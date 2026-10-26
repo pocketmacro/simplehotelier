@@ -72,32 +72,29 @@
       <!-- ===== OVERVIEW ===== -->
       <section class="view active" id="view-overview">
         <div class="view-head">
-          <div><h1>Good morning, Maya</h1><p class="sub">Here's what's happening at Pinecrest today.</p></div>
-          <div class="spacer"></div>
-          <div class="seg" role="tablist" aria-label="Overview range"><button class="active" type="button">Today</button><button type="button">7 days</button><button type="button">30 days</button></div>
+          <div><h1 id="ovGreet">Welcome back</h1><p class="sub" id="ovSub">Here's what's happening at your property today.</p></div>
         </div>
 
         <div class="grid g-kpi">
           <div class="card kpi accent">
             <div class="k-label">Occupancy tonight</div>
-            <div class="k-value">75<small>%</small></div>
-            <div class="k-sub">6 of 8 cabins filled</div>
-            <svg class="spark" width="120" height="52" viewBox="0 0 120 52" fill="none"><path d="M2 42 L22 34 L42 38 L62 22 L82 26 L102 10 L118 14" stroke="#e0aa4e" stroke-width="2.5" stroke-linecap="round"/></svg>
+            <div class="k-value" id="kOcc">—</div>
+            <div class="k-sub" id="kOccSub">—</div>
           </div>
           <div class="card kpi">
-            <div class="k-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 7c0-2-2.2-3-5-3s-5 1-5 3 2 2.5 5 3 5 1.5 5 3-2.2 3-5 3-5-1-5-3"/></svg>Revenue · Oct</div>
-            <div class="k-value">$18.4<small>k</small></div>
-            <div class="k-delta up">▲ 12.3% vs Sept</div>
+            <div class="k-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 7c0-2-2.2-3-5-3s-5 1-5 3 2 2.5 5 3 5 1.5 5 3-2.2 3-5 3-5-1-5-3"/></svg>Collected</div>
+            <div class="k-value" id="kRev">—</div>
+            <div class="k-sub" id="kRevSub">—</div>
           </div>
           <div class="card kpi">
             <div class="k-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg>Arrivals / Departures</div>
-            <div class="k-value">4 <small>/</small> 3</div>
-            <div class="k-sub">Next arrival: 3:00 PM · Cabin A3</div>
+            <div class="k-value" id="kArrDep">—</div>
+            <div class="k-sub" id="kArrSub">—</div>
           </div>
           <div class="card kpi">
             <div class="k-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/></svg>Rooms to clean</div>
-            <div class="k-value">3</div>
-            <div class="k-sub">1 in progress · <button class="drawer-link" data-goto="housekeeping" type="button">Open board →</button></div>
+            <div class="k-value" id="kClean">—</div>
+            <div class="k-sub" id="kCleanSub">—</div>
           </div>
         </div>
 
@@ -110,11 +107,7 @@
           <div class="card card-pad">
             <h3>Needs attention</h3>
             <p class="hint">Sorted by urgency</p>
-            <div class="row-list">
-              <div class="row-item"><span class="pill overdue"><i></i>Overdue</span><div class="ri-main"><strong>$486.20 unpaid · R-1042</strong><span>Daniel Okafor · Birch Cabin · due yesterday</span></div><div class="ri-right"><button class="btn btn-ghost btn-xs" data-action="charge" data-ref="R-1042" type="button">Charge</button></div></div>
-              <div class="row-item"><span class="pill progress"><i></i>Dirty</span><div class="ri-main"><strong>Aspen Loft still dirty at 10:42 AM</strong><span>Guest arrives 3:00 PM · assign cleaner</span></div><div class="ri-right"><button class="btn btn-ghost btn-xs" data-goto="housekeeping" type="button">Assign</button></div></div>
-              <div class="row-item"><span class="pill pending"><i></i>Pending</span><div class="ri-main"><strong>2 requests await confirmation</strong><span>Oct 30 – Nov 2 · from booking page</span></div><div class="ri-right"><button class="btn btn-ghost btn-xs" data-goto="reservations" type="button">Review</button></div></div>
-            </div>
+            <div class="row-list" id="attentionList"></div>
           </div>
         </div>
 
@@ -125,14 +118,9 @@
             <div class="grid g-rooms" id="miniRooms" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))"></div>
           </div>
           <div class="card card-pad">
-            <h3>Booking page performance</h3>
-            <p class="hint">pinecrest.simplehotelier.com · last 7 days</p>
-            <div class="kv">
-              <dt>Page views</dt><dd class="mono">1,284</dd>
-              <dt>Started checkout</dt><dd class="mono">96 (7.5%)</dd>
-              <dt>Completed</dt><dd class="mono">31 (2.4%)</dd>
-              <dt>Direct revenue</dt><dd class="mono">$6,214.00</dd>
-            </div>
+            <h3>Your booking page</h3>
+            <p class="hint">What guests can book right now</p>
+            <div class="kv" id="bkPerfKv"></div>
             <div style="margin-top:14px;display:flex;gap:8px">
               <button class="btn btn-ghost btn-sm" data-goto="booking" type="button">Edit page</button>
               <button class="btn btn-ghost btn-sm" data-goto="reports" type="button">Full reports</button>
@@ -307,35 +295,27 @@
       <!-- ===== REPORTS ===== -->
       <section class="view" id="view-reports">
         <div class="view-head">
-          <div><h1>Reports</h1><p class="sub">Revenue, occupancy and channel mix for October 2026.</p></div>
+          <div><h1>Reports</h1><p class="sub" id="repSub">Revenue, occupancy and booking mix.</p></div>
           <div class="spacer"></div>
-          <div class="seg"><button type="button">Week</button><button class="active" type="button">Month</button><button type="button">Season</button></div>
-          <button class="btn btn-ghost" type="button" data-action="export">Export PDF</button>
+          <div class="seg" id="repRange" role="tablist" aria-label="Report range"><button type="button" data-days="7">Week</button><button class="active" type="button" data-days="30">Month</button><button type="button" data-days="90">Season</button></div>
+          <button class="btn btn-ghost" type="button" data-action="export">Export CSV</button>
         </div>
         <div class="grid g-2eq">
           <div class="card card-pad">
-            <h3>Revenue by day</h3><p class="hint">Room revenue + add-ons, before taxes</p>
+            <h3>Revenue by day</h3><p class="hint">Booked revenue by check-in date</p>
             <div class="bar-chart" id="revChart"></div>
           </div>
-          <div class="card card-pad">
-            <h3>Where bookings come from</h3><p class="hint">31 reservations this month</p>
-            <div class="donut-row">
-              <svg width="150" height="150" viewBox="0 0 150 150"><circle cx="75" cy="75" r="58" fill="none" stroke="#e8eeec" stroke-width="20"/><circle cx="75" cy="75" r="58" fill="none" stroke="#0c3b3c" stroke-width="20" stroke-dasharray="200 365" stroke-linecap="round" transform="rotate(-90 75 75)"/><circle cx="75" cy="75" r="58" fill="none" stroke="#c98a2e" stroke-width="20" stroke-dasharray="90 365" stroke-dashoffset="-200" stroke-linecap="round" transform="rotate(-90 75 75)"/><circle cx="75" cy="75" r="58" fill="none" stroke="#7fa8a3" stroke-width="20" stroke-dasharray="60 365" stroke-dashoffset="-290" stroke-linecap="round" transform="rotate(-90 75 75)"/><text x="75" y="71" text-anchor="middle" font-family="Sora,sans-serif" font-weight="700" font-size="22" fill="#101f1e">$18.4k</text><text x="75" y="89" text-anchor="middle" font-size="11" fill="#5d6f6b">total revenue</text></svg>
-              <div class="legend" style="flex:1">
-                <div><i style="background:#0c3b3c"></i>Direct booking page<b>55%</b></div>
-                <div><i style="background:#c98a2e"></i>Airbnb / Vrbo<b>25%</b></div>
-                <div><i style="background:#7fa8a3"></i>Phone / walk-in<b>20%</b></div>
-              </div>
-            </div>
+          <div class="card card-pad" id="channelCard">
+            <h3>Bookings by status</h3><p class="hint">Loading…</p>
           </div>
         </div>
         <div class="grid g-2eq mt">
           <div class="card card-pad">
-            <h3>Top performing units</h3><p class="hint">By revenue, this month</p>
+            <h3>Top performing units</h3><p class="hint">By booked revenue in this window</p>
             <div class="row-list" id="topRooms"></div>
           </div>
           <div class="card card-pad">
-            <h3>Tax liability</h3><p class="hint">Collected and owed, October</p>
+            <h3>Tax liability</h3><p class="hint">Estimated from booked revenue in this window</p>
             <div class="kv" id="taxLiability"></div>
           </div>
         </div>
@@ -465,32 +445,7 @@
             </div>
           </div>
           <div>
-            <div class="card card-pad">
-              <h3>Property profile</h3><p class="hint">Shown on receipts and your booking page</p>
-              <div class="form-2">
-                <div class="field"><label>Property name</label><input class="input" id="pfName" value="Pinecrest Cabins"></div>
-                <div class="field"><label>Contact email</label><input class="input" id="pfEmail" value="stay@pinecrestcabins.com"></div>
-              </div>
-              <div class="field"><label>Property logo</label>
-                <div style="display:flex;gap:12px;align-items:center">
-                  <img id="logoPreview" alt="Property logo" style="width:56px;height:56px;border-radius:13px;object-fit:cover;border:1px solid var(--line);background:var(--surface-2)" hidden>
-                  <div id="logoEmpty" style="width:56px;height:56px;border-radius:13px;border:1.5px dashed var(--line);display:grid;place-items:center;color:var(--faint);font-size:11px;text-align:center">No logo</div>
-                  <div>
-                    <label class="btn btn-ghost btn-sm" for="logoFile" style="cursor:pointer">Upload logo</label>
-                    <input type="file" id="logoFile" accept="image/*" hidden>
-                    <div class="help">PNG, JPG or SVG up to 5 MB. Shown on your booking page.</div>
-                  </div>
-                </div>
-              </div>
-              <div class="form-2">
-                <div class="field"><label>Check-in</label><input class="input" id="pfCheckIn" value="3:00 PM"></div>
-                <div class="field"><label>Check-out</label><input class="input" id="pfCheckOut" value="11:00 AM"></div>
-              </div>
-              <div class="field"><label>Cancellation policy</label><select class="select" id="pfPolicy"><option>Moderate — full refund to 7 days</option><option>Flexible — full refund to 48 hours</option><option>Strict — 50% refund to 14 days</option></select></div>
-              <button class="btn btn-primary btn-sm" type="button" data-action="save-settings">Save changes</button>
-              <p class="hint" id="dbStatus" style="margin-top:12px">Data source: checking…</p>
-            </div>
-            <div class="card card-pad mt" id="billingCard">
+            <div class="card card-pad" id="billingCard">
               <h3>Plan and billing</h3>
               <p class="hint">SimpleHotelier subscription, billed by Stripe</p>
               <div class="kv">
@@ -504,6 +459,96 @@
               </div>
               <p class="hint" style="margin-top:10px">Guest payments use your connected Stripe account and are separate from this subscription.</p>
             </div>
+          </div>
+        </div>
+
+        <div class="card card-pad mt" id="propertyCard">
+          <h3>Property details</h3>
+          <p class="hint">These details appear on your public booking page, guest emails and receipts.</p>
+
+          <div class="field"><label>Property logo</label>
+            <div style="display:flex;gap:12px;align-items:center">
+              <img id="logoPreview" alt="Property logo" style="width:56px;height:56px;border-radius:13px;object-fit:cover;border:1px solid var(--line);background:var(--surface-2)" hidden>
+              <div id="logoEmpty" style="width:56px;height:56px;border-radius:13px;border:1.5px dashed var(--line);display:grid;place-items:center;color:var(--faint);font-size:11px;text-align:center">No logo</div>
+              <div>
+                <label class="btn btn-ghost btn-sm" for="logoFile" style="cursor:pointer">Upload logo</label>
+                <input type="file" id="logoFile" accept="image/*" hidden>
+                <div class="help">PNG, JPG or SVG up to 5 MB. Shown on your booking page.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid g-3">
+            <div>
+              <h4 class="rt-sec">General</h4>
+              <div class="field"><label>Property name *</label><input class="input" id="pfName" value="Pinecrest Cabins"></div>
+              <div class="field"><label>Address line 1</label><input class="input" id="pfAddress1" placeholder="38946 State Spur 16B"></div>
+              <div class="field"><label>Address line 2</label><input class="input" id="pfAddress2" placeholder="Suite, building, etc."></div>
+              <div class="form-2">
+                <div class="field"><label>Postcode</label><input class="input" id="pfPostcode" placeholder="69201"></div>
+                <div class="field"><label>City / Suburb</label><input class="input" id="pfCity" placeholder="Valentine"></div>
+              </div>
+              <div class="form-2">
+                <div class="field"><label>State</label><input class="input" id="pfState" placeholder="Nebraska"></div>
+                <div class="field"><label>Country</label><select class="select" id="pfCountry"><option>United States</option><option>Canada</option><option>Mexico</option><option>United Kingdom</option><option>Ireland</option><option>France</option><option>Spain</option><option>Italy</option><option>Germany</option><option>Netherlands</option><option>Australia</option><option>New Zealand</option><option>South Africa</option><option>India</option><option>Japan</option><option>Brazil</option><option>Other</option></select></div>
+              </div>
+              <div class="field"><label>Tax number</label><input class="input" id="pfTaxNumber" placeholder="ABN, GST, VAT…"><span class="help">Printed on guest invoices and tax reports.</span></div>
+            </div>
+
+            <div>
+              <h4 class="rt-sec">Contact details</h4>
+              <div class="field"><label>Contact email</label><input class="input" id="pfEmail" type="email" value="stay@pinecrestcabins.com"></div>
+              <div class="field"><label>Hotel phone number</label><input class="input" id="pfPhone" type="tel" placeholder="402-376-5984"></div>
+              <div class="field"><label>Main contact phone number</label><input class="input" id="pfContactPhone" type="tel" placeholder="Owner or manager mobile"></div>
+              <div class="field"><label>Property home page</label><input class="input" id="pfWebsite" type="url" placeholder="https://yourproperty.com"><span class="help">Set up a link on the booking engine to your property home page. Should start with "https://".</span></div>
+              <div class="field"><label>Facebook</label><input class="input" id="pfFacebook" type="url" placeholder="https://facebook.com/yourproperty"></div>
+              <div class="field"><label>Instagram</label><input class="input" id="pfInstagram" type="url" placeholder="https://instagram.com/yourproperty"></div>
+              <div class="field"><label>Twitter / X</label><input class="input" id="pfTwitter" type="url" placeholder="https://x.com/yourproperty"></div>
+              <div class="field"><label>YouTube</label><input class="input" id="pfYoutube" type="url" placeholder="https://youtube.com/@yourproperty"><span class="help">Social links appear in guest emails and on your booking page.</span></div>
+            </div>
+
+            <div>
+              <h4 class="rt-sec">Description</h4>
+              <div class="field"><label>About your property</label><textarea class="textarea" id="pfDesc" rows="7" placeholder="Tell guests what makes your place special — setting, wildlife, activities, the experience."></textarea><span class="help">Shown in the About section of your booking page.</span></div>
+              <div class="field"><label>Property star rating</label>
+                <label class="check-item"><input type="checkbox" id="pfStarRated"><span>Star rated</span></label>
+              </div>
+              <div class="field"><label>Number of stars</label><select class="select" id="pfStars"><option value="">Not set</option><option value="1">1 ★</option><option value="2">2 ★★</option><option value="3">3 ★★★</option><option value="4">4 ★★★★</option><option value="5">5 ★★★★★</option></select></div>
+              <div class="form-2">
+                <div class="field"><label>Check-in</label><input class="input" id="pfCheckIn" value="3:00 PM"></div>
+                <div class="field"><label>Check-out</label><input class="input" id="pfCheckOut" value="11:00 AM"></div>
+              </div>
+              <div class="field"><label>Cancellation policy</label><select class="select" id="pfPolicy"><option>Moderate — full refund to 7 days</option><option>Flexible — full refund to 48 hours</option><option>Strict — 50% refund to 14 days</option></select></div>
+            </div>
+          </div>
+
+          <h4 class="rt-sec">Other settings</h4>
+          <div class="grid g-3">
+            <div>
+              <div class="field"><label>Maximum child age (in years)</label><input class="input" id="pfMaxChildAge" type="number" min="0" placeholder="e.g. 10"><span class="help">Guests at or under this age count as children for extra-guest rates.</span></div>
+              <div class="field"><label>Maximum infant age (in years)</label><input class="input" id="pfMaxInfantAge" type="number" min="0" placeholder="e.g. 2"></div>
+              <div class="field"><label>Minimum room rate (USD)</label><input class="input mono" id="pfMinRoomRate" type="number" min="0" step="0.01" placeholder="10.00"><span class="help">Rate plans and overrides will not price a night below this.</span></div>
+              <div class="field"><label>Weekend starts</label><select class="select" id="pfWeekendStarts"><option value="friday">Friday</option><option value="saturday">Saturday</option><option value="sunday">Sunday</option></select></div>
+              <label class="check-item"><input type="checkbox" id="pfAllowDecimals" checked><span>Allow decimals in rates</span></label>
+            </div>
+            <div>
+              <div class="field"><label>Booking confirmation email</label><input class="input" id="pfBookingEmail" type="email" placeholder="bookings@yourproperty.com"><span class="help">Booking notifications will be sent to this address.</span></div>
+              <div class="field"><label>Booking confirmation CC email</label><input class="input" id="pfBookingCc" placeholder="manager@email.com, owner@email.com"><span class="help">You may enter multiple addresses separated by commas.</span></div>
+              <div class="field"><label>Enquiry email</label><input class="input" id="pfEnquiryEmail" type="email" placeholder="hello@yourproperty.com"><span class="help">Customer enquiries will be sent to this address.</span></div>
+              <div class="field"><label>Availability alert email</label><input class="input" id="pfAvailEmail" type="email" placeholder="alerts@yourproperty.com"><span class="help">Inventory alerts will be sent to this address.</span></div>
+              <label class="check-item"><input type="checkbox" id="pfGdpr"><span>Enable GDPR consent on booking page</span></label>
+              <p class="help" style="font-size:12px;color:var(--faint)">Ask guests if they consent to receiving marketing emails (GDPR regulation).</p>
+            </div>
+            <div>
+              <div class="field"><label>What these do</label>
+                <p class="help" style="font-size:12.5px;line-height:1.6">Address, phone, description, star rating and social links show on your public booking page. Notification emails control where booking, enquiry and availability messages go once email sending is switched on for your property.</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap">
+            <button class="btn btn-primary" type="button" data-action="save-settings">Save property details</button>
+            <span class="hint" id="dbStatus">Data source: checking…</span>
           </div>
         </div>
       </section>

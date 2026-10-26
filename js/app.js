@@ -34,6 +34,20 @@ const RT_SMOKING = [["non-smoking", "Non-smoking"], ["outdoor-only", "Smoking ou
 const RT_BED_TYPES = ["King", "California King", "Queen", "Full / Double", "Twin XL", "Twin", "Bunk bed", "Sofa bed", "Daybed", "Futon", "Murphy bed", "Rollaway", "Air mattress", "Crib"];
 const RT_ACCESS_FEATURES = ["Step-free entry", "Ground floor", "Elevator access", "Wide doorways (32 in+)", "Accessible parking nearby", "Accessible route to room", "Roll-in shower", "Grab bars in shower", "Grab bars by toilet", "Shower seat / bench", "Handheld showerhead", "Raised toilet", "Lowered sink / vanity", "Lowered counters", "Lever door handles", "Lowered light switches", "Lowered bed", "Transfer space beside bed", "Visual fire alarm", "Visual doorbell / hearing kit", "Braille signage", "Service animals welcome"];
 const RT_FEATURES = ["Air conditioning", "Ceiling fan", "Heating", "Fireplace", "Blackout curtains", "Soundproofing", "Windows that open", "Alarm clock", "Reading light", "Extra pillows & blankets", "Linens provided", "Towels provided", "Wardrobe / closet", "Dresser", "Nightstands", "Sofa", "Armchair", "Desk / workspace", "Dining table", "Safe", "Iron & ironing board", "Hair dryer", "Bath", "Shower", "Bathtub & shower", "Soaking tub", "Jetted tub", "Bidet", "Double vanity", "Rain shower", "Handheld shower", "Bathrobes", "Slippers", "Toiletries", "Flat-screen TV", "Cable TV", "Streaming TV", "Free WiFi", "High-speed WiFi", "Ethernet connection", "USB chargers", "Bluetooth speaker", "Board games", "Books", "Full kitchen", "Kitchenette", "Plates & glassware", "Cutlery", "Pots & pans", "Mini fridge", "Full-size fridge", "Microwave", "Oven", "Stovetop", "Dishwasher", "Coffee maker", "Espresso machine", "Kettle", "Toaster", "BBQ utensils", "Washer", "Dryer", "Washer / dryer", "Laundry service", "Private balcony", "Private patio", "Deck / porch", "Outdoor furniture", "BBQ / grill", "Fire pit", "Hot tub", "Private entrance", "24-hour security", "Keyless entry", "Smart lock", "Daily housekeeping", "Free parking", "Garage", "EV charger", "Bike storage", "Ski storage", "Pool access", "Gym access", "Sauna", "Beach access", "Lake access", "Pet friendly", "High chair", "Pack 'n play / crib"];
+function normalizeRatePlan(p) {
+  const n = { ...(p || {}) };
+  n.id = n.id || "plan-" + Math.random().toString(36).slice(2, 8);
+  n.name = n.name || ""; n.desc = n.desc || "";
+  n.minStay = n.minStay != null ? n.minStay : 1; n.maxStay = n.maxStay || 0;
+  n.releasePeriod = n.releasePeriod || 0;
+  n.rateKind = n.rateKind === "flat" ? "flat" : "percent";
+  n.difference = Number(n.difference) || 0;
+  ["extraAdultRate", "extraChildRate", "extraInfantRate"].forEach((k) => { n[k] = Number(n[k]) || 0; });
+  n.includedOccupants = n.includedOccupants === "" || n.includedOccupants == null ? null : Number(n.includedOccupants);
+  ["maxAdults", "maxChildren", "maxInfants", "maxOccupants"].forEach((k) => { n[k] = n[k] === "" || n[k] == null ? null : Number(n[k]); });
+  n.promoCode = String(n.promoCode || "").trim();
+  return n;
+}
 function normalizeRoomType(t) {
   const n = { ...(t || {}) };
   n.bathrooms = n.bathrooms != null ? Number(n.bathrooms) : 1;
@@ -46,6 +60,7 @@ function normalizeRoomType(t) {
   n.maxInfants = n.maxInfants || 0; n.maxOccupants = n.maxOccupants || 0;
   n.adultsRequired = n.adultsRequired != null ? n.adultsRequired : 1;
   n.beds = Array.isArray(n.beds) ? n.beds : [];
+  n.ratePlans = (Array.isArray(n.ratePlans) ? n.ratePlans : []).map(normalizeRatePlan);
   n.handicapAccessible = !!n.handicapAccessible;
   n.accessibleFeatures = Array.isArray(n.accessibleFeatures) ? n.accessibleFeatures : [];
   n.features = Array.isArray(n.features) ? n.features : [];
@@ -53,7 +68,7 @@ function normalizeRoomType(t) {
   return n;
 }
 let roomTypes = [
-  { id: "demo-cabin", name: "Cabin", desc: "Standalone cabin", bathrooms: 1, view: "Forest / woodland view", smoking: "outdoor-only", rackRate: 249, minStay: 2, includedAdults: 2, maxAdults: 4, maxChildren: 2, maxInfants: 1, maxOccupants: 6, adultsRequired: 1, beds: [{ qty: 1, type: "Queen" }, { qty: 2, type: "Twin" }], features: ["Air conditioning", "Heating", "Fireplace", "Full kitchen", "Plates & glassware", "Flat-screen TV", "Free WiFi", "Deck / porch", "Fire pit", "Towels provided", "Linens provided"] },
+  { id: "demo-cabin", name: "Cabin", desc: "Standalone cabin", bathrooms: 1, view: "Forest / woodland view", smoking: "outdoor-only", rackRate: 249, minStay: 2, includedAdults: 2, maxAdults: 4, maxChildren: 2, maxInfants: 1, maxOccupants: 6, adultsRequired: 1, beds: [{ qty: 1, type: "Queen" }, { qty: 2, type: "Twin" }], features: ["Air conditioning", "Heating", "Fireplace", "Full kitchen", "Plates & glassware", "Flat-screen TV", "Free WiFi", "Deck / porch", "Fire pit", "Towels provided", "Linens provided"], ratePlans: [{ id: "plan-extended", name: "Extended stay rate", desc: "Enjoy 10% off when booking for more than three nights.", minStay: 3, maxStay: 30, releasePeriod: 0, rateKind: "percent", difference: -10, extraAdultRate: 20, extraChildRate: 0, extraInfantRate: 0, includedOccupants: 2, maxAdults: 5, maxChildren: 4, maxInfants: 0, maxOccupants: 6, promoCode: "" }] },
   { id: "demo-suite", name: "Suite", desc: "Suite in the main lodge" },
   { id: "demo-loft", name: "Loft", desc: "Upper loft unit" },
   { id: "demo-house", name: "House", desc: "Full vacation house" }
@@ -130,6 +145,16 @@ function openModal({ title, sub = "", body = "", foot = "", wide = false }) {
   overlay.classList.add("open");
 }
 function closeModal() { overlay.classList.remove("open"); }
+/* Custom confirmation for destructive actions (never native confirm). */
+let confirmCb = null;
+function confirmAction(title, body, label, cb) {
+  confirmCb = cb;
+  openModal({
+    title, body: `<p style="color:var(--muted);font-size:13.5px;line-height:1.55">${body}</p>`,
+    foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Keep it</button>
+      <button class="btn btn-danger btn-sm" data-action="confirm-yes" type="button">${esc(label || "Delete")}</button>`
+  });
+}
 overlay.addEventListener("click", (e) => { if (e.target === overlay) closeModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 document.addEventListener("click", (e) => { if (e.target.closest("[data-close]")) closeModal(); });
@@ -193,6 +218,49 @@ function renderToday() {
     `<div class="empty">No movement today.</div>`;
 }
 
+let tenantDisplayName = "";
+function renderOverview() {
+  const greetEl = $("#ovGreet"), subEl = $("#ovSub");
+  if (!greetEl) return;
+  const h = new Date().getHours();
+  greetEl.textContent = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+  const prop = tenantDisplayName || ($("#pfName") && $("#pfName").value) || "your property";
+  subEl.textContent = `Here's what's happening at ${prop} today.`;
+  const active = reservations.filter((r) => r.status !== "cancelled");
+  const tonight = new Set(active.filter((r) => r.inN <= 0 && r.outN > 0).map((r) => r.room)).size;
+  const occPct = rooms.length ? Math.round(tonight / rooms.length * 100) : 0;
+  $("#kOcc").innerHTML = `${occPct}<small>%</small>`;
+  $("#kOccSub").textContent = `${tonight} of ${rooms.length} rooms filled tonight`;
+  const collected = active.reduce((s, r) => s + r.paid, 0);
+  const outstanding = active.reduce((s, r) => s + balance(r), 0);
+  $("#kRev").textContent = money(collected);
+  $("#kRevSub").textContent = outstanding > 0 ? `${money(outstanding)} still outstanding` : "Nothing outstanding";
+  const arr = active.filter((r) => r.inN === 0), dep = active.filter((r) => r.outN === 0);
+  $("#kArrDep").innerHTML = `${arr.length} <small>/</small> ${dep.length}`;
+  const nextArr = active.filter((r) => r.inN >= 0).sort((a, b) => a.inN - b.inN)[0];
+  $("#kArrSub").textContent = nextArr ? `Next arrival: ${esc(nextArr.guest)} · ${esc(nextArr.room)}${nextArr.inN === 0 ? " · today" : nextArr.inN === 1 ? " · tomorrow" : " · in " + nextArr.inN + " days"}` : "No upcoming arrivals";
+  const dirty = rooms.filter((r) => r.hk === "dirty").length, prog = rooms.filter((r) => r.hk === "progress").length;
+  $("#kClean").textContent = dirty;
+  $("#kCleanSub").innerHTML = `${prog} in progress · <button class="drawer-link" data-goto="housekeeping" type="button">Open board →</button>`;
+  // Needs attention, derived from live state.
+  const items = [];
+  active.filter((r) => balance(r) > 0).sort((a, b) => balance(b) - balance(a)).slice(0, 2).forEach((r) => {
+    items.push(`<div class="row-item"><span class="pill overdue"><i></i>Unpaid</span><div class="ri-main"><strong>${money(balance(r))} unpaid · ${esc(r.ref)}</strong><span>${esc(r.guest)} · ${esc(r.room)}</span></div><div class="ri-right"><button class="btn btn-ghost btn-xs" data-action="charge" data-ref="${esc(r.ref)}" type="button">Charge</button></div></div>`);
+  });
+  const dirtyRooms = rooms.filter((r) => r.hk === "dirty");
+  if (dirtyRooms.length) items.push(`<div class="row-item"><span class="pill progress"><i></i>Dirty</span><div class="ri-main"><strong>${dirtyRooms.length} room${dirtyRooms.length > 1 ? "s" : ""} to clean</strong><span>${dirtyRooms.map((r) => esc(r.code)).join(", ")}</span></div><div class="ri-right"><button class="btn btn-ghost btn-xs" data-goto="housekeeping" type="button">Open board</button></div></div>`);
+  const pend = active.filter((r) => r.status === "pending");
+  if (pend.length) items.push(`<div class="row-item"><span class="pill pending"><i></i>Pending</span><div class="ri-main"><strong>${pend.length} request${pend.length > 1 ? "s" : ""} await confirmation</strong><span>${pend.map((r) => esc(r.guest)).slice(0, 2).join(", ")}</span></div><div class="ri-right"><button class="btn btn-ghost btn-xs" data-goto="reservations" type="button">Review</button></div></div>`);
+  $("#attentionList").innerHTML = items.join("") || `<div class="empty">All caught up. Nothing needs attention.</div>`;
+  const kv = $("#bkPerfKv");
+  if (kv) kv.innerHTML = `
+    <dt>Rooms listed</dt><dd class="mono">${rooms.length}</dd>
+    <dt>Room types</dt><dd class="mono">${roomTypes.length}</dd>
+    <dt>Add-ons enabled</dt><dd class="mono">${addons.filter((a) => a.on).length}</dd>
+    <dt>Reservations on file</dt><dd class="mono">${active.length}</dd>
+    <dt>Booked revenue</dt><dd class="mono">${money(active.reduce((s, r) => s + r.total, 0))}</dd>`;
+}
+
 function renderMiniRooms() {
   $("#miniRooms").innerHTML = rooms.map((r) => `
     <div style="border:1px solid var(--line);border-radius:10px;padding:10px 11px;background:var(--surface-2)">
@@ -248,19 +316,22 @@ function renderCalendar() {
   const days = [...Array(14)].map((_, i) => addDays(calOffset + i));
   let html = `<div class="cal-head"><div>${dstr(days[0])} – ${dstr(days[13])}</div>` +
     days.map((d, i) => `<div style="${i === -calOffset ? "color:var(--brand);font-weight:800" : ""}">${d.toLocaleDateString("en-US", { weekday: "short" })}<br>${d.getMonth() + 1}/${d.getDate()}</div>`).join("") + `</div>`;
-  // Deterministic demo stays per room (offsets relative to today)
-  const demo = { A1: [[0, 3, "Tom Becker", "confirmed"], [8, 11, "Marta Silva", "pending"]], A2: [[-2, 2, "Daniel Okafor", "checkedin"]], A3: [[-1, 1, "Priya Nair", "checkedin"], [2, 5, "Carl Jensen", "confirmed"]], B1: [[-3, 3, "Sam Whitaker", "checkedin"]], B2: [[4, 7, "Greg Poulsen", "pending"], [8, 11, "Marta Silva", "confirmed"]], B3: [[-1, 3, "Lucia Fernandez", "checkedin"]], C1: [[0, 2, "Aisha Khan", "confirmed"]], C2: [[4, 6, "Nina Rossi", "pending"]] };
+  // Real stays from the reservations list (offsets relative to today), so the
+  // calendar always matches Reservations — in demo and live data alike.
+  const stayCls = (s) => ({ "checked-in": "checkedin", "checked-out": "confirmed" }[s] || s);
+  const demo = {};
+  reservations.filter((r) => r.status !== "cancelled" && r.status !== "checked-out").forEach((r) => {
+    (demo[r.room] = demo[r.room] || []).push([r.inN, r.outN, r.guest, stayCls(r.status), r.ref]);
+  });
   rooms.forEach((r) => {
     html += `<div class="cal-row"><div class="cal-room"><strong>${r.code} · ${esc(r.name)}</strong><span>${esc(r.type)}</span></div>`;
     days.forEach((d, i) => {
       const n = calOffset + i;
       const isToday = n === 0;
       const stay = (demo[r.code] || []).find(([s, e]) => n >= s && n < e);
-      const blocked = r.code === "C2" && n >= 11 && n < 13;
       let inner = "";
-      if (stay && n === stay[0]) inner = `<div class="stay s-${stay[3]}" data-action="res-detail" data-ref="${stay[2]}">${esc(stay[2])}<small>${dstr(addDays(stay[0]))} → ${dstr(addDays(stay[1]))}</small></div>`;
+      if (stay && n === stay[0]) inner = `<div class="stay s-${stay[3]}" data-action="res-detail" data-ref="${esc(stay[4] || stay[2])}">${esc(stay[2])}<small>${dstr(addDays(stay[0]))} → ${dstr(addDays(stay[1]))}</small></div>`;
       else if (stay) inner = `<div class="stay s-${stay[3]}" style="opacity:.45">&nbsp;<small>&nbsp;</small></div>`;
-      else if (blocked) inner = `<div class="stay-blocked"></div>`;
       html += `<div class="cal-cell${isToday ? " today" : ""}">${inner}</div>`;
     });
     html += `</div>`;
@@ -312,9 +383,16 @@ if (ratePrevBtn) ratePrevBtn.addEventListener("click", () => { ratesMonthOff--; 
 if (rateNextBtn) rateNextBtn.addEventListener("click", () => { ratesMonthOff++; renderRates(); });
 if (rateTodayBtn2) rateTodayBtn2.addEventListener("click", () => { ratesMonthOff = 0; renderRates(); });
 if (rateRoomSel) rateRoomSel.addEventListener("change", () => { ratesRoomCode = rateRoomSel.value; renderRates(); });
+const repRange = $("#repRange");
+if (repRange) repRange.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  reportDays = parseInt(b.dataset.days, 10) || 30;
+  $$("#repRange button").forEach((x) => x.classList.toggle("active", x === b));
+  renderReports();
+});
 /* Audit bindings: segmented toggles, property picker, logo upload */
 $$(".seg").forEach((seg) => {
-  if (seg.id === "resFilter") return;
+  if (seg.id === "resFilter" || seg.id === "repRange") return;
   seg.addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;
     $$("button", seg).forEach((x) => x.classList.toggle("active", x === b));
@@ -350,7 +428,7 @@ document.addEventListener("click", (e) => {
   const r = roomByCode(code);
   r.hk = hk;
   if (hk === "clean") r.note = r.status === "vacant" ? "Ready for next arrival" : r.note;
-  renderRooms(); renderHK(); renderMiniRooms();
+  renderRooms(); renderHK(); renderMiniRooms(); renderOverview();
   if (window.SHDB) SHDB.updateHK(r);
   toast(`${code} marked ${HK[hk][1].toLowerCase()}`, r.name, hk === "clean" ? "ok" : "");
 });
@@ -367,6 +445,7 @@ function rtSummary(t) {
   if (t.rackRate) bits.push("rack " + money(t.rackRate));
   if (t.beds && t.beds.length) bits.push(t.beds.reduce((n, b) => n + (Number(b.qty) || 0), 0) + " bed(s)");
   if (t.features && t.features.length) bits.push(t.features.length + " features");
+  if (t.ratePlans && t.ratePlans.length) bits.push(t.ratePlans.length + " rate plan(s)");
   if (t.photos && t.photos.length) bits.push(t.photos.length + " photo(s)");
   if (t.handicapAccessible) bits.push("accessible");
   return bits.join(" · ");
@@ -393,6 +472,7 @@ function openRoomTypes(editId) {
         ${roomTypes.map((t, i) => `
           <div class="row-item"><div class="ri-main"><strong>${esc(t.name)}</strong><span>${esc(rtSummary(normalizeRoomType(t)) || t.desc || "No details yet")}</span></div>
             <div class="ri-right" style="display:flex;gap:6px;align-items:center"><span class="tag">${typeRoomCount(t)} rooms</span>
+            <button class="btn btn-ghost btn-xs" data-action="rt-rates" data-i="${i}" type="button">Rates${t.ratePlans && t.ratePlans.length ? " (" + t.ratePlans.length + ")" : ""}</button>
             <button class="btn btn-ghost btn-xs" data-action="rt-photos" data-i="${i}" type="button">Photos${t.photos && t.photos.length ? " (" + t.photos.length + ")" : ""}</button>
             <button class="btn btn-ghost btn-xs" data-action="rt-edit" data-i="${i}" type="button">Edit</button>
             <button class="btn btn-ghost btn-xs" data-action="rt-del" data-i="${i}" type="button">Delete</button></div></div>`).join("") || `<p class="hint">No room types yet. Add your first below.</p>`}
@@ -448,7 +528,7 @@ function openRoomTypes(editId) {
       <h4 class="rt-sec">Features &amp; amenities</h4>
       <div class="field"><input class="input" id="rtFeatureSearch" type="search" placeholder="Filter features… (e.g. bath, tv, plates)"><span class="help">Tick everything this room type includes — shown on your booking page.</span></div>
       ${checkGridHtml("rtFeatureGrid", RT_FEATURES, editing.features)}
-      <p class="hint" style="margin-top:12px">Photos: use the Photos button next to the type above. Type photos are the fallback on the booking page when a room has none of its own.</p>`,
+      <p class="hint" style="margin-top:12px">Rate plans (extended-stay discounts, promo-code rates) and photos live behind the Rates and Photos buttons next to the type above. Type photos are the fallback on the booking page when a room has none of its own.</p>`,
     foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Close</button>
       <button class="btn btn-primary btn-sm" data-action="rt-save" data-edit="${isEdit ? editing.id : ""}" type="button">${isEdit ? "Save type" : "Add type"}</button>`,
     wide: true
@@ -493,6 +573,91 @@ function openRoomTypePhotos(id) {
     }
     if (window.SHDB && SHDB.hasLive() && t.id && !String(t.id).startsWith("demo-") && !String(t.id).startsWith("local-")) SHDB.updateRoomType(t.id, normalizeRoomType(t)).catch(() => toast("Photos saved locally only", "Storage sync failed", "warn"));
     openRoomTypePhotos(t.id);
+  });
+}
+function persistRoomType(t) {
+  if (window.SHDB && SHDB.hasLive() && t.id && !String(t.id).startsWith("demo-") && !String(t.id).startsWith("local-")) {
+    SHDB.updateRoomType(t.id, normalizeRoomType(t)).catch(() => toast("Saved locally only", "Supabase write failed", "warn"));
+  }
+}
+function planSummary(p) {
+  const diff = p.rateKind === "flat" ? money(p.difference) + "/night" : (p.difference > 0 ? "+" : "") + p.difference + "%";
+  const bits = [diff, (p.minStay || 1) + "–" + (p.maxStay || "∞") + " nights"];
+  if (p.releasePeriod) bits.push("book " + p.releasePeriod + "+ days ahead");
+  if (p.promoCode) bits.push("code " + p.promoCode);
+  return bits.join(" · ");
+}
+function openRoomTypeRates(typeId, planId) {
+  const t = roomTypes.find((x) => x.id === typeId);
+  if (!t) return;
+  const tn = normalizeRoomType(t);
+  const editing = planId ? tn.ratePlans.find((p) => p.id === planId) : null;
+  const p = editing || normalizeRatePlan({});
+  const isEdit = !!editing;
+  const blank = (v) => (v == null ? "" : v);
+  openModal({
+    title: `Rate plans · ${t.name}`, sub: "Different prices for longer stays, early bookers or promo codes — based on each room's nightly rate",
+    body: `
+      <div class="row-list" style="margin-bottom:6px">
+        ${tn.ratePlans.map((pl) => `
+          <div class="row-item"><div class="ri-main"><strong>${esc(pl.name)}</strong><span>${esc(planSummary(pl))}</span></div>
+            <div class="ri-right" style="display:flex;gap:6px;align-items:center">
+            <button class="btn btn-ghost btn-xs" data-action="rtp-edit" data-type="${esc(t.id)}" data-plan="${esc(pl.id)}" type="button">Edit</button>
+            <button class="btn btn-ghost btn-xs" data-action="rtp-del" data-type="${esc(t.id)}" data-plan="${esc(pl.id)}" type="button">Delete</button></div></div>`).join("") || `<p class="hint">No rate plans yet — every booking uses the standard rate. Add your first below (e.g. an extended-stay discount).</p>`}
+      </div>
+
+      <h4 class="rt-sec">${isEdit ? "Edit" : "New"} rate plan</h4>
+      <div class="field"><label>Plan name *</label><input class="input" id="rpName" value="${isEdit ? esc(p.name) : ""}" placeholder="e.g. Extended stay rate"><span class="help">This is the rate name that displays to online customers when it applies.</span></div>
+      <div class="field"><label>Description</label><textarea class="textarea" id="rpDesc" placeholder="e.g. Enjoy 10% off when booking for more than three nights.">${isEdit ? esc(p.desc) : ""}</textarea></div>
+      <div class="form-3">
+        <div class="field"><label>Default minimum stay *</label><input class="input" id="rpMinStay" type="number" min="0" value="${p.minStay}"></div>
+        <div class="field"><label>Default maximum stay</label><input class="input" id="rpMaxStay" type="number" min="0" value="${p.maxStay || ""}" placeholder="No limit"></div>
+        <div class="field"><label>Release period (days)</label><input class="input" id="rpRelease" type="number" min="0" value="${p.releasePeriod || ""}" placeholder="0"><span class="help">Booking must be made at least this many days in advance.</span></div>
+      </div>
+
+      <h4 class="rt-sec">Rates</h4>
+      <div class="form-3">
+        <div class="field"><label>Rate type</label><select class="select" id="rpKind"><option value="percent" ${p.rateKind === "percent" ? "selected" : ""}>% difference</option><option value="flat" ${p.rateKind === "flat" ? "selected" : ""}>$ difference / night</option></select></div>
+        <div class="field"><label>Difference *</label><input class="input mono" id="rpDiff" type="number" step="0.1" value="${p.difference}"><span class="help">Use a negative number for a discount, e.g. -10.</span></div>
+        <div class="field"><label>Extra adult rate *</label><input class="input mono" id="rpExtraAdult" type="number" min="0" step="0.01" value="${p.extraAdultRate}"></div>
+      </div>
+      <div class="form-2">
+        <div class="field"><label>Extra child rate *</label><input class="input mono" id="rpExtraChild" type="number" min="0" step="0.01" value="${p.extraChildRate}"></div>
+        <div class="field"><label>Extra infant rate *</label><input class="input mono" id="rpExtraInfant" type="number" min="0" step="0.01" value="${p.extraInfantRate}"></div>
+      </div>
+
+      <h4 class="rt-sec">Occupancies</h4>
+      <div class="form-3">
+        <div class="field"><label>Included occupants</label><input class="input" id="rpIncOcc" type="number" min="0" value="${blank(p.includedOccupants)}" placeholder="Use type default"></div>
+        <div class="field"><label>Maximum adults</label><input class="input" id="rpMaxAdults" type="number" min="0" value="${blank(p.maxAdults)}" placeholder="Use type default"></div>
+        <div class="field"><label>Maximum children</label><input class="input" id="rpMaxChildren" type="number" min="0" value="${blank(p.maxChildren)}" placeholder="Use type default"></div>
+      </div>
+      <div class="form-2">
+        <div class="field"><label>Maximum infants</label><input class="input" id="rpMaxInfants" type="number" min="0" value="${blank(p.maxInfants)}" placeholder="Use type default"><span class="help">Number of infants do not count towards the maximum number of occupants.</span></div>
+        <div class="field"><label>Maximum occupants</label><input class="input" id="rpMaxOcc" type="number" min="0" value="${blank(p.maxOccupants)}" placeholder="Use type default"></div>
+      </div>
+
+      <h4 class="rt-sec">Promotional code</h4>
+      <div class="field"><label>Promo code</label><input class="input mono" id="rpPromo" value="${isEdit ? esc(p.promoCode) : ""}" placeholder="e.g. STAYLONGER" style="text-transform:uppercase"><span class="help">Leave blank if this rate shows to everyone. If you enter a code, the rate is only shown when a guest enters that linked promotional code at checkout.</span></div>`,
+    foot: `<button class="btn btn-ghost btn-sm" data-action="rtp-back" data-type="${esc(t.id)}" type="button">Back to type</button>
+      <button class="btn btn-primary btn-sm" data-action="rtp-save" data-type="${esc(t.id)}" data-plan="${isEdit ? esc(p.id) : ""}" type="button">${isEdit ? "Save rate plan" : "Add rate plan"}</button>`,
+    wide: true
+  });
+}
+function readRatePlanForm() {
+  const val = (sel) => { const el = $(sel); return el ? el.value.trim() : ""; };
+  const intOr = (sel, d) => { const v = parseInt(val(sel), 10); return Number.isFinite(v) ? v : d; };
+  const intOrNull = (sel) => { const v = parseInt(val(sel), 10); return Number.isFinite(v) ? v : null; };
+  const moneyOr0 = (sel) => { const v = parseFloat(val(sel)); return Number.isFinite(v) ? v : 0; };
+  return normalizeRatePlan({
+    name: val("#rpName"), desc: val("#rpDesc"),
+    minStay: intOr("#rpMinStay", 1), maxStay: intOr("#rpMaxStay", 0), releasePeriod: intOr("#rpRelease", 0),
+    rateKind: val("#rpKind") || "percent",
+    difference: (() => { const v = parseFloat(val("#rpDiff")); return Number.isFinite(v) ? v : 0; })(),
+    extraAdultRate: moneyOr0("#rpExtraAdult"), extraChildRate: moneyOr0("#rpExtraChild"), extraInfantRate: moneyOr0("#rpExtraInfant"),
+    includedOccupants: intOrNull("#rpIncOcc"), maxAdults: intOrNull("#rpMaxAdults"), maxChildren: intOrNull("#rpMaxChildren"),
+    maxInfants: intOrNull("#rpMaxInfants"), maxOccupants: intOrNull("#rpMaxOcc"),
+    promoCode: val("#rpPromo").toUpperCase()
   });
 }
 function readRoomTypeForm() {
@@ -696,23 +861,74 @@ function bindStudio() {
   });
 }
 
-/* ---------------- Reports ---------------- */
+/* ---------------- Reports (computed from your reservations, not samples) ---------------- */
+let reportDays = 30;
+function computeReports(days) {
+  const active = reservations.filter((r) => r.status !== "cancelled");
+  const inWin = active.filter((r) => r.inN >= -(days - 1) && r.inN <= 0);
+  // Chart buckets: daily up to 31 days, weekly beyond that.
+  const buckets = [];
+  if (days <= 31) {
+    for (let off = -(days - 1); off <= 0; off++) {
+      const dt = addDays(off);
+      buckets.push({ label: String(dt.getDate()), title: dt.toLocaleDateString("en-US", { month: "short", day: "numeric" }), value: 0 });
+    }
+    inWin.forEach((r) => { const b = buckets[r.inN + days - 1]; if (b) b.value += r.total; });
+  } else {
+    const weeks = Math.ceil(days / 7);
+    for (let w = weeks - 1; w >= 0; w--) buckets.push({ label: "W" + (weeks - w), title: "Week of " + dstr(addDays(-w * 7 - 6)), value: 0 });
+    inWin.forEach((r) => { const w = Math.min(weeks - 1, Math.floor(-r.inN / 7)); buckets[weeks - 1 - w].value += r.total; });
+  }
+  const byRoom = {};
+  inWin.forEach((r) => { byRoom[r.room] = (byRoom[r.room] || 0) + r.total; });
+  const top = Object.entries(byRoom).map(([code, v]) => { const rm = roomByCode(code); return [code + (rm ? " · " + rm.name : ""), Math.round(v * 100) / 100]; }).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const taxRows = taxes.filter((t) => t.on).map((t) => {
+    let amt = 0;
+    inWin.forEach((r) => { const nights = Math.max(1, r.outN - r.inN); amt += t.kind === "percent" ? r.total * t.value / 100 : t.value * nights; });
+    return [t.name, Math.round(amt * 100) / 100];
+  });
+  const byStatus = { "checked-in": 0, confirmed: 0, pending: 0, "checked-out": 0 };
+  inWin.forEach((r) => { if (byStatus[r.status] != null) byStatus[r.status]++; });
+  return {
+    days, buckets, top, taxRows,
+    taxTotal: Math.round(taxRows.reduce((s, [, v]) => s + v, 0) * 100) / 100,
+    revenue: Math.round(inWin.reduce((s, r) => s + r.total, 0) * 100) / 100,
+    collected: Math.round(inWin.reduce((s, r) => s + r.paid, 0) * 100) / 100,
+    count: inWin.length, byStatus
+  };
+}
 function renderReports() {
-  const data = [["12", 420], ["13", 610], ["14", 380], ["15", 540], ["16", 890], ["17", 1240], ["18", 1180], ["19", 640], ["20", 520], ["21", 610], ["22", 780], ["23", 990], ["24", 1310], ["25", 1090]];
-  const max = Math.max(...data.map((d) => d[1]));
-  $("#revChart").innerHTML = data.map(([d, v], i) =>
-    `<div class="bar" title="Oct ${d} · ${money(v)}"><i style="height:${Math.round(v / max * 100)}%"></i><span>${d}</span></div>`).join("");
-  const top = [["B3 · Fern Hollow", 3210], ["C1 · Grove House", 2980], ["B1 · Dogwood Cabin", 2744], ["A2 · Birch Cabin", 2510]];
-  const tmax = top[0][1];
-  $("#topRooms").innerHTML = top.map(([n, v]) => `
+  const rep = computeReports(reportDays);
+  const max = Math.max(1, ...rep.buckets.map((d) => d.value));
+  $("#revChart").innerHTML = rep.buckets.map((d) =>
+    `<div class="bar" title="${esc(d.title)} · ${money(d.value)}"><i style="height:${Math.max(2, Math.round(d.value / max * 100))}%"></i><span>${esc(d.label)}</span></div>`).join("") ||
+    `<div class="empty">No bookings in this window yet.</div>`;
+  const tmax = rep.top.length ? rep.top[0][1] : 1;
+  $("#topRooms").innerHTML = rep.top.map(([n, v]) => `
     <div class="row-item"><div class="ri-main" style="flex:1"><strong>${esc(n)}</strong>
       <div class="progress" style="background:var(--surface-3);margin-top:6px"><i style="width:${Math.round(v / tmax * 100)}%;background:var(--brand-2)"></i></div></div>
-      <div class="ri-right mono">${money(v)}</div></div>`).join("");
-  $("#taxLiability").innerHTML = `
-    <dt>State lodging tax (6.5%)</dt><dd class="mono">$1,021.40</dd>
-    <dt>Tourism assessment</dt><dd class="mono">$287.50</dd>
-    <dt>District fee (1.5%)</dt><dd class="mono">$235.60</dd>
-    <dt><strong>Total owed</strong></dt><dd class="mono"><strong>$1,544.50</strong></dd>`;
+      <div class="ri-right mono">${money(v)}</div></div>`).join("") || `<div class="empty">No revenue in this window yet.</div>`;
+  $("#taxLiability").innerHTML = (rep.taxRows.map(([n, v]) => `<dt>${esc(n)}</dt><dd class="mono">${money(v)}</dd>`).join("") ||
+    `<dt>No tax rules yet</dt><dd class="mono">—</dd>`) +
+    `<dt><strong>Estimated total</strong></dt><dd class="mono"><strong>${money(rep.taxTotal)}</strong></dd>`;
+  const sub = $("#repSub"); if (sub) sub.textContent = `Revenue, occupancy and booking mix · last ${reportDays} days · ${rep.count} reservations · ${money(rep.revenue)} booked`;
+  const card = $("#channelCard");
+  if (card) {
+    const groups = [["In-house", rep.byStatus["checked-in"], "#0c3b3c"], ["Confirmed", rep.byStatus.confirmed, "#c98a2e"], ["Pending", rep.byStatus.pending, "#7fa8a3"], ["Checked out", rep.byStatus["checked-out"], "#b9c8c3"]];
+    const total = Math.max(1, groups.reduce((s, g) => s + g[1], 0));
+    const C = 2 * Math.PI * 58;
+    let acc = 0;
+    const arcs = groups.filter((g) => g[1] > 0).map((g) => {
+      const frac = g[1] / total;
+      const s = `<circle cx="75" cy="75" r="58" fill="none" stroke="${g[2]}" stroke-width="20" stroke-dasharray="${(frac * C).toFixed(1)} ${C.toFixed(1)}" stroke-dashoffset="${(-acc * C).toFixed(1)}" transform="rotate(-90 75 75)"/>`;
+      acc += frac; return s;
+    }).join("");
+    card.innerHTML = `<h3>Bookings by status</h3><p class="hint">${rep.count} reservations in the last ${reportDays} days</p>
+      <div class="donut-row">
+        <svg width="150" height="150" viewBox="0 0 150 150"><circle cx="75" cy="75" r="58" fill="none" stroke="#e8eeec" stroke-width="20"/>${arcs}<text x="75" y="71" text-anchor="middle" font-family="Sora,sans-serif" font-weight="700" font-size="22" fill="#101f1e">${rep.count}</text><text x="75" y="89" text-anchor="middle" font-size="11" fill="#5d6f6b">reservations</text></svg>
+        <div class="legend" style="flex:1">${groups.map((g) => `<div><i style="background:${g[2]}"></i>${g[0]}<b>${total ? Math.round(g[1] / total * 100) : 0}%</b></div>`).join("")}</div>
+      </div>`;
+  }
 }
 
 /* ---------------- Modals: reservation detail / new / charge ---------------- */
@@ -784,13 +1000,16 @@ document.addEventListener("click", (e) => {
   const el = e.target.closest("[data-action]");
   // notification bell (no data-action)
   if (e.target.closest("#notifBtn")) {
+    const items = [];
+    reservations.filter((r) => r.status === "pending").slice(0, 3).forEach((r) => {
+      items.push(`<div class="row-item"><span class="pill pending"><i></i>New</span><div class="ri-main"><strong>Booking request: ${esc(r.guest)}</strong><span>${esc(r.room)} · ${esc(resDates(r))} · ${money(r.total)}</span></div><div class="ri-right"><button class="btn btn-ghost btn-xs" data-action="res-detail" data-ref="${esc(r.ref)}" type="button">Review</button></div></div>`);
+    });
+    reservations.filter((r) => balance(r) > 0 && r.status !== "cancelled").slice(0, 3).forEach((r) => {
+      items.push(`<div class="row-item"><span class="pill overdue"><i></i>Unpaid</span><div class="ri-main"><strong>${esc(r.ref)} balance ${money(balance(r))}</strong><span>${esc(r.guest)} · ${esc(r.room)}</span></div><div class="ri-right"><button class="btn btn-ghost btn-xs" data-action="charge" data-ref="${esc(r.ref)}" type="button">Charge</button></div></div>`);
+    });
     openModal({
-      title: "Notifications", sub: "Today",
-      body: `<div class="row-list">
-        <div class="row-item"><span class="pill pending"><i></i>New</span><div class="ri-main"><strong>Booking request: Greg Poulsen</strong><span>B2 · Oct 30 – Nov 2 · $655.20</span></div></div>
-        <div class="row-item"><span class="pill pending"><i></i>New</span><div class="ri-main"><strong>Booking request: Nina Rossi</strong><span>C2 · Oct 30 – Nov 1 · $348.60</span></div></div>
-        <div class="row-item"><span class="pill overdue"><i></i>Unpaid</span><div class="ri-main"><strong>R-1042 balance $486.20</strong><span>Daniel Okafor · due yesterday</span></div></div>
-      </div>`,
+      title: "Notifications", sub: "Needs your attention",
+      body: `<div class="row-list">${items.join("") || `<div class="empty">All caught up. No pending requests or unpaid balances.</div>`}</div>`,
       foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Close</button>`,
     });
     return;
@@ -798,6 +1017,7 @@ document.addEventListener("click", (e) => {
   if (!el) return;
   const a = el.dataset.action, ref = el.dataset.ref;
 
+  if (a === "confirm-yes") { const cb = confirmCb; confirmCb = null; closeModal(); if (cb) cb(); return; }
   if (a === "new-reservation") openNewReservation();
   else if (a === "res-detail") openResDetail(ref);
   else if (a === "charge") { closeModal(); setTimeout(() => openCharge(ref), 30); }
@@ -811,6 +1031,8 @@ document.addEventListener("click", (e) => {
     const contact = $("#nrContact").value.trim() || "—";
     const room = $("#nrRoom").value;
     const nin = $("#nrIn").value, nout = $("#nrOut").value;
+    if (!roomByCode(room)) { toast("Pick a room", "Add a room first, then create the reservation", "warn"); return; }
+    if (!nin || !nout || new Date(nout) <= new Date(nin)) { toast("Check your dates", "Check-out must be after check-in", "warn"); return; }
     const nights = Math.max(1, Math.round((new Date(nout) - new Date(nin)) / dayMs));
     const subtotal = nightlySum(roomByCode(room), nin, nout);
     const taxEst = taxes.filter((t) => t.on).reduce((s, t) => s + (t.kind === "percent" ? subtotal * t.value / 100 : t.value * nights), 0);
@@ -833,6 +1055,7 @@ document.addEventListener("click", (e) => {
   else if (a === "run-charge") {
     const r = reservations.find((x) => x.ref === ref);
     const amt = Math.min(parseFloat($("#chAmt").value) || 0, balance(r));
+    if (amt <= 0) { toast("Enter an amount", "More than $0 and no more than the balance due", "warn"); return; }
     const methodLabel = $("#chMethod").value;
     r.paid = Math.round((r.paid + amt) * 100) / 100;
     txns.unshift({ when: "Just now", desc: `${r.ref} · Charge · ${r.guest}`, method: methodLabel, status: "paid", amount: amt });
@@ -873,8 +1096,10 @@ document.addEventListener("click", (e) => {
     const csvCell = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
     let rows, fname;
     if (activeView === "view-reports") {
-      rows = [["Metric", "Value"], ["Revenue (Oct)", "$18.4k"], ["Direct booking share", "55%"], ["Tax liability total", "$1,544.50"], ["", ""], ["Top unit", "Revenue"]]
-        .concat([["B3 Fern Hollow", 3210], ["C1 Grove House", 2980], ["B1 Dogwood Cabin", 2744], ["A2 Birch Cabin", 2510]]);
+      const rep = computeReports(reportDays);
+      rows = [["Metric", "Value"], ["Window (days)", rep.days], ["Reservations", rep.count], ["Revenue booked", rep.revenue.toFixed(2)], ["Collected", rep.collected.toFixed(2)], ["Estimated tax liability", rep.taxTotal.toFixed(2)], ["", ""], ["Top unit", "Revenue"]]
+        .concat(rep.top.map(([n, v]) => [n, v.toFixed(2)]))
+        .concat([["", ""], ["Tax rule", "Estimated amount"]], rep.taxRows.map(([n, v]) => [n, v.toFixed(2)]));
       fname = "simplehotelier-report.csv";
     } else {
       rows = [["Guest", "Confirmation", "Room", "Check-in offset", "Check-out offset", "Status", "Total", "Paid", "Balance"]]
@@ -894,11 +1119,48 @@ document.addEventListener("click", (e) => {
   else if (a === "room-rates") { ratesRoomCode = el.dataset.code; goto("rates"); }
   else if (a === "rt-edit") openRoomTypes(roomTypes[+el.dataset.i].id);
   else if (a === "rt-del") {
-    const [gone] = roomTypes.splice(+el.dataset.i, 1);
-    rooms.forEach((r) => { if (r.typeId === gone.id) r.typeId = null; });
-    if (window.SHDB && gone.id && !String(gone.id).startsWith("demo-")) SHDB.deleteRoomType(gone.id).catch(() => toast("Deleted locally only", "Supabase delete failed", "warn"));
-    toast(`Deleted type “${gone.name}”`, "Rooms keep their own names and rates", "warn");
-    openRoomTypes();
+    const gone = roomTypes[+el.dataset.i];
+    if (!gone) return;
+    confirmAction(`Delete “${gone.name}”?`, "Rooms with this type keep their own names and rates, but lose the shared details, features and rate plans. This cannot be undone.", "Delete type", () => {
+      roomTypes.splice(roomTypes.indexOf(gone), 1);
+      rooms.forEach((r) => { if (r.typeId === gone.id) r.typeId = null; });
+      if (window.SHDB && gone.id && !String(gone.id).startsWith("demo-")) SHDB.deleteRoomType(gone.id).catch(() => toast("Deleted locally only", "Supabase delete failed", "warn"));
+      toast(`Deleted type “${gone.name}”`, "Rooms keep their own names and rates", "warn");
+      openRoomTypes();
+    });
+  }
+  else if (a === "rt-rates") openRoomTypeRates(roomTypes[+el.dataset.i].id);
+  else if (a === "rtp-back") openRoomTypes(el.dataset.type);
+  else if (a === "rtp-edit") openRoomTypeRates(el.dataset.type, el.dataset.plan);
+  else if (a === "rtp-del") {
+    const t = roomTypes.find((x) => x.id === el.dataset.type);
+    const pl = t && normalizeRoomType(t).ratePlans.find((x) => x.id === el.dataset.plan);
+    if (!t || !pl) return;
+    confirmAction(`Delete “${pl.name}”?`, "Bookings will use the standard rate instead. This cannot be undone.", "Delete rate plan", () => {
+      t.ratePlans = normalizeRoomType(t).ratePlans.filter((x) => x.id !== pl.id);
+      persistRoomType(t);
+      toast(`Deleted rate plan “${pl.name}”`, t.name, "warn");
+      openRoomTypeRates(t.id);
+    });
+  }
+  else if (a === "rtp-save") {
+    const t = roomTypes.find((x) => x.id === el.dataset.type);
+    if (!t) return;
+    const data = readRatePlanForm();
+    if (!data.name) { toast("Give the rate plan a name", "e.g. Extended stay rate", "warn"); return; }
+    if (data.maxStay > 0 && data.minStay > data.maxStay) { toast("Check stay limits", "Minimum stay is longer than the maximum stay", "warn"); return; }
+    t.ratePlans = normalizeRoomType(t).ratePlans;
+    const planId = el.dataset.plan;
+    if (planId) {
+      const ix = t.ratePlans.findIndex((x) => x.id === planId);
+      if (ix >= 0) t.ratePlans[ix] = { ...data, id: planId };
+      toast("Rate plan saved", data.name, "ok");
+    } else {
+      t.ratePlans.push(data);
+      toast("Rate plan added", `${data.name} · ${t.name}`, "ok");
+    }
+    persistRoomType(t);
+    openRoomTypeRates(t.id);
   }
   else if (a === "rt-photos") openRoomTypePhotos(roomTypes[+el.dataset.i].id);
   else if (a === "rt-photo-del") {
@@ -975,6 +1237,7 @@ document.addEventListener("click", (e) => {
     const room = ratesRoom();
     const from = $("#rateFrom").value, to = $("#rateTo").value, val = parseFloat($("#rateBulk").value), mode = $("#rateMode").value;
     if (!room || !from || !to || isNaN(val)) { toast("Pick a room, range and rate", "All three are needed for bulk rates", "warn"); return; }
+    if (from > to) { toast("Check the range", "Start date must be before the end date", "warn"); return; }
     const entries = [];
     const d = new Date(from + "T12:00:00"), end = new Date(to + "T12:00:00");
     while (d <= end) {
@@ -995,6 +1258,7 @@ document.addEventListener("click", (e) => {
     const room = ratesRoom();
     const from = $("#rateFrom").value, to = $("#rateTo").value;
     if (!room || !from || !to) { toast("Pick a room and range", "Then clear overrides inside it", "warn"); return; }
+    if (from > to) { toast("Check the range", "Start date must be before the end date", "warn"); return; }
     const d = new Date(from + "T12:00:00"), end = new Date(to + "T12:00:00");
     let n = 0;
     const clears = [];
@@ -1082,11 +1346,34 @@ document.addEventListener("click", (e) => {
     toast("Email draft opened", email || "Address it to your cleaner", "ok");
   }
   else if (a === "save-settings") {
+    const v = (id) => { const el = $(id); return el ? el.value.trim() : ""; };
+    const url = (id) => { const s = v(id); return s && !/^https?:\/\//i.test(s) ? "https://" + s : s; };
+    const intOrNull = (id) => { const n = parseInt(v(id), 10); return Number.isFinite(n) ? n : null; };
+    if (!v("#pfName")) { toast("Property name is required", "It shows on your booking page and receipts", "warn"); return; }
+    const minRate = parseFloat(v("#pfMinRoomRate"));
     const patch = {
-      name: $("#pfName").value.trim(), contact_email: $("#pfEmail").value.trim(),
-      check_in_time: $("#pfCheckIn").value.trim(), check_out_time: $("#pfCheckOut").value.trim(),
-      cancellation_policy: ["moderate", "flexible", "strict"][$("#pfPolicy").selectedIndex] || "moderate"
+      name: v("#pfName"), contact_email: v("#pfEmail") || null,
+      address_line1: v("#pfAddress1") || null, address_line2: v("#pfAddress2") || null,
+      postcode: v("#pfPostcode") || null, city: v("#pfCity") || null, state: v("#pfState") || null,
+      country: v("#pfCountry") || null, tax_number: v("#pfTaxNumber") || null,
+      phone: v("#pfPhone") || null, contact_phone: v("#pfContactPhone") || null,
+      website_url: url("#pfWebsite") || null, facebook_url: url("#pfFacebook") || null,
+      instagram_url: url("#pfInstagram") || null, twitter_url: url("#pfTwitter") || null, youtube_url: url("#pfYoutube") || null,
+      description: v("#pfDesc") || null,
+      star_rated: !!($("#pfStarRated") && $("#pfStarRated").checked),
+      star_count: ($("#pfStarRated") && $("#pfStarRated").checked) ? intOrNull("#pfStars") : null,
+      check_in_time: v("#pfCheckIn"), check_out_time: v("#pfCheckOut"),
+      cancellation_policy: ["moderate", "flexible", "strict"][$("#pfPolicy").selectedIndex] || "moderate",
+      max_child_age: intOrNull("#pfMaxChildAge"), max_infant_age: intOrNull("#pfMaxInfantAge"),
+      min_room_rate_cents: Number.isFinite(minRate) ? Math.round(minRate * 100) : null,
+      weekend_starts: v("#pfWeekendStarts") || "saturday",
+      allow_decimals: !!($("#pfAllowDecimals") && $("#pfAllowDecimals").checked),
+      booking_email: v("#pfBookingEmail") || null, booking_cc_email: v("#pfBookingCc") || null,
+      enquiry_email: v("#pfEnquiryEmail") || null, availability_email: v("#pfAvailEmail") || null,
+      gdpr_consent: !!($("#pfGdpr") && $("#pfGdpr").checked)
     };
+    tenantDisplayName = patch.name;
+    renderOverview();
     if ($("#bkName")) $("#bkName").value = patch.name;
     if (window.SHDB && SHDB.hasLive()) {
       SHDB.updateTenantSettings(patch).then(() => toast("Settings saved", "Property profile updated", "ok"))
@@ -1098,14 +1385,22 @@ document.addEventListener("click", (e) => {
     if (window.SHDB && ad.id) SHDB.setAddonActive(ad.id, ad.on).catch(() => toast("Visibility saved locally only", "Supabase write failed", "warn"));
   }
   else if (a === "del-addon") {
-    const [gone] = addons.splice(+el.dataset.i, 1); renderAddons();
-    if (window.SHDB && gone.id) SHDB.deleteAddon(gone.id).catch(() => toast("Removed locally only", "Supabase delete failed", "warn"));
-    toast(`Removed “${gone.name}”`, "It no longer shows at checkout", "warn");
+    const gone = addons[+el.dataset.i];
+    if (!gone) return;
+    confirmAction(`Remove “${gone.name}”?`, "Guests will no longer see this add-on at checkout. Existing reservations keep what they already booked.", "Remove add-on", () => {
+      addons.splice(addons.indexOf(gone), 1); renderAddons();
+      if (window.SHDB && gone.id) SHDB.deleteAddon(gone.id).catch(() => toast("Removed locally only", "Supabase delete failed", "warn"));
+      toast(`Removed “${gone.name}”`, "It no longer shows at checkout", "warn");
+    });
   }
   else if (a === "del-tax") {
-    const [gone] = taxes.splice(+el.dataset.i, 1); renderTaxes();
-    if (window.SHDB && gone.id) SHDB.deleteTax(gone.id).catch(() => toast("Removed locally only", "Supabase delete failed", "warn"));
-    toast(`Removed “${gone.name}”`, "Totals recalculated", "warn");
+    const gone = taxes[+el.dataset.i];
+    if (!gone) return;
+    confirmAction(`Remove “${gone.name}”?`, "New totals will be calculated without this tax or fee. Past reservations are not changed.", "Remove rule", () => {
+      taxes.splice(taxes.indexOf(gone), 1); renderTaxes();
+      if (window.SHDB && gone.id) SHDB.deleteTax(gone.id).catch(() => toast("Removed locally only", "Supabase delete failed", "warn"));
+      toast(`Removed “${gone.name}”`, "Totals recalculated", "warn");
+    });
   }
   else if (a === "add-addon") {
     openModal({
@@ -1119,6 +1414,7 @@ document.addEventListener("click", (e) => {
   }
   else if (a === "save-addon") {
     const na = { name: $("#adName").value.trim() || "Custom add-on", price: parseFloat($("#adPrice").value) || 0, per: $("#adPer").value, on: true, desc: $("#adDesc").value.trim() || "Custom charge" };
+    if (na.price < 0) { toast("Check the price", "Price cannot be negative", "warn"); return; }
     addons.unshift(na);
     if (window.SHDB && SHDB.hasLive()) SHDB.createAddon(na).then((row) => { if (row) na.id = row.id; }).catch(() => toast("Add-on saved locally only", "Supabase write failed", "warn"));
     closeModal(); renderAddons(); toast("Add-on added", "Now available at checkout", "ok");
@@ -1129,12 +1425,12 @@ document.addEventListener("click", (e) => {
       body: `<div class="form-2"><div class="field"><label>Name</label><input class="input" id="txName" placeholder="e.g. City lodging fee"></div>
         <div class="field"><label>Type</label><select class="select" id="txKind"><option value="percent">Percent of subtotal</option><option value="night">Flat per night</option></select></div></div>
         <div class="form-2"><div class="field"><label>Value</label><input class="input mono" id="txVal" type="number" step="0.01" value="2"></div>
-        <div class="field"><label>Applies to</label><select class="select"><option>Room + add-ons</option><option>Room only</option></select></div></div>`,
+        <div class="field"><label>Applies to</label><select class="select" id="txApplies"><option>Room + add-ons</option><option>Room only</option></select></div></div>`,
       foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Cancel</button><button class="btn btn-primary btn-sm" data-action="save-tax" type="button">Add rule</button>`,
     });
   }
   else if (a === "save-tax") {
-    const nt = { name: $("#txName").value.trim() || "Custom fee", kind: $("#txKind").value, value: parseFloat($("#txVal").value) || 0, applies: "Room + add-ons", on: true };
+    const nt = { name: $("#txName").value.trim() || "Custom fee", kind: $("#txKind").value, value: parseFloat($("#txVal").value) || 0, applies: $("#txApplies") ? $("#txApplies").value : "Room + add-ons", on: true };
     taxes.push(nt);
     if (window.SHDB && SHDB.hasLive()) SHDB.createTax(nt).then((row) => { if (row) nt.id = row.id; }).catch(() => toast("Tax saved locally only", "Supabase write failed", "warn"));
     closeModal(); renderTaxes(); toast("Tax rule added", "Totals recalculated everywhere", "ok");
@@ -1153,6 +1449,8 @@ document.addEventListener("click", (e) => {
   else if (a === "save-room") {
     const typeSel = roomTypes.find((t) => t.id === $("#rmType").value);
     const nr = { code: ($("#rmCode").value.trim() || "NEW").toUpperCase(), name: $("#rmName").value.trim() || "New unit", sleeps: parseInt($("#rmSleeps").value) || 2, rate: parseFloat($("#rmRate").value) || 0, typeId: typeSel && !String(typeSel.id).startsWith("demo-") ? typeSel.id : null };
+    if (roomByCode(nr.code)) { toast("That code is already used", "Pick a different room code, e.g. D2", "warn"); return; }
+    if (nr.rate < 0) { toast("Check the rate", "Nightly rate cannot be negative", "warn"); return; }
     const localRoom = { code: nr.code, name: nr.name, sleeps: nr.sleeps, typeId: nr.typeId, typeName: typeSel ? typeSel.name : "Cabin", type: "", rate: nr.rate, status: "vacant", hk: "clean", guest: "", note: "New unit — add photos & details", photos: [] };
     syncRoomType(localRoom);
     rooms.push(localRoom);
@@ -1174,7 +1472,7 @@ $("#globalSearch").addEventListener("keydown", (e) => {
 /* ---------------- Boot ---------------- */
 renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
 renderRooms(); renderHK(); renderFolios(); renderTxns();
-renderAddons(); renderTaxes(); renderMockRooms(); renderReports();
+renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview();
 bindStudio(); updateEmbed(null);
 
 /* Live Supabase data (falls back silently to demo data when unconfigured).
@@ -1202,8 +1500,9 @@ function loadLiveIntoUI() {
     if (live.roomTypes && live.roomTypes.length) roomTypes = live.roomTypes.map(normalizeRoomType);
     if (live.rateOverrides) { rateOverrides = {}; live.rateOverrides.forEach((o) => { if (o.roomCode) rateOverrides[o.roomCode + "|" + o.date] = o.rate; }); }
     if (live.txns && live.txns.length) { txns.splice(0, txns.length, ...live.txns); }
+    tenantDisplayName = live.tenant.name || "";
     renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
-    renderRooms(); renderHK(); renderFolios(); renderTxns(); renderAddons(); renderTaxes(); renderMockRooms();
+    renderRooms(); renderHK(); renderFolios(); renderTxns(); renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview();
     if (live.user) {
       $("#userName").textContent = live.user.email;
       $("#userRole").textContent = "Owner · " + live.tenant.name;
@@ -1219,6 +1518,27 @@ function loadLiveIntoUI() {
     if ($("#pfCheckIn")) $("#pfCheckIn").value = live.tenant.check_in_time || "3:00 PM";
     if ($("#pfCheckOut")) $("#pfCheckOut").value = live.tenant.check_out_time || "11:00 AM";
     if ($("#pfPolicy")) { const ix = ["moderate", "flexible", "strict"].indexOf(live.tenant.cancellation_policy); $("#pfPolicy").selectedIndex = ix >= 0 ? ix : 0; }
+    {
+      const T = live.tenant;
+      const set = (id, val) => { const el = $(id); if (el && val != null) el.value = val; };
+      const chk = (id, val) => { const el = $(id); if (el) el.checked = !!val; };
+      set("#pfAddress1", T.address_line1); set("#pfAddress2", T.address_line2);
+      set("#pfPostcode", T.postcode); set("#pfCity", T.city); set("#pfState", T.state);
+      if (T.country && $("#pfCountry")) { const c = $("#pfCountry"); if (![...c.options].some((o) => o.value === T.country)) c.add(new Option(T.country, T.country)); c.value = T.country; }
+      set("#pfTaxNumber", T.tax_number);
+      set("#pfPhone", T.phone); set("#pfContactPhone", T.contact_phone);
+      set("#pfWebsite", T.website_url); set("#pfFacebook", T.facebook_url); set("#pfInstagram", T.instagram_url);
+      set("#pfTwitter", T.twitter_url); set("#pfYoutube", T.youtube_url);
+      set("#pfDesc", T.description);
+      chk("#pfStarRated", T.star_rated); if (T.star_count) set("#pfStars", String(T.star_count));
+      set("#pfMaxChildAge", T.max_child_age); set("#pfMaxInfantAge", T.max_infant_age);
+      if (T.min_room_rate_cents != null) set("#pfMinRoomRate", (T.min_room_rate_cents / 100).toFixed(2));
+      set("#pfWeekendStarts", T.weekend_starts || "saturday");
+      chk("#pfAllowDecimals", T.allow_decimals !== false);
+      set("#pfBookingEmail", T.booking_email); set("#pfBookingCc", T.booking_cc_email);
+      set("#pfEnquiryEmail", T.enquiry_email); set("#pfAvailEmail", T.availability_email);
+      chk("#pfGdpr", T.gdpr_consent);
+    }
     if (live.tenant.logo_url && $("#logoPreview")) { $("#logoPreview").src = live.tenant.logo_url; $("#logoPreview").hidden = false; const le = $("#logoEmpty"); if (le) le.style.display = "none"; }
     renderRates();
     if ($("#billStatus")) $("#billStatus").textContent = live.tenant.subscription_status || "trialing";

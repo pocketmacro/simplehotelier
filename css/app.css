@@ -7,13 +7,13 @@
   --ink: #101f1e;
   --ink-2: #33413f;
   --muted: #5d6f6b;
-  --faint: #8aa09b;
+  --faint: #5f7a73;
   --line: #dbe4e1;
   --line-soft: #e8eeec;
   --brand: #0c3b3c;
   --brand-2: #115152;
   --brand-3: #1a6465;
-  --brass: #b97a2a;
+  --brass: #96621e;
   --brass-soft: #f7ecda;
   --success: #1d7a4c;
   --success-soft: #e2f2e8;
@@ -88,7 +88,7 @@ button { font-family: inherit; }
 .prop-dot { width: 9px; height: 9px; border-radius: 50%; background: #7fd79a; flex: none; }
 .prop-picker strong { display: block; font-size: 13px; color: #fff; }
 .prop-picker span { font-size: 11.5px; color: var(--sidebar-muted); }
-.nav-label { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6f8883; padding: 10px 10px 6px; }
+.nav-label { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9dbcb5; padding: 10px 10px 6px; }
 .nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 .nav-btn {
   display: flex; align-items: center; gap: 11px;
@@ -412,7 +412,7 @@ table.data .guest span { color: var(--muted); font-size: 12.3px; }
 /* Responsive */
 @media (max-width: 1100px) {
   .g-kpi { grid-template-columns: repeat(2, 1fr); }
-  .g-2, .g-2eq, .studio { grid-template-columns: 1fr; }
+  .g-2, .g-2eq, .g-3, .studio { grid-template-columns: 1fr; }
   .hk-board { grid-template-columns: 1fr; }
   .mock-rooms { grid-template-columns: 1fr 1fr; }
   .mock-search { grid-template-columns: 1fr 1fr; }

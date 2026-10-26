@@ -1,7 +1,7 @@
 /* SimpleHotelier — public booking page + embed widget (standalone, mobile-first) */
 :root {
   --brand: #0c3b3c; --brand-2: #115152; --brass: #b97a2a;
-  --ink: #101f1e; --ink-2: #33413f; --muted: #5d6f6b; --faint: #8aa09b;
+  --ink: #101f1e; --ink-2: #33413f; --muted: #5d6f6b; --faint: #5f7a73;
   --line: #dbe4e1; --bg: #f2f5f3; --surface: #fff;
   --success: #1d7a4c; --danger: #b3261e; --danger-soft: #f9e3e1;
   --radius: 14px;
@@ -17,7 +17,7 @@ h1, h2 { font-family: "Sora", "Segoe UI", sans-serif; color: var(--ink); letter-
 .bk-hero h1 { font-size: clamp(28px, 5vw, 42px); line-height: 1.08; margin: 0 0 8px; max-width: 640px; }
 .bk-hero p { color: var(--muted); max-width: 560px; margin: 0; font-size: 15.5px; }
 .bk-wrap { max-width: 1080px; margin: 0 auto; padding: 18px 22px 54px; }
-.bk-search { display: grid; grid-template-columns: 1fr 1fr .7fr auto; gap: 12px; align-items: end; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: 0 1px 2px rgb(16 31 30 / 7%), 0 4px 14px rgb(16 31 30 / 6%); }
+.bk-search { display: grid; grid-template-columns: 1fr 1fr .7fr 1fr auto; gap: 12px; align-items: end; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: 0 1px 2px rgb(16 31 30 / 7%), 0 4px 14px rgb(16 31 30 / 6%); }
 .bk-field { display: flex; flex-direction: column; gap: 5px; }
 .bk-field label { font-size: 12px; font-weight: 700; color: var(--ink); }
 .bk-input { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; width: 100%; }
@@ -41,6 +41,15 @@ h1, h2 { font-family: "Sora", "Segoe UI", sans-serif; color: var(--ink); letter-
 .bk-room .meta { font-size: 12.8px; color: var(--muted); }
 .bk-feats { display: flex; flex-wrap: wrap; gap: 5px; }
 .bk-feat { font-size: 11px; font-weight: 600; color: var(--brand); background: #eef4f2; border: 1px solid #d8e4e0; border-radius: 999px; padding: 2px 8px; }
+.bk-feat.bk-plan { background: #fdf3e0; border-color: #ecd9ae; color: #7a5410; }
+.bk-about { margin-top: 26px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.bk-about h2 { margin-top: 0; }
+.bk-about p { color: var(--muted); line-height: 1.6; }
+.bk-contact { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 13.5px; color: var(--ink-2); margin-top: 12px; }
+.bk-socials { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.bk-socials a { font-size: 12px; font-weight: 700; color: var(--brand); border: 1px solid #d8e4e0; background: #eef4f2; border-radius: 999px; padding: 4px 11px; text-decoration: none; }
+.bk-consent { display: flex; gap: 9px; align-items: flex-start; font-size: 13px; color: var(--muted); margin-top: 4px; cursor: pointer; }
+.bk-consent input { margin-top: 3px; accent-color: var(--brand); }
 .bk-room .price { margin-top: auto; padding-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .bk-room .price b { font-family: "Sora", sans-serif; color: var(--ink); font-size: 17px; }
 .bk-room .price span { font-size: 11.8px; color: var(--faint); }

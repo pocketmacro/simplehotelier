@@ -31,7 +31,7 @@ globalThis.fetch = async (url, opts = {}) => {
   if (u.includes("/rest/v1/transactions?")) return json([]);
   if (u.includes("/rest/v1/room_types") && opts.method === "POST") return json([{ id: "type-2" }], 201);
   if (u.includes("/rest/v1/room_types") && opts.method === "PATCH") return json([{ id: "type-1" }]);
-  if (u.includes("/rest/v1/room_types?")) return json([{ id: "type-1", tenant_id: tenantId, name: "Cabin", description: "Standalone", bathrooms: 1.5, view: "Mountain view", smoking_policy: "non-smoking", min_stay: 2, max_stay: 14, rack_rate_cents: 24900, extra_adult_cents: 2500, extra_child_cents: 1000, extra_infant_cents: 0, included_adults: 2, included_children: 0, included_infants: 0, max_adults: 4, max_children: 2, max_infants: 1, max_occupants: 6, adults_required: 1, beds: [{ qty: 1, type: "Queen" }], handicap_accessible: true, accessible_features: ["Step-free entry"], features: ["Hot tub"], photos: ["https://example.com/y.jpg"] }]);
+  if (u.includes("/rest/v1/room_types?")) return json([{ id: "type-1", tenant_id: tenantId, name: "Cabin", description: "Standalone", bathrooms: 1.5, view: "Mountain view", smoking_policy: "non-smoking", min_stay: 2, max_stay: 14, rack_rate_cents: 24900, extra_adult_cents: 2500, extra_child_cents: 1000, extra_infant_cents: 0, included_adults: 2, included_children: 0, included_infants: 0, max_adults: 4, max_children: 2, max_infants: 1, max_occupants: 6, adults_required: 1, beds: [{ qty: 1, type: "Queen" }], handicap_accessible: true, accessible_features: ["Step-free entry"], features: ["Hot tub"], photos: ["https://example.com/y.jpg"], rate_plans: [{ id: "plan-1", name: "Extended stay rate", minStay: 3, maxStay: 30, rateKind: "percent", difference: -10, promoCode: "" }] }]);
   if (u.includes("/rest/v1/reservations") && opts.method === "POST") return json([{ id: "res-1", confirmation_code: opts.body ? JSON.parse(opts.body).confirmation_code : null }], 201);
   if (u.includes("/rest/v1/addons") && opts.method === "POST") return json([{ id: "addon-1" }], 201);
   return json([], 200);
@@ -71,6 +71,9 @@ test("room type details map cents and JSONB lists on load", async () => {
   assert.equal(t.handicapAccessible, true);
   assert.deepEqual(t.features, ["Hot tub"]);
   assert.deepEqual(t.photos, ["https://example.com/y.jpg"]);
+  assert.equal(t.ratePlans.length, 1);
+  assert.equal(t.ratePlans[0].name, "Extended stay rate");
+  assert.equal(t.ratePlans[0].difference, -10);
 });
 
 test("createRoomType posts full detail payload in cents", async () => {
@@ -80,7 +83,8 @@ test("createRoomType posts full detail payload in cents", async () => {
     includedAdults: 2, includedChildren: 1, includedInfants: 0,
     maxAdults: 3, maxChildren: 2, maxInfants: 1, maxOccupants: 5, adultsRequired: 1,
     beds: [{ qty: 1, type: "King" }, { qty: 2, type: "Twin" }],
-    handicapAccessible: false, accessibleFeatures: [], features: ["Air conditioning"], photos: []
+    handicapAccessible: false, accessibleFeatures: [], features: ["Air conditioning"], photos: [],
+    ratePlans: [{ id: "plan-9", name: "Extended stay rate", minStay: 3, maxStay: 30, rateKind: "percent", difference: -10, promoCode: "STAYLONGER" }]
   });
   const post = calls.find((c) => c.method === "POST" && c.url.includes("/rest/v1/room_types"));
   assert.ok(post, "expected a POST to room_types");
@@ -91,6 +95,8 @@ test("createRoomType posts full detail payload in cents", async () => {
   assert.equal(post.body.max_occupants, 5);
   assert.deepEqual(post.body.beds, [{ qty: 1, type: "King" }, { qty: 2, type: "Twin" }]);
   assert.deepEqual(post.body.features, ["Air conditioning"]);
+  assert.equal(post.body.rate_plans[0].promoCode, "STAYLONGER");
+  assert.equal(post.body.rate_plans[0].difference, -10);
 });
 
 test("createAddon converts dollars to cents and scopes to tenant", async () => {

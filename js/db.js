@@ -47,7 +47,8 @@
       maxInfants: t.max_infants || 0, maxOccupants: t.max_occupants || 0,
       adultsRequired: t.adults_required != null ? t.adults_required : 1,
       beds: arr(t.beds), handicapAccessible: !!t.handicap_accessible,
-      accessibleFeatures: arr(t.accessible_features), features: arr(t.features), photos: arr(t.photos)
+      accessibleFeatures: arr(t.accessible_features), features: arr(t.features), photos: arr(t.photos),
+      ratePlans: arr(t.rate_plans)
     };
   }
   function roomTypePayload(t) {
@@ -64,7 +65,8 @@
       max_adults: int(t.maxAdults, 0), max_children: int(t.maxChildren, 0), max_infants: int(t.maxInfants, 0), max_occupants: int(t.maxOccupants, 0),
       adults_required: int(t.adultsRequired, 1),
       beds: arr(t.beds), handicap_accessible: !!t.handicapAccessible,
-      accessible_features: arr(t.accessibleFeatures), features: arr(t.features), photos: arr(t.photos)
+      accessible_features: arr(t.accessibleFeatures), features: arr(t.features), photos: arr(t.photos),
+      rate_plans: arr(t.ratePlans)
     };
   }
 

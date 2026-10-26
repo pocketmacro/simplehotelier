@@ -153,6 +153,7 @@
     $("#toSignup").addEventListener("click", () => setTab("signup"));
     $("#toLogin").addEventListener("click", () => setTab("login"));
     if (location.hash === "#signup") setTab("signup");
+    if (location.hash === "#login") setTab("login");
     $("#demoBtn").addEventListener("click", () => { gate().hidden = true; });
     $("#signOutBtn").addEventListener("click", async () => { await logout(); location.reload(); });
 
@@ -169,6 +170,7 @@
     $("#signupForm").addEventListener("submit", async (e) => {
       e.preventDefault(); showError("");
       const btn = $("#suSubmit"); btn.disabled = true; btn.textContent = "Creating…";
+      if (!$("#suProperty").value.trim()) { showError("Give your property a name — it becomes your booking page title."); $("#suProperty").focus(); btn.disabled = false; btn.textContent = "Create property & log in"; return; }
       try {
         const data = await signup($("#suEmail").value.trim(), $("#suPassword").value);
         if (!accessToken()) {

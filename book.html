@@ -27,6 +27,7 @@
     <div class="bk-field"><label for="inDate">Check-in</label><input class="bk-input" id="inDate" type="date" required></div>
     <div class="bk-field"><label for="outDate">Check-out</label><input class="bk-input" id="outDate" type="date" required></div>
     <div class="bk-field"><label for="guests">Guests</label><input class="bk-input" id="guests" type="number" min="1" max="16" value="2"></div>
+    <div class="bk-field"><label for="promoCode">Promo code (optional)</label><input class="bk-input" id="promoCode" type="text" placeholder="e.g. STAYLONGER" autocomplete="off" style="text-transform:uppercase"></div>
     <button class="bk-btn bk-btn-main" type="submit">Check availability</button>
   </form>
   <p class="bk-note" id="availNote" hidden></p>
@@ -49,6 +50,7 @@
           <div class="bk-field"><label for="gEmail">Email</label><input class="bk-input" id="gEmail" type="email" autocomplete="email" required placeholder="jane@email.com"></div>
           <div class="bk-field"><label for="gPhone">Phone (optional)</label><input class="bk-input" id="gPhone" autocomplete="tel" placeholder="(555) 010-2030"></div>
           <div class="bk-field"><label for="gNotes">Requests (optional)</label><input class="bk-input" id="gNotes" placeholder="Early arrival, crib, quiet room…"></div>
+          <div class="bk-field" id="gConsentWrap" hidden><label class="bk-consent"><input type="checkbox" id="gConsent"><span>I'd like to receive offers and news from this property by email. You can unsubscribe at any time.</span></label></div>
         </form>
       </section>
     </div>
@@ -60,6 +62,14 @@
       <p class="bk-secure">No payment taken now unless the property requires a deposit. Free cancellation per property policy.</p>
     </aside>
   </div>
+
+  <section class="bk-about" id="propAbout" hidden>
+    <h2 class="bk-h2" id="aboutTitle">About</h2>
+    <p id="aboutStars" hidden></p>
+    <p id="aboutDesc"></p>
+    <div class="bk-contact" id="aboutContact"></div>
+    <div class="bk-socials" id="aboutSocials"></div>
+  </section>
 
   <section class="bk-success" id="successPanel" hidden>
     <div class="bk-check">✓</div>
