@@ -15,7 +15,14 @@ Always mention the destination screen by its exact name in your answer: the app 
 Cover: adding rooms, rates, reservations, calendar, housekeeping flags, charging guests (Stripe Connect), add-ons, taxes, booking page, embedding, Google Analytics, reports, inviting cleaners, billing.
 If you cannot solve it, say so plainly and suggest opening a support case. Never invent buttons or screens. Keep answers under 180 words.`;
 
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const key = Deno.env.get("MODEL_API_KEY") || Deno.env.get("META_API_KEY");
   if (!key) return json({ error: "ai_not_configured" }, 501);
   try {
@@ -57,5 +64,5 @@ Deno.serve(async (req) => {
 });
 
 function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  return new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 }
