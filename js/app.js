@@ -164,6 +164,7 @@ function goto(view) {
   $$("#mainNav .nav-btn, .nav .nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + view));
   if (view === "rates") renderRates();
+  if (view === "setup") renderSetupUI();
   document.body.classList.remove("nav-open");
   window.scrollTo({ top: 0 });
 }
@@ -219,6 +220,53 @@ function renderToday() {
 }
 
 let tenantDisplayName = "";
+let liveTenant = null, liveMembersCount = 1, setupRouted = false;
+/* One source of truth for setup progress — sidebar, Settings checklist and
+   the Setup screen all read from here, so the % is always accurate. */
+function computeSetup() {
+  const T = liveTenant || {};
+  const steps = [
+    { key: "profile", title: "Company profile created", desc: T.name ? `${T.name} · address and phone for guests` : "Name, address and phone guests see", done: !!(T.name && (T.address_line1 || T.address) && T.phone), view: "settings", cta: "Edit profile" },
+    { key: "rooms", title: rooms.length ? `${rooms.length} room${rooms.length > 1 ? "s" : ""} added with rates` : "Add your rooms and rates", desc: "Each room gets a code, sleeps count and nightly rate", done: rooms.length > 0, view: "rooms", cta: rooms.length ? "Manage rooms" : "Add rooms" },
+    { key: "booking", title: "Booking page published", desc: T.slug ? `${T.slug}.simplehotelier.com` : "Your public booking page", done: !!T.booking_headline, view: "booking", cta: "Open booking studio" },
+    { key: "taxes", title: taxes.length ? "Taxes configured" : "Configure taxes", desc: taxes.length ? `${taxes.length} rule${taxes.length > 1 ? "s" : ""} applied to totals` : "Lodging tax, tourism fees and other rules", done: taxes.length > 0, view: "addons", cta: "Set up taxes" },
+    { key: "payouts", title: "Connect bank payouts", desc: "2–3 day transfers · required to charge cards", done: !!T.stripe_onboarding_complete, action: "connect-bank", cta: "Connect Stripe" },
+    { key: "team", title: "Invite your team", desc: liveMembersCount > 1 ? `${liveMembersCount} people on the team` : "Cleaners get a free mobile turnover list", done: liveMembersCount > 1, action: "invite", cta: "Invite" }
+  ];
+  const done = steps.filter((s) => s.done).length;
+  return { steps, done, total: steps.length, pct: Math.round(done / steps.length * 100) };
+}
+function renderSetupUI() {
+  const s = computeSetup();
+  const next = s.steps.find((x) => !x.done);
+  const set = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
+  set("#navSetupPct", s.pct >= 100 ? "Done" : s.pct + "%");
+  set("#setupPctText", s.pct >= 100 ? "Setup complete" : `Setup ${s.pct}% complete`);
+  set("#setupNextText", next ? `${next.title} — next step.` : "You're live. Share your booking page.");
+  const bar = $("#setupBar"); if (bar) bar.style.width = s.pct + "%";
+  set("#setupBigPct", s.pct + "%");
+  const bigBar = $("#setupBigBar"); if (bigBar) bigBar.style.width = s.pct + "%";
+  set("#setupBigText", s.pct >= 100 ? "Everything is ready — you're taking bookings." : `${s.done} of ${s.total} steps done. Next: ${next ? next.title : ""}`);
+  const title = $("#setupTitle"); if (title && tenantDisplayName) title.textContent = "Finish setting up " + tenantDisplayName;
+  const doneCard = $("#setupDone"); if (doneCard) doneCard.hidden = s.pct < 100;
+  const wrap = $("#setupSteps");
+  if (wrap) wrap.innerHTML = s.steps.map((x) => `
+    <div class="row-item" style="align-items:center">
+      <span class="box" style="width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none;${x.done ? "background:var(--success);color:#fff" : "border:1.5px solid #b9c8c3;color:transparent"}">✓</span>
+      <div class="ri-main"><strong>${esc(x.title)}</strong><span>${esc(x.desc)}</span></div>
+      <div class="ri-right"><button class="btn ${x.done ? "btn-ghost" : "btn-primary"} btn-sm" data-action="setup-step" data-key="${x.key}" type="button">${x.done ? "Edit" : esc(x.cta)}</button></div>
+    </div>`).join("");
+  // Settings checklist mirrors the same truth.
+  const rows = $$("#checklist .check");
+  s.steps.forEach((x, i) => {
+    const row = rows[i]; if (!row) return;
+    row.classList.toggle("done", x.done);
+    const box = row.querySelector(".box"); if (box) box.textContent = x.done ? "✓" : "";
+    const strong = row.querySelector("strong"); if (strong) strong.textContent = x.title;
+    const p = row.querySelector("p"); if (p) p.textContent = x.desc;
+    const goEdit = row.querySelector(".check-go"); if (goEdit) goEdit.style.display = x.done ? "" : "none";
+  });
+}
 function renderOverview() {
   const greetEl = $("#ovGreet"), subEl = $("#ovSub");
   if (!greetEl) return;
@@ -252,16 +300,7 @@ function renderOverview() {
   const pend = active.filter((r) => r.status === "pending");
   if (pend.length) items.push(`<div class="row-item"><span class="pill pending"><i></i>Pending</span><div class="ri-main"><strong>${pend.length} request${pend.length > 1 ? "s" : ""} await confirmation</strong><span>${pend.map((r) => esc(r.guest)).slice(0, 2).join(", ")}</span></div><div class="ri-right"><button class="btn btn-ghost btn-xs" data-goto="reservations" type="button">Review</button></div></div>`);
   $("#attentionList").innerHTML = items.join("") || `<div class="empty">All caught up. Nothing needs attention.</div>`;
-  // Keep the Settings setup checklist honest for brand-new (empty) accounts.
-  const chkItems = $$("#checklist .check");
-  const setChk = (ix, done, label) => {
-    const row = chkItems[ix]; if (!row) return;
-    row.classList.toggle("done", done);
-    const box = row.querySelector(".box"); if (box) box.textContent = done ? "✓" : "";
-    const strong = row.querySelector("strong"); if (strong && label) strong.textContent = label;
-  };
-  setChk(1, rooms.length > 0, rooms.length ? `${rooms.length} room${rooms.length > 1 ? "s" : ""} added with rates` : "Add your rooms and rates");
-  setChk(3, taxes.length > 0, taxes.length ? "Taxes configured" : "Configure taxes");
+  renderSetupUI();
   // Sidebar identity + nav badges follow the real property, not the demo.
   const pn = $("#propNameSide"); if (pn && tenantDisplayName) pn.textContent = tenantDisplayName;
   const ps = $("#propSubSide"); if (ps) ps.textContent = `${rooms.length} unit${rooms.length === 1 ? "" : "s"}`;
@@ -1322,7 +1361,7 @@ document.addEventListener("click", (e) => {
         booking_redirect_url: $("#bkRedirect").value.trim() || null,
         deposit_enabled: !!($("#bkDepositOn") && $("#bkDepositOn").checked),
         deposit_percent: Math.min(100, Math.max(1, parseInt($("#bkDepositPct") ? $("#bkDepositPct").value : "25", 10) || 25))
-      }).then(() => { updateEmbed({ slug: slugVal }); toast("Booking page published", "Settings saved to Supabase", "ok"); })
+      }).then(() => { if (liveTenant) { liveTenant.booking_headline = $("#bkHead").value.trim() || liveTenant.booking_headline; liveTenant.deposit_enabled = !!($("#bkDepositOn") && $("#bkDepositOn").checked); } renderSetupUI(); updateEmbed({ slug: slugVal }); toast("Booking page published", "Settings saved to Supabase", "ok"); })
         .catch(() => toast("Could not save settings", "Apply the booking migration (20261027000000), then retry", "warn"));
     } else {
       toast("Booking page published", $("#bkUrl").value, "ok");
@@ -1373,6 +1412,17 @@ document.addEventListener("click", (e) => {
     closeModal();
     toast("Email draft opened", email || "Address it to your cleaner", "ok");
   }
+  else if (a === "setup-step") {
+    const step = computeSetup().steps.find((s) => s.key === el.dataset.key);
+    if (!step) return;
+    if (step.view) goto(step.view);
+    if (step.key === "profile") setTimeout(() => {
+      const card = $("#propertyCard"); if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+      const name = $("#pfName"); if (name) name.focus({ preventScroll: true });
+    }, 120);
+    if (step.action === "connect-bank") { const b = document.querySelector('#checklist [data-action="connect-bank"]'); if (b) b.click(); else goto("settings"); }
+    if (step.action === "invite") { const b = document.querySelector('#checklist [data-action="invite"]'); if (b) b.click(); else goto("settings"); }
+  }
   else if (a === "setup-property") {
     const name = $("#obPropertyName") ? $("#obPropertyName").value.trim() : "";
     if (!name) { toast("Give your property a name", "It becomes your booking page title", "warn"); return; }
@@ -1418,6 +1468,7 @@ document.addEventListener("click", (e) => {
       gdpr_consent: !!($("#pfGdpr") && $("#pfGdpr").checked)
     };
     tenantDisplayName = patch.name;
+    if (liveTenant) Object.assign(liveTenant, patch);
     renderOverview();
     if ($("#bkName")) $("#bkName").value = patch.name;
     if (window.SHDB && SHDB.hasLive()) {
@@ -1599,6 +1650,8 @@ function loadLiveIntoUI() {
     if (live.rateOverrides) { rateOverrides = {}; live.rateOverrides.forEach((o) => { if (o.roomCode) rateOverrides[o.roomCode + "|" + o.date] = o.rate; }); }
     txns.splice(0, txns.length, ...(live.txns || []));
     tenantDisplayName = live.tenant.name || "";
+    liveTenant = live.tenant;
+    liveMembersCount = live.membersCount != null ? live.membersCount : 1;
     renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
     renderRooms(); renderHK(); renderFolios(); renderTxns(); renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview();
     if (live.user) {
@@ -1645,6 +1698,10 @@ function loadLiveIntoUI() {
     if ($("#billPeriod")) $("#billPeriod").textContent = live.tenant.current_period_end ? new Date(live.tenant.current_period_end).toLocaleDateString() : "-";
     if (statusEl) statusEl.textContent = "Data source: Supabase · " + live.tenant.name + " (live" + (live.user ? " · " + live.user.email : "") + ")";
     toast("Connected to Supabase", live.tenant.name + " loaded live", "ok");
+    if (!setupRouted) {
+      setupRouted = true;
+      if (computeSetup().pct < 100) goto("setup");
+    }
     if (!checkoutToastShown) {
       checkoutToastShown = true;
       const co = new URLSearchParams(location.search).get("checkout");

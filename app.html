@@ -28,6 +28,7 @@
 
     <div class="nav-label">Manage</div>
     <nav class="nav" id="mainNav">
+      <button class="nav-btn" data-view="setup" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Setup<span class="count" id="navSetupPct">0%</span></button>
       <button class="nav-btn active" data-view="overview" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Overview</button>
       <button class="nav-btn" data-view="reservations" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Reservations<span class="count" id="navResCount">12</span></button>
       <button class="nav-btn" data-view="calendar" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 15h3M14 15h2"/></svg>Calendar</button>
@@ -48,10 +49,10 @@
     </nav>
 
     <div class="sidebar-foot">
-      <div class="onboard-mini">
-        <p><strong>Setup 62% complete</strong><br>Connect payouts to go live.</p>
-        <div class="progress"><i></i></div>
-      </div>
+      <button class="onboard-mini" data-goto="setup" type="button" style="width:100%;text-align:left;background:none;border:0;cursor:pointer;color:inherit;padding:0">
+        <p><strong id="setupPctText">Setup 0% complete</strong><br><span id="setupNextText">Start setup to go live.</span></p>
+        <div class="progress"><i id="setupBar" style="width:0%"></i></div>
+      </button>
       <div class="user-chip"><div class="avatar" id="userAvatar">MK</div><div class="user-meta"><strong id="userName">Maya Keller</strong><span id="userRole">Owner · Pinecrest</span></div><button class="btn btn-ghost btn-xs" id="signOutBtn" type="button" hidden>Sign out</button></div>
     </div>
   </aside>
@@ -131,6 +132,29 @@
       </section>
 
       <!-- ===== RESERVATIONS ===== -->
+      <section class="view" id="view-setup">
+        <div class="page-head">
+          <div><h1 id="setupTitle">Finish setting up</h1><p class="sub">Complete each step once — you land here until everything is ready to take bookings.</p></div>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost" data-goto="overview" type="button">Go to dashboard</button>
+        </div>
+        <div class="card card-pad" style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <strong id="setupBigPct" style="font-family:var(--font-display);font-size:26px">0%</strong>
+            <div style="flex:1;min-width:200px">
+              <div class="progress" style="height:10px"><i id="setupBigBar" style="width:0%;background:var(--brand-2)"></i></div>
+              <p class="hint" id="setupBigText" style="margin:6px 0 0">Let's get your property live.</p>
+            </div>
+          </div>
+        </div>
+        <div id="setupDone" class="card card-pad" hidden style="border-color:var(--success);background:var(--success-soft)">
+          <h3>You're all set up</h3>
+          <p class="hint">Every step is complete. Your booking page is ready to share.</p>
+          <button class="btn btn-primary btn-sm" data-goto="overview" type="button">Go to dashboard</button>
+        </div>
+        <div class="row-list" id="setupSteps"></div>
+      </section>
+
       <section class="view" id="view-reservations">
         <div class="view-head">
           <div><h1>Reservations</h1><p class="sub">Search, filter, confirm and charge — everything from one table.</p></div>

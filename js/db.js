@@ -123,9 +123,10 @@
       ctx.roomIdByCode = {};
       rooms.forEach((r) => { ctx.roomIdByCode[r.code] = r.id; });
       const txnRows = await rest("transactions?" + tid + "&select=*&order=created_at.desc&limit=20").catch(() => []);
+      const memberRows = await rest("tenant_members?" + tid + "&select=user_id").catch(() => []);
       const roomCode = (id) => (rooms.find((r) => r.id === id) || {}).code || "—";
       return {
-        tenant, user,
+        tenant, user, membersCount: (memberRows || []).length,
         rooms: rooms.map((r) => ({
           id: r.id, code: r.code, name: r.name,
           sleeps: r.sleeps || 2, typeId: r.room_type_id || null,

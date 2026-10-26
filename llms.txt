@@ -1,0 +1,37 @@
+# SimpleHotelier
+
+> SimpleHotelier is a hotel management and rental system for cabins, resorts, lodges, inns and boutique hotels with roughly 2-40 rooms. It replaces spreadsheets and paper cleaning lists with reservations, housekeeping, guest charges and a direct booking page. One flat price: $30/month after a 30-day free trial (card required, nothing charged during the trial).
+
+SimpleHotelier is for owners who want to rent their cabins, rent their rooms, or run a small resort and take direct bookings without marketplace commissions on those stays. Guests pay through the property's own Stripe account; SimpleHotelier never holds guest money.
+
+## Product facts
+
+- Price: $30/month, everything included. No per-room fees, no commissions on direct bookings, cancel anytime.
+- Trial: 30 days free, credit card required up front.
+- Who it is for: cabin resorts, vacation cabins, lodges, inns, boutique hotels, small resorts, lake houses and multi-unit short-term rental properties.
+- Setup: sign up, name the property, add rooms and rates, publish the booking page. Most properties are live the same day.
+
+## Key features
+
+- Reservations: calendar and list views, booking requests, confirmation codes, folios, guest charges by card or cash, add-on charges and per-property tax rules.
+- Housekeeping: clean / dirty / in-progress board built for phones; cleaners get a simple turnover list.
+- Room types: bathrooms, views, smoking policy, beds, occupancy limits (adults, children, infants), included occupants, extra-guest rates, accessibility and amenity feature lists, photos.
+- Rates: per-date rate calendar with a default-rate fallback, plus rate plans (for example an extended-stay rate at -10% for 3-30 nights) optionally locked to a promo code.
+- Booking page: each property gets a public booking page and a mobile-friendly website embed, with Google Analytics conversion tracking, an optional post-booking redirect, optional booking deposits collected by card, and rate-plan/promo support.
+- Reports: revenue by day, top units and estimated tax liability computed from real reservations.
+- Support: in-app support portal with an AI assistant and human case follow-up; system admins see all subscribers and cases.
+- Integrations: Stripe (subscriptions, guest charges, deposits, property payouts via Stripe Connect), Supabase (data/auth), Google Analytics.
+
+## Pages
+
+- [Home](https://simplehotelier.com/): what SimpleHotelier is, features, pricing ($30/month), FAQ.
+- [Create account](https://simplehotelier.com/app.html#signup): start the 30-day free trial.
+- [Log in](https://simplehotelier.com/app.html): the property dashboard (reservations, calendar, rooms, housekeeping, payments, reports, settings).
+- [Example booking page](https://simplehotelier.com/book.html?property=pinecrest): what a property's public booking page looks like to guests.
+
+## Common questions
+
+- How do I rent my cabins directly? Create an account, add your cabins and rates, then share your booking page link or embed it on your website. Guests book and pay you directly.
+- Is there a rental system for a small resort? Yes — SimpleHotelier is built for small resorts and multi-unit properties, not scaled-down enterprise hotel software.
+- Do guests pay SimpleHotelier? No. Guest payments go through the property's own connected Stripe account.
+- Can cleaners use it? Yes, the housekeeping board works on phones and shows only the rooms that need attention.
