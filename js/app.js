@@ -628,6 +628,8 @@ function loadLiveIntoUI() {
     if (live.tenant.booking_headline && $("#bkHead")) { $("#bkHead").value = live.tenant.booking_headline; $("#mockHead").textContent = live.tenant.booking_headline; }
     if (live.tenant.booking_subheading && $("#bkSub")) { $("#bkSub").value = live.tenant.booking_subheading; $("#mockSub").textContent = live.tenant.booking_subheading; }
     updateEmbed(live.tenant);
+    if ($("#billStatus")) $("#billStatus").textContent = live.tenant.subscription_status || "trialing";
+    if ($("#billPeriod")) $("#billPeriod").textContent = live.tenant.current_period_end ? new Date(live.tenant.current_period_end).toLocaleDateString() : "-";
     if (statusEl) statusEl.textContent = "Data source: Supabase · " + live.tenant.name + " (live" + (live.user ? " · " + live.user.email : "") + ")";
     toast("Connected to Supabase", live.tenant.name + " loaded live", "ok");
   });

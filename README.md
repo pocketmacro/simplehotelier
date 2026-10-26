@@ -8,9 +8,23 @@ This repo currently contains the interactive dashboard prototype wired to a
 live Supabase backend.
 
 ## Run locally
-Open `index.html` in a browser (no build step). Without Supabase keys it runs
-on built-in demo data; with keys it loads your live property.
+- `index.html` is the public marketing landing page ($30/month).
+- `app.html` is the dashboard (login gate, then your property).
+- `book.html?property={slug}` is the guest booking page / embed widget.
+Open the files in a browser (no build step). Without Supabase keys the
+dashboard runs on built-in demo data; with keys it loads your live property.
 Optional local server: `python -m http.server` then visit the printed URL.
+
+## Platform: billing, support, system admin
+- Subscriptions: signup (and Settings > Plan and billing) starts Stripe
+  Checkout via `create-checkout`; `stripe-webhook` keeps
+  `tenants.subscription_status` in sync. See `supabase/functions/README.md`.
+- Support: users get the Spark assistant (muse-spark via `support-ai`,
+  with built-in help articles offline) plus support cases in the app.
+- System Admin view (admins only, `system_admins` table): all subscriber
+  properties with billing status, and every support case with replies.
+- Requires `supabase/migrations/20261028000000_admin_support.sql`
+  (`scripts/apply-admin-migration.ps1` applies it and promotes your user).
 
 ## Supabase setup
 See [supabase/README.md](supabase/README.md). Short version:

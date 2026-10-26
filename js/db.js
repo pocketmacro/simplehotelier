@@ -192,8 +192,51 @@
     return true;
   }
 
+  /* ---------------- Support + system admin ---------------- */
+  function sessionUserId() {
+    try { const u = JSON.parse(localStorage.getItem("sh_user") || "null"); return u && u.id; } catch { return null; }
+  }
+  async function isSystemAdmin() {
+    const uid = sessionUserId();
+    if (!uid) return false;
+    const rows = await rest("system_admins?user_id=eq." + uid + "&select=user_id").catch(() => []);
+    return !!(rows && rows.length);
+  }
+  async function listSupportCases() {
+    return rest("support_cases?select=*&order=updated_at.desc&limit=100");
+  }
+  async function createSupportCase({ subject, category, priority, body, email }) {
+    const uid = sessionUserId();
+    const rows = await rest("support_cases", {
+      method: "POST", headers: rep,
+      body: JSON.stringify({ tenant_id: ctx.tenantId, user_id: uid, requester_email: email || null, subject, category: category || "help", priority: priority || "normal", status: "open" })
+    });
+    const created = rows && rows[0];
+    if (created && body) await addSupportMessage(created.id, body, "user", email);
+    return created;
+  }
+  async function listSupportMessages(caseId) {
+    return rest("support_messages?case_id=eq." + caseId + "&select=*&order=created_at.asc");
+  }
+  async function addSupportMessage(caseId, body, sender, email) {
+    const rows = await rest("support_messages", {
+      method: "POST", headers: rep,
+      body: JSON.stringify({ case_id: caseId, tenant_id: ctx.tenantId, sender: sender || "user", author_email: email || null, body })
+    });
+    await rest("support_cases?id=eq." + caseId, { method: "PATCH", body: JSON.stringify({ updated_at: new Date().toISOString() }) }).catch(() => {});
+    return rows && rows[0];
+  }
+  async function setSupportStatus(caseId, status) {
+    await rest("support_cases?id=eq." + caseId, { method: "PATCH", body: JSON.stringify({ status }) });
+  }
+  async function adminSubscribers() {
+    return rest("tenants?select=*&order=created_at.desc&limit=200");
+  }
+  const tenantId = () => ctx.tenantId;
+
   window.SHDB = {
-    configured, loadLiveData, updateHK, hasLive, updateTenantSettings,
+    configured, loadLiveData, updateHK, hasLive, updateTenantSettings, tenantId,
+    isSystemAdmin, listSupportCases, createSupportCase, listSupportMessages, addSupportMessage, setSupportStatus, adminSubscribers,
     createReservation, setReservationStatus, updateReservationPaid, addTransaction,
     createAddon, setAddonActive, deleteAddon, createTax, deleteTax, createRoom
   };

@@ -1,3 +1,4 @@
 .env
 supabase/.branches
 supabase/.temp
+generated_images/

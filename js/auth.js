@@ -92,6 +92,21 @@
     return data;
   }
 
+  /* Starts Stripe Checkout for the $30/mo subscription when billing is deployed. */
+  async function tryBilling(tenant) {
+    try {
+      const res = await fetch(base + "/functions/v1/create-checkout", {
+        method: "POST",
+        headers: { apikey: anon, Authorization: "Bearer " + accessToken(), "Content-Type": "application/json" },
+        body: JSON.stringify({ tenant_id: tenant.id, origin: location.origin })
+      });
+      if (!res.ok) return false;
+      const d = await res.json().catch(() => ({}));
+      if (d.url) { location.href = d.url; return true; }
+    } catch { /* billing not deployed yet: continue into the app */ }
+    return false;
+  }
+
   /* Creates the tenant + owner membership for the signed-in user. */
   async function createProperty(name) {
     const user = sessionUser();
@@ -137,6 +152,7 @@
     $("#tabSignup").addEventListener("click", () => setTab("signup"));
     $("#toSignup").addEventListener("click", () => setTab("signup"));
     $("#toLogin").addEventListener("click", () => setTab("login"));
+    if (location.hash === "#signup") setTab("signup");
     $("#demoBtn").addEventListener("click", () => { gate().hidden = true; });
     $("#signOutBtn").addEventListener("click", async () => { await logout(); location.reload(); });
 
@@ -160,8 +176,9 @@
           setTab("login");
           return;
         }
-        await createProperty($("#suProperty").value.trim());
-        enterApp(sessionUser());
+        const tenant = await createProperty($("#suProperty").value.trim());
+        const billed = await tryBilling(tenant);
+        if (!billed) enterApp(sessionUser());
       } catch (err) { showError(err.message); }
       btn.disabled = false; btn.textContent = "Create property & log in";
     });
