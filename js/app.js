@@ -124,6 +124,24 @@ document.addEventListener("click", (e) => {
   const go = e.target.closest("[data-goto]");
   if (go) goto(go.dataset.goto);
 });
+/* Setup checklist: completed items stay editable — click (or Enter) reopens the setting. */
+function openChecklistRow(row) {
+  if (!row) return;
+  if (row.dataset.goto) { goto(row.dataset.goto); return; }
+  if (row.dataset.focus) {
+    const el = document.querySelector(row.dataset.focus);
+    if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(() => el.focus({ preventScroll: true }), 250); }
+  }
+}
+document.addEventListener("click", (e) => {
+  const row = e.target.closest(".check[data-focus]");
+  if (row) openChecklistRow(row);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const row = e.target.closest ? e.target.closest(".check[role='button']") : null;
+  if (row) openChecklistRow(row);
+});
 $("#menuBtn").addEventListener("click", () => document.body.classList.toggle("nav-open"));
 
 /* ---------------- Status helpers ---------------- */

@@ -382,6 +382,10 @@ table.data .guest span { color: var(--muted); font-size: 12.3px; }
 .check strong { color: var(--ink); font-size: 13.8px; display: block; }
 .check p { font-size: 12.6px; color: var(--muted); margin: 1px 0 0; }
 .check .btn { margin-left: auto; flex: none; }
+.check[data-goto], .check[data-focus] { cursor: pointer; border-radius: 10px; padding-left: 8px; padding-right: 8px; margin-left: -8px; margin-right: -8px; transition: background .15s ease; }
+.check[data-goto]:hover, .check[data-focus]:hover { background: #f2f7f4; }
+.check[data-goto]:focus-visible, .check[data-focus]:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.check-go { margin-left: auto; flex: none; align-self: center; color: var(--brand); font-weight: 700; font-size: 12.5px; white-space: nowrap; }
 
 /* Empty */
 .empty { text-align: center; padding: 34px 20px; color: var(--muted); }
