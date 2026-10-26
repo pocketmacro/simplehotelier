@@ -31,6 +31,8 @@
 
   const dayOff = (iso) => Math.round((new Date(iso + "T12:00:00") - ANCHOR) / DAY);
   const mapStatus = (s) => ({ checked_in: "checked-in", checked_out: "checked-out" }[s] || s);
+  const statusIn = (s) => ({ "checked-in": "checked_in", "checked-out": "checked_out" }[s] || s);
+  const ctx = { tenantId: null, roomIdByCode: {} }; // set by loadLiveData; writes no-op without it
 
   /* Signed-in path: resolve the user's tenant via tenant_members (RLS-safe). */
   async function memberTenant() {
@@ -65,12 +67,16 @@
         if (!tenant) return null;
       }
       const tid = "tenant_id=eq." + tenant.id;
+      ctx.tenantId = tenant.id;
       const [rooms, reservations, addons, taxes] = await Promise.all([
         rest("rooms?" + tid + "&select=*&order=sort_order.asc"),
         rest("reservations?" + tid + "&select=*&order=check_in.asc"),
         rest("addons?" + tid + "&select=*&order=name.asc"),
         rest("tax_rules?" + tid + "&select=*&order=sort_order.asc")
       ]);
+      ctx.roomIdByCode = {};
+      rooms.forEach((r) => { ctx.roomIdByCode[r.code] = r.id; });
+      const txnRows = await rest("transactions?" + tid + "&select=*&order=created_at.desc&limit=20").catch(() => []);
       const roomCode = (id) => (rooms.find((r) => r.id === id) || {}).code || "—";
       return {
         tenant, user,
@@ -87,7 +93,11 @@
           status: mapStatus(r.status), total: (r.total_cents || 0) / 100, paid: (r.paid_cents || 0) / 100
         })),
         addons: addons.map((a) => ({ id: a.id, name: a.name, price: (a.price_cents || 0) / 100, per: a.per, on: a.active, desc: a.description || "" })),
-        taxes: taxes.map((t) => ({ id: t.id, name: t.name, kind: t.kind, value: Number(t.rate), applies: t.applies_to, on: t.active }))
+        taxes: taxes.map((t) => ({ id: t.id, name: t.name, kind: t.kind, value: Number(t.rate), applies: t.applies_to, on: t.active })),
+        txns: (txnRows || []).map((t) => ({
+          when: new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+          desc: t.description, method: t.method || "Card", status: t.status, amount: (t.amount_cents || 0) / 100
+        }))
       };
     } catch (err) {
       console.warn("[SimpleHotelier] Live load failed, using demo data:", err.message);
@@ -106,5 +116,80 @@
     } catch { /* offline / anon: local change still stands */ }
   }
 
-  window.SHDB = { configured, loadLiveData, updateHK };
+  /* ---------------- Writes (member-only under RLS; no-op in demo mode) ---------------- */
+  const rep = { Prefer: "return=representation" };
+  async function createReservation(p) {
+    if (!ctx.tenantId) return null;
+    const isEmail = p.contact && p.contact.includes("@");
+    const rows = await rest("reservations", {
+      method: "POST", headers: rep,
+      body: JSON.stringify({
+        tenant_id: ctx.tenantId, room_id: ctx.roomIdByCode[p.roomCode] || null,
+        guest_name: p.guestName, guest_email: isEmail ? p.contact : null,
+        guest_phone: isEmail ? null : (p.contact || null),
+        confirmation_code: p.ref, check_in: p.checkIn, check_out: p.checkOut,
+        status: statusIn(p.status || "confirmed"), source: p.source || "direct",
+        notes: p.notes || null, subtotal_cents: p.subtotalCents | 0,
+        tax_cents: p.taxCents | 0, total_cents: p.totalCents | 0, paid_cents: p.paidCents | 0
+      })
+    });
+    return rows && rows[0];
+  }
+  async function setReservationStatus(id, status) {
+    if (!id) return;
+    await rest("reservations?id=eq." + id, { method: "PATCH", body: JSON.stringify({ status: statusIn(status) }) });
+  }
+  async function updateReservationPaid(id, paidCents) {
+    if (!id) return;
+    await rest("reservations?id=eq." + id, { method: "PATCH", body: JSON.stringify({ paid_cents: paidCents | 0 }) });
+  }
+  async function addTransaction(t) {
+    if (!ctx.tenantId) return null;
+    const rows = await rest("transactions", {
+      method: "POST", headers: rep,
+      body: JSON.stringify({
+        tenant_id: ctx.tenantId, reservation_id: t.reservationId || null,
+        description: t.description, method: t.method || "Card",
+        status: t.status || "paid", amount_cents: Math.round((t.amountCents || 0))
+      })
+    });
+    return rows && rows[0];
+  }
+  async function createAddon(a) {
+    if (!ctx.tenantId) return null;
+    const rows = await rest("addons", {
+      method: "POST", headers: rep,
+      body: JSON.stringify({ tenant_id: ctx.tenantId, name: a.name, description: a.desc || null, price_cents: Math.round((a.price || 0) * 100), per: a.per || "stay", active: true })
+    });
+    return rows && rows[0];
+  }
+  async function setAddonActive(id, on) {
+    if (!id) return;
+    await rest("addons?id=eq." + id, { method: "PATCH", body: JSON.stringify({ active: !!on }) });
+  }
+  async function deleteAddon(id) { if (id) await rest("addons?id=eq." + id, { method: "DELETE" }); }
+  async function createTax(t) {
+    if (!ctx.tenantId) return null;
+    const rows = await rest("tax_rules", {
+      method: "POST", headers: rep,
+      body: JSON.stringify({ tenant_id: ctx.tenantId, name: t.name, kind: t.kind, rate: t.value, applies_to: t.applies || "Room + add-ons", active: true })
+    });
+    return rows && rows[0];
+  }
+  async function deleteTax(id) { if (id) await rest("tax_rules?id=eq." + id, { method: "DELETE" }); }
+  async function createRoom(r) {
+    if (!ctx.tenantId) return null;
+    const rows = await rest("rooms", {
+      method: "POST", headers: rep,
+      body: JSON.stringify({ tenant_id: ctx.tenantId, code: r.code, name: r.name, sleeps: r.sleeps || 2, rate_cents: Math.round((r.rate || 0) * 100), status: "vacant", housekeeping_status: "clean" })
+    });
+    return rows && rows[0];
+  }
+  const hasLive = () => !!ctx.tenantId;
+
+  window.SHDB = {
+    configured, loadLiveData, updateHK, hasLive,
+    createReservation, setReservationStatus, updateReservationPaid, addTransaction,
+    createAddon, setAddonActive, deleteAddon, createTax, deleteTax, createRoom
+  };
 })();

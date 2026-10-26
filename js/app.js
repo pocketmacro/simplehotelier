@@ -418,24 +418,45 @@ document.addEventListener("click", (e) => {
   else if (a === "charge") { closeModal(); setTimeout(() => openCharge(ref), 30); }
   else if (a === "confirm-res") {
     const r = reservations.find((x) => x.ref === ref); r.status = "confirmed";
+    if (window.SHDB && r.id) SHDB.setReservationStatus(r.id, "confirmed").catch(() => toast("Status saved locally only", "Supabase write failed", "warn"));
     closeModal(); renderReservations(); renderToday(); toast(`${ref} confirmed`, r.guest, "ok");
   }
   else if (a === "save-reservation") {
     const name = $("#nrName").value.trim() || "Walk-in Guest";
+    const contact = $("#nrContact").value.trim() || "—";
     const room = $("#nrRoom").value;
     const nin = $("#nrIn").value, nout = $("#nrOut").value;
     const nights = Math.max(1, Math.round((new Date(nout) - new Date(nin)) / dayMs));
     const rate = roomByCode(room).rate;
+    const subtotal = rate * nights;
+    const taxEst = taxes.filter((t) => t.on).reduce((s, t) => s + (t.kind === "percent" ? subtotal * t.value / 100 : t.value * nights), 0);
+    const total = Math.round((subtotal + taxEst) * 100) / 100;
     const id = "R-" + (1053 + reservations.length - 12);
-    reservations.unshift({ ref: id, guest: name, contact: $("#nrContact").value.trim() || "—", room, inN: Math.round((new Date(nin) - TODAY) / dayMs), outN: Math.round((new Date(nout) - TODAY) / dayMs), status: "confirmed", total: rate * nights * 1.08, paid: 0 });
+    const local = { ref: id, guest: name, contact, room, inN: Math.round((new Date(nin) - TODAY) / dayMs), outN: Math.round((new Date(nout) - TODAY) / dayMs), status: "confirmed", total, paid: 0 };
+    reservations.unshift(local);
+    if (window.SHDB && SHDB.hasLive()) {
+      SHDB.createReservation({
+        ref: id, guestName: name, contact, roomCode: room, checkIn: nin, checkOut: nout,
+        status: "confirmed", source: "direct", notes: $("#nrNotes").value,
+        subtotalCents: Math.round(subtotal * 100), taxCents: Math.round(taxEst * 100),
+        totalCents: Math.round(total * 100), paidCents: 0
+      }).then((row) => { if (row) local.id = row.id; })
+        .catch((err) => toast("Saved in this browser only", "Supabase rejected it (dates may overlap): " + err.message, "warn"));
+    }
     closeModal(); renderReservations(); renderToday(); renderFolios();
     toast(`Reservation ${id} created`, `${name} · ${room} · ${nights} night${nights > 1 ? "s" : ""}`, "ok");
   }
   else if (a === "run-charge") {
     const r = reservations.find((x) => x.ref === ref);
     const amt = Math.min(parseFloat($("#chAmt").value) || 0, balance(r));
+    const methodLabel = $("#chMethod").value;
     r.paid = Math.round((r.paid + amt) * 100) / 100;
-    txns.unshift({ when: "Just now", desc: `${r.ref} · Charge · ${r.guest}`, method: $("#chMethod").value, status: "paid", amount: amt });
+    txns.unshift({ when: "Just now", desc: `${r.ref} · Charge · ${r.guest}`, method: methodLabel, status: "paid", amount: amt });
+    if (window.SHDB && r.id) {
+      SHDB.updateReservationPaid(r.id, Math.round(r.paid * 100))
+        .then(() => SHDB.addTransaction({ reservationId: r.id, description: `${r.ref} · Charge · ${r.guest}`, method: methodLabel, status: "paid", amountCents: Math.round(amt * 100) }))
+        .catch(() => toast("Payment shown locally only", "Supabase write failed", "warn"));
+    }
     closeModal(); renderReservations(); renderFolios(); renderTxns();
     toast(`Charged ${money(amt)}`, `${r.ref} · ${balance(r) > 0 ? money(balance(r)) + " still due" : "paid in full"}`, "ok");
   }
@@ -449,7 +470,6 @@ document.addEventListener("click", (e) => {
   }
   else if (a === "cash-done") { closeModal(); toast("Cash payment recorded", "Receipt ready to print", "ok"); }
   else if (a === "export") toast("Export started", "You'll get a download link by email", "");
-  else if (a === "add-room") toast("Room builder", "Add units from Settings → Rooms in the full product", "");
   else if (a === "room-types") toast("3 room types", "Cabin · Suite · Loft · House", "");
   else if (a === "print-hk") { window.print(); }
   else if (a === "copy-link") {
@@ -461,12 +481,19 @@ document.addEventListener("click", (e) => {
   else if (a === "connect-bank") toast("Payouts", "Bank connection opens in the full product", "");
   else if (a === "invite") toast("Invite sent", "cleaners@pinecrestcabins.com", "ok");
   else if (a === "save-settings") toast("Settings saved", "Property profile updated", "ok");
-  else if (a === "toggle-addon") { addons[+el.dataset.i].on = !addons[+el.dataset.i].on; renderAddons(); }
+  else if (a === "toggle-addon") {
+    const ad = addons[+el.dataset.i]; ad.on = !ad.on; renderAddons();
+    if (window.SHDB && ad.id) SHDB.setAddonActive(ad.id, ad.on).catch(() => toast("Visibility saved locally only", "Supabase write failed", "warn"));
+  }
   else if (a === "del-addon") {
-    const [gone] = addons.splice(+el.dataset.i, 1); renderAddons(); toast(`Removed “${gone.name}”`, "It no longer shows at checkout", "warn");
+    const [gone] = addons.splice(+el.dataset.i, 1); renderAddons();
+    if (window.SHDB && gone.id) SHDB.deleteAddon(gone.id).catch(() => toast("Removed locally only", "Supabase delete failed", "warn"));
+    toast(`Removed “${gone.name}”`, "It no longer shows at checkout", "warn");
   }
   else if (a === "del-tax") {
-    const [gone] = taxes.splice(+el.dataset.i, 1); renderTaxes(); toast(`Removed “${gone.name}”`, "Totals recalculated", "warn");
+    const [gone] = taxes.splice(+el.dataset.i, 1); renderTaxes();
+    if (window.SHDB && gone.id) SHDB.deleteTax(gone.id).catch(() => toast("Removed locally only", "Supabase delete failed", "warn"));
+    toast(`Removed “${gone.name}”`, "Totals recalculated", "warn");
   }
   else if (a === "add-addon") {
     openModal({
@@ -479,7 +506,9 @@ document.addEventListener("click", (e) => {
     });
   }
   else if (a === "save-addon") {
-    addons.unshift({ name: $("#adName").value.trim() || "Custom add-on", price: parseFloat($("#adPrice").value) || 0, per: $("#adPer").value, on: true, desc: $("#adDesc").value.trim() || "Custom charge" });
+    const na = { name: $("#adName").value.trim() || "Custom add-on", price: parseFloat($("#adPrice").value) || 0, per: $("#adPer").value, on: true, desc: $("#adDesc").value.trim() || "Custom charge" };
+    addons.unshift(na);
+    if (window.SHDB && SHDB.hasLive()) SHDB.createAddon(na).then((row) => { if (row) na.id = row.id; }).catch(() => toast("Add-on saved locally only", "Supabase write failed", "warn"));
     closeModal(); renderAddons(); toast("Add-on added", "Now available at checkout", "ok");
   }
   else if (a === "add-tax") {
@@ -493,8 +522,28 @@ document.addEventListener("click", (e) => {
     });
   }
   else if (a === "save-tax") {
-    taxes.push({ name: $("#txName").value.trim() || "Custom fee", kind: $("#txKind").value, value: parseFloat($("#txVal").value) || 0, applies: "Room + add-ons", on: true });
+    const nt = { name: $("#txName").value.trim() || "Custom fee", kind: $("#txKind").value, value: parseFloat($("#txVal").value) || 0, applies: "Room + add-ons", on: true };
+    taxes.push(nt);
+    if (window.SHDB && SHDB.hasLive()) SHDB.createTax(nt).then((row) => { if (row) nt.id = row.id; }).catch(() => toast("Tax saved locally only", "Supabase write failed", "warn"));
     closeModal(); renderTaxes(); toast("Tax rule added", "Totals recalculated everywhere", "ok");
+  }
+  else if (a === "add-room") {
+    openModal({
+      title: "Add a room or cabin", sub: "It appears on your booking page immediately",
+      body: `<div class="form-2"><div class="field"><label>Code</label><input class="input" id="rmCode" placeholder="e.g. D1"></div>
+        <div class="field"><label>Name</label><input class="input" id="rmName" placeholder="e.g. Juniper Lodge"></div></div>
+        <div class="form-2"><div class="field"><label>Sleeps</label><input class="input" id="rmSleeps" type="number" min="1" value="2"></div>
+        <div class="field"><label>Nightly rate (USD)</label><input class="input mono" id="rmRate" type="number" min="0" value="150"></div></div>`,
+      foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Cancel</button><button class="btn btn-primary btn-sm" data-action="save-room" type="button">Add unit</button>`
+    });
+  }
+  else if (a === "save-room") {
+    const nr = { code: ($("#rmCode").value.trim() || "NEW").toUpperCase(), name: $("#rmName").value.trim() || "New unit", sleeps: parseInt($("#rmSleeps").value) || 2, rate: parseFloat($("#rmRate").value) || 0 };
+    const localRoom = { code: nr.code, name: nr.name, type: "Cabin · Sleeps " + nr.sleeps, rate: nr.rate, status: "vacant", hk: "clean", guest: "", note: "New unit — add photos & details" };
+    rooms.push(localRoom);
+    if (window.SHDB && SHDB.hasLive()) SHDB.createRoom(nr).then((row) => { if (row) localRoom.id = row.id; }).catch(() => toast("Room saved locally only", "Supabase write failed (code may already exist)", "warn"));
+    closeModal(); renderRooms(); renderMiniRooms();
+    toast(`${nr.code} · ${nr.name} added`, "Set its booking-page photos next", "ok");
   }
 });
 
@@ -535,8 +584,9 @@ function loadLiveIntoUI() {
     if (live.reservations.length) { reservations.splice(0, reservations.length, ...live.reservations); }
     if (live.addons.length) { addons.splice(0, addons.length, ...live.addons); }
     if (live.taxes.length) { taxes.splice(0, taxes.length, ...live.taxes); }
+    if (live.txns && live.txns.length) { txns.splice(0, txns.length, ...live.txns); }
     renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
-    renderRooms(); renderHK(); renderFolios(); renderAddons(); renderTaxes(); renderMockRooms();
+    renderRooms(); renderHK(); renderFolios(); renderTxns(); renderAddons(); renderTaxes(); renderMockRooms();
     if (live.user) {
       $("#userName").textContent = live.user.email;
       $("#userRole").textContent = "Owner · " + live.tenant.name;

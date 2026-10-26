@@ -36,3 +36,4 @@ Secret keys live only in function secrets, never in browser code.
 - `index.html`, `css/app.css`, `js/` — static dashboard (no build)
 - `supabase/` — Postgres schema (RLS + no-double-booking rule), seed, functions
 - `scripts/` — one-time Supabase setup/claim helpers (read `.env`, gitignored)
+- `tests/` — focused checks (run: `node --test tests/db-writes.test.mjs`)
