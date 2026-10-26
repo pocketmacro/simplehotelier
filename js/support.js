@@ -257,13 +257,13 @@
   const refresh = $("#adminRefresh");
   if (refresh) refresh.addEventListener("click", loadAdmin);
   document.addEventListener("click", (e) => {
+    const act = e.target.closest("[data-action]");
+    if (act && act.dataset.action === "billing-checkout") { startCheckout(); return; }
+    if (act && act.dataset.action === "billing-help") { goto("support"); $("#caseCategory").value = "billing"; return; }
     const v = e.target.closest("[data-view]");
     if (!v) return;
     if (v.dataset.view === "support") loadMyCases();
     if (v.dataset.view === "admin") loadAdmin();
-    const act = e.target.closest("[data-action]");
-    if (act && act.dataset.action === "billing-checkout") startCheckout();
-    if (act && act.dataset.action === "billing-help") { goto("support"); $("#caseCategory").value = "billing"; }
   });
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-goto-view]");

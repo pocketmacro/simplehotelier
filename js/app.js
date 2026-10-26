@@ -262,6 +262,11 @@ function renderOverview() {
   };
   setChk(1, rooms.length > 0, rooms.length ? `${rooms.length} room${rooms.length > 1 ? "s" : ""} added with rates` : "Add your rooms and rates");
   setChk(3, taxes.length > 0, taxes.length ? "Taxes configured" : "Configure taxes");
+  // Sidebar identity + nav badges follow the real property, not the demo.
+  const pn = $("#propNameSide"); if (pn && tenantDisplayName) pn.textContent = tenantDisplayName;
+  const ps = $("#propSubSide"); if (ps) ps.textContent = `${rooms.length} unit${rooms.length === 1 ? "" : "s"}`;
+  const nr = $("#navResCount"); if (nr) { nr.textContent = active.length; nr.style.display = active.length ? "" : "none"; }
+  const nh = $("#navHkCount"); if (nh) { nh.textContent = dirty; nh.style.display = dirty ? "" : "none"; }
   const kv = $("#bkPerfKv");
   if (kv) kv.innerHTML = `
     <dt>Rooms listed</dt><dd class="mono">${rooms.length}</dd>
