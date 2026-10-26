@@ -292,6 +292,7 @@
       if (error) throw new Error(error.message || "Card declined");
       if (!paymentIntent || paymentIntent.status !== "succeeded") throw new Error("Payment did not complete. Please try another card.");
       await fnPost("charge-guest", { action: "confirm", tenant_id: state.tenant.id, payment_intent_id: paymentIntent.id }).catch(() => {});
+      fnPost("send-email", { action: "charge_receipt", reservation_id: state.paying.resId, payment_intent_id: paymentIntent.id }).catch(() => {});
       const { code, total, due } = state.paying;
       showSuccess(code, total, ` Your ${money(due)} deposit is paid — the remaining balance is due at the property.`);
     } catch (e) {
@@ -578,6 +579,8 @@
           body: JSON.stringify({ tenant_id: state.tenant.id, reservation_id: resId, addon_id: a.id, name_snapshot: a.name, price_cents: a.price_cents, qty: 1 })
         }).catch(() => {});
       }
+      // Guest confirmation email (+ property notification). Best effort: the booking already succeeded.
+      fnPost("send-email", { action: "booking_confirmation", reservation_id: resId }).catch(() => {});
       if (state.dep && state.dep.collectible) {
         // Deposit required: create the card charge and switch the button to Pay.
         btn.textContent = "Preparing secure payment…";

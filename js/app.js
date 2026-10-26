@@ -121,6 +121,15 @@ let taxes = [
   { name: "Community district fee", kind: "percent", value: 1.5, applies: "Room only", on: true },
 ];
 
+/* Maintenance tickets + external calendar feeds (Airbnb / Vrbo iCal sync). */
+let tickets = [
+  { id: "demo-t1", roomCode: "A2", title: "Hot tub jets weak on one side", desc: "Guest reported low pressure in the left jet bank. Check pump 2 filter.", photo: "", priority: "high", status: "open", when: "Today" },
+  { id: "demo-t2", roomCode: "B1", title: "Leaky kitchen faucet", desc: "Slow drip under the sink; bucket placed. Needs a plumber visit.", photo: "", priority: "normal", status: "in_progress", when: "Yesterday" },
+  { id: "demo-t3", roomCode: "C1", title: "Replace porch light bulb", desc: "Front porch bulb out. Spare bulbs are in the laundry closet.", photo: "", priority: "low", status: "open", when: "Oct 24" }
+];
+let icalFeeds = [];
+let liveSlug = "", liveIcalToken = "";
+
 const txns = [
   { when: "Today · 9:41 AM", desc: "R-1043 · Balance · Priya Nair", method: "Visa **** 8810", status: "paid", amount: 202.10 },
   { when: "Today · 8:15 AM", desc: "R-1044 · Partial · Sam Whitaker", method: "Amex **** 1005", status: "paid", amount: 400.00 },
@@ -448,6 +457,72 @@ function renderHK() {
           </div></div>`).join("") || `<div class="empty" style="padding:18px">Nothing here.</div>`) + `</div>`;
   }).join("");
 }
+/* ---------------- Maintenance ---------------- */
+function renderMaintenance() {
+  const board = $("#maintBoard"); if (!board) return;
+  const cols = [["open", "Open · needs attention"], ["in_progress", "In progress"], ["done", "Done"]];
+  const prioPill = (p) => p === "high" ? `<span class="pill" style="background:#fde8e8;color:#8c2b2b">High</span>` : p === "low" ? `<span class="pill">Low</span>` : `<span class="pill">Normal</span>`;
+  board.innerHTML = cols.map(([key, label]) => {
+    const list = tickets.filter((t) => t.status === key);
+    return `<div class="hk-col"><header>${label}<span class="n">${list.length}</span></header>` +
+      (list.map((t) => `
+        <div class="hk-card"><strong>${esc(t.title)}</strong>
+          <p>${t.roomCode ? esc(t.roomCode) + " · " : ""}${esc(t.when || "")}</p>
+          ${t.desc ? `<p>${esc(t.desc)}</p>` : ""}
+          ${t.photo ? `<img src="${esc(t.photo)}" alt="Ticket photo" style="width:100%;border-radius:8px;margin:6px 0">` : ""}
+          <div style="margin:4px 0 8px">${prioPill(t.priority)}</div>
+          <div class="hk-move">
+            ${key === "open" ? `<button class="btn btn-primary btn-xs" data-action="ticket-status" data-id="${t.id}" data-status="in_progress" type="button">Start →</button>` : ""}
+            ${key === "in_progress" ? `<button class="btn btn-primary btn-xs" data-action="ticket-status" data-id="${t.id}" data-status="done" type="button">Mark done ✓</button>` : ""}
+            ${key !== "open" ? `<button class="btn btn-ghost btn-xs" data-action="ticket-status" data-id="${t.id}" data-status="open" type="button">← Reopen</button>` : ""}
+            <button class="btn btn-ghost btn-xs" data-action="del-ticket" data-id="${t.id}" type="button">Delete</button>
+          </div></div>`).join("") || `<div class="empty" style="padding:18px">Nothing here.</div>`) + `</div>`;
+  }).join("");
+  const openCount = tickets.filter((t) => t.status !== "done").length;
+  const badge = $("#navMaintBadge");
+  if (badge) { badge.hidden = !openCount; badge.textContent = openCount; }
+}
+
+/* ---------------- External calendars (iCal sync) ---------------- */
+function icalExportBase() {
+  const c = window.SH_CONFIG || {};
+  return (c.SUPABASE_URL || "").replace(/\/$/, "") + "/functions/v1/ical-export";
+}
+function renderIcal() {
+  const urlInput = $("#icalExportUrl");
+  if (urlInput) urlInput.value = liveSlug && liveIcalToken ? `${icalExportBase()}?property=${encodeURIComponent(liveSlug)}&token=${encodeURIComponent(liveIcalToken)}` : "Sign in with your property account to get your calendar link";
+  const roomSel = $("#icalRoom");
+  if (roomSel) {
+    const html = rooms.map((r) => `<option value="${r.id || ""}" data-code="${r.code}">${r.code} · ${esc(r.name)}</option>`).join("");
+    if (roomSel.innerHTML !== html) { const keep = roomSel.value; roomSel.innerHTML = html; if (keep) roomSel.value = keep; }
+  }
+  const list = $("#icalFeedList");
+  if (list) {
+    list.innerHTML = icalFeeds.length ? icalFeeds.map((f) => `
+      <div class="kv-row" style="display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)">
+        <div style="flex:1;min-width:0"><strong style="font-size:13.5px">${esc(f.name)}</strong> <span class="pill">${esc(f.source)}</span> <span style="color:var(--muted);font-size:12.5px">${esc(f.roomCode)} · ${f.lastError ? "Last sync failed: " + esc(f.lastError) : f.lastSynced ? "Synced " + new Date(f.lastSynced).toLocaleString() : "Not synced yet"}</span></div>
+        <button class="btn btn-ghost btn-xs" data-action="sync-feed" data-id="${f.id}" type="button">Sync now</button>
+        <button class="btn btn-ghost btn-xs" data-action="del-feed" data-id="${f.id}" type="button">Remove</button>
+      </div>`).join("") : `<div class="empty" style="padding:14px">No external calendars yet. Add your Airbnb or Vrbo calendar below.</div>`;
+  }
+  const note = $("#icalLiveNote");
+  if (note) note.textContent = window.SHDB && SHDB.hasLive() ? "" : "Demo mode: sign in with your property account to add live calendars.";
+}
+
+/* Invoke an Edge Function with the signed-in user's token (falls back to anon key). */
+async function fnInvoke(name, body) {
+  const c = window.SH_CONFIG || {};
+  const token = localStorage.getItem("sh_access_token") || c.SUPABASE_ANON_KEY;
+  const res = await fetch((c.SUPABASE_URL || "").replace(/\/$/, "") + "/functions/v1/" + name, {
+    method: "POST",
+    headers: { apikey: c.SUPABASE_ANON_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify(body || {})
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error || ("Function " + name + " failed (" + res.status + ")"));
+  return d;
+}
+
 const ratePrevBtn = $("#ratePrev"), rateNextBtn = $("#rateNext"), rateTodayBtn2 = $("#rateTodayBtn"), rateRoomSel = $("#rateRoom");
 if (ratePrevBtn) ratePrevBtn.addEventListener("click", () => { ratesMonthOff--; renderRates(); });
 if (rateNextBtn) rateNextBtn.addEventListener("click", () => { ratesMonthOff++; renderRates(); });
@@ -1094,6 +1169,24 @@ function openResDetail(ref) {
   });
 }
 
+function openNewTicket() {
+  openModal({
+    title: "New maintenance ticket", sub: "Report an issue for your team to fix",
+    body: `
+      <div class="field"><label>Issue</label><input class="input" id="tkTitle" placeholder="e.g. Leaky kitchen faucet"></div>
+      <div class="form-2">
+        <div class="field"><label>Room (optional)</label><select class="select" id="tkRoom"><option value="">Property-wide</option>${rooms.map((r) => `<option value="${r.id || ""}" data-code="${r.code}">${r.code} · ${esc(r.name)}</option>`).join("")}</select></div>
+        <div class="field"><label>Priority</label><select class="select" id="tkPrio"><option value="low">Low</option><option value="normal" selected>Normal</option><option value="high">High — guest-impacting</option></select></div>
+      </div>
+      <div class="field"><label>Details</label><textarea class="textarea" id="tkDesc" placeholder="What's wrong, where, and anything the fixer should bring…"></textarea></div>
+      <div class="field"><label>Photo (optional)</label><input class="input" id="tkPhoto" type="file" accept="image/*"></div>`,
+    foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Cancel</button>
+      <button class="btn btn-primary btn-sm" data-action="save-ticket" type="button">Create ticket</button>`,
+    wide: true
+  });
+  const inp = $("#tkTitle"); if (inp) inp.focus();
+}
+
 function openNewReservation() {
   const roomOpts = rooms.map((r) => `<option value="${r.code}">${r.code} · ${esc(r.name)} — ${money(r.rate)}/nt</option>`).join("");
   openModal({
@@ -1158,6 +1251,95 @@ document.addEventListener("click", (e) => {
 
   if (a === "confirm-yes") { const cb = confirmCb; confirmCb = null; closeModal(); if (cb) cb(); return; }
   if (a === "new-reservation") openNewReservation();
+  else if (a === "new-ticket") openNewTicket();
+  else if (a === "save-ticket") {
+    const title = $("#tkTitle").value.trim();
+    if (!title) { toast("Give the issue a title", "e.g. Leaky kitchen faucet", "warn"); return; }
+    const roomSel = $("#tkRoom");
+    const roomCode = roomSel.selectedOptions[0] ? roomSel.selectedOptions[0].dataset.code || "" : "";
+    const ticket = { roomCode, roomId: roomSel.value || null, title, desc: $("#tkDesc").value.trim(), priority: $("#tkPrio").value, photo: "" };
+    const file = $("#tkPhoto").files && $("#tkPhoto").files[0];
+    const finish = (saved) => {
+      tickets.unshift(saved || { id: "local-" + Date.now(), ...ticket, status: "open", when: "Just now" });
+      closeModal(); renderMaintenance(); toast("Ticket created", title, "ok");
+    };
+    if (window.SHDB && SHDB.hasLive()) {
+      (async () => {
+        try {
+          if (file) ticket.photo = await SHDB.uploadPublic("room-photos", "maintenance/" + Date.now() + "-" + file.name.replace(/[^\w.\-]+/g, "_"), file);
+          const row = await SHDB.createTicket(ticket);
+          finish(row ? { id: row.id, roomCode: ticket.roomCode, title: row.title, desc: row.description || "", photo: row.photo_url || "", priority: row.priority, status: row.status, when: "Just now" } : null);
+        } catch { toast("Ticket saved locally only", "Supabase write failed", "warn"); finish(null); }
+      })();
+    } else finish(null);
+  }
+  else if (a === "ticket-status") {
+    const t = tickets.find((x) => x.id === el.dataset.id);
+    if (t) {
+      t.status = el.dataset.status;
+      if (window.SHDB && SHDB.hasLive() && !String(t.id).startsWith("local-")) SHDB.setTicketStatus(t.id, t.status).catch(() => toast("Status saved locally only", "Supabase write failed", "warn"));
+      renderMaintenance(); toast("Ticket updated", `${t.title} → ${t.status.replace("_", " ")}`, "ok");
+    }
+  }
+  else if (a === "del-ticket") {
+    const t = tickets.find((x) => x.id === el.dataset.id);
+    if (t) confirmAction("Delete this ticket?", `<strong>${esc(t.title)}</strong> will be removed from the maintenance board.`, "Delete ticket", () => {
+      tickets = tickets.filter((x) => x.id !== t.id);
+      if (window.SHDB && SHDB.hasLive() && !String(t.id).startsWith("local-")) SHDB.deleteTicket(t.id).catch(() => {});
+      renderMaintenance(); toast("Ticket deleted", t.title, "ok");
+    });
+  }
+  else if (a === "copy-ical") {
+    const inp = $("#icalExportUrl");
+    if (inp && inp.value.startsWith("http")) { inp.select(); navigator.clipboard && navigator.clipboard.writeText(inp.value); toast("Calendar link copied", "Paste it into Airbnb or Vrbo to block your booked dates", "ok"); }
+    else toast("No link yet", "Sign in with your property account first", "warn");
+  }
+  else if (a === "regen-ical") {
+    if (!(window.SHDB && SHDB.hasLive())) { toast("Sign in live first", "Calendar links need your property account", "warn"); return; }
+    confirmAction("Regenerate calendar link?", "The old link stops working everywhere you pasted it (Airbnb, Vrbo). You will need to paste the new link in again.", "Regenerate", async () => {
+      const token = Array.from(crypto.getRandomValues(new Uint8Array(24))).map((b) => b.toString(16).padStart(2, "0")).join("");
+      try { await SHDB.updateTenantSettings({ ical_token: token }); liveIcalToken = token; renderIcal(); toast("New calendar link ready", "Copy it into Airbnb / Vrbo", "ok"); }
+      catch { toast("Could not regenerate", "Supabase write failed", "warn"); }
+    });
+  }
+  else if (a === "add-feed") {
+    if (!(window.SHDB && SHDB.hasLive())) { toast("Sign in live first", "Calendar import needs your property account", "warn"); return; }
+    const roomSel = $("#icalRoom"), url = $("#icalUrl").value.trim();
+    if (!roomSel.value) { toast("Pick a room", "Each external calendar belongs to one room", "warn"); return; }
+    if (!/^https?:\/\/.+/i.test(url)) { toast("Paste the calendar URL", "Airbnb: Calendar → Availability → Export Calendar", "warn"); return; }
+    const name = $("#icalName").value.trim() || ($("#icalSource").value === "vrbo" ? "Vrbo calendar" : "Airbnb calendar");
+    const roomCode = roomSel.selectedOptions[0] ? roomSel.selectedOptions[0].dataset.code || "" : "";
+    (async () => {
+      try {
+        const row = await SHDB.createIcalFeed({ roomId: roomSel.value, name, source: $("#icalSource").value, url });
+        if (!row) throw new Error("no row");
+        icalFeeds.push({ id: row.id, roomId: row.room_id, roomCode, name: row.name, source: row.source, url: row.url, lastSynced: null, lastError: "" });
+        $("#icalUrl").value = ""; $("#icalName").value = "";
+        renderIcal(); toast("Calendar added", "Syncing now…", "ok");
+        fnInvoke("ical-sync", { feed_id: row.id }).then((r) => {
+          const f = icalFeeds.find((x) => x.id === row.id); if (f) { f.lastSynced = new Date().toISOString(); f.lastError = r.error || ""; }
+          renderIcal(); toast("Calendar synced", `${r.imported || 0} bookings blocked, ${r.skipped || 0} skipped`, r.error ? "warn" : "ok");
+        }).catch((e) => toast("Sync failed", e.message, "warn"));
+      } catch { toast("Could not add calendar", "Supabase write failed", "warn"); }
+    })();
+  }
+  else if (a === "sync-feed") {
+    const f = icalFeeds.find((x) => x.id === el.dataset.id);
+    if (!f) return;
+    toast("Syncing calendar", f.name + "…", "");
+    fnInvoke("ical-sync", { feed_id: f.id }).then((r) => {
+      f.lastSynced = new Date().toISOString(); f.lastError = r.error || "";
+      renderIcal(); toast("Calendar synced", `${r.imported || 0} bookings blocked, ${r.skipped || 0} skipped`, r.error ? "warn" : "ok");
+    }).catch((e) => toast("Sync failed", e.message, "warn"));
+  }
+  else if (a === "del-feed") {
+    const f = icalFeeds.find((x) => x.id === el.dataset.id);
+    if (f) confirmAction("Remove this calendar?", `<strong>${esc(f.name)}</strong> will stop syncing. Dates it already blocked stay blocked until you delete them from Reservations.`, "Remove calendar", () => {
+      icalFeeds = icalFeeds.filter((x) => x.id !== f.id);
+      if (window.SHDB && SHDB.hasLive()) SHDB.deleteIcalFeed(f.id).catch(() => {});
+      renderIcal(); toast("Calendar removed", f.name, "ok");
+    });
+  }
   else if (a === "res-detail") openResDetail(ref);
   else if (a === "charge") { closeModal(); setTimeout(() => openCharge(ref), 30); }
   else if (a === "confirm-res") {
@@ -1201,6 +1383,7 @@ document.addEventListener("click", (e) => {
     if (window.SHDB && r.id) {
       SHDB.updateReservationPaid(r.id, Math.round(r.paid * 100))
         .then(() => SHDB.addTransaction({ reservationId: r.id, description: `${r.ref} · Charge · ${r.guest}`, method: methodLabel, status: "paid", amountCents: Math.round(amt * 100) }))
+        .then(() => fnInvoke("send-email", { action: "charge_receipt", reservation_id: r.id }).catch(() => {}))
         .catch(() => toast("Payment shown locally only", "Supabase write failed", "warn"));
     }
     closeModal(); renderReservations(); renderFolios(); renderTxns();
@@ -1748,7 +1931,7 @@ $("#globalSearch").addEventListener("keydown", (e) => {
 
 /* ---------------- Boot ---------------- */
 renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
-renderRooms(); renderHK(); renderFolios(); renderTxns();
+renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns();
 renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview();
 bindStudio(); updateEmbed(null);
 
@@ -1761,10 +1944,13 @@ function clearAllData() {
   roomTypes = [];
   txns.splice(0, txns.length);
   rateOverrides = {};
+  tickets = [];
+  icalFeeds = [];
+  liveSlug = ""; liveIcalToken = "";
 }
 function renderAll() {
   renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
-  renderRooms(); renderHK(); renderFolios(); renderTxns();
+  renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns();
   renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview();
 }
 function openPropertySetup() {
@@ -1830,11 +2016,15 @@ function loadLiveIntoUI() {
     roomTypes = (live.roomTypes || []).map(normalizeRoomType);
     if (live.rateOverrides) { rateOverrides = {}; live.rateOverrides.forEach((o) => { if (o.roomCode) rateOverrides[o.roomCode + "|" + o.date] = { rate: o.rate, minStay: o.minStay != null ? o.minStay : null, maxStay: o.maxStay != null ? o.maxStay : null, closed: !!o.closed, cta: !!o.cta, ctd: !!o.ctd }; }); }
     txns.splice(0, txns.length, ...(live.txns || []));
+    tickets = live.tickets || [];
+    icalFeeds = live.icalFeeds || [];
+    liveSlug = live.tenant.slug || "";
+    liveIcalToken = live.tenant.ical_token || "";
     tenantDisplayName = live.tenant.name || "";
     liveTenant = live.tenant;
     liveMembersCount = live.membersCount != null ? live.membersCount : 1;
     renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
-    renderRooms(); renderHK(); renderFolios(); renderTxns(); renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview();
+    renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns(); renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview();
     if (live.user) {
       $("#userName").textContent = live.user.email;
       $("#userRole").textContent = "Owner · " + live.tenant.name;

@@ -122,6 +122,8 @@
       (roomTypesRaw || []).forEach((t) => { typeNameById[t.id] = t.name; typePhotosById[t.id] = arr(t.photos); });
       ctx.roomIdByCode = {};
       rooms.forEach((r) => { ctx.roomIdByCode[r.code] = r.id; });
+      const ticketRows = await rest("maintenance_tickets?" + tid + "&select=*&order=created_at.desc").catch(() => []);
+      const feedRows = await rest("ical_feeds?" + tid + "&select=*&order=created_at.asc").catch(() => []);
       const txnRows = await rest("transactions?" + tid + "&select=*&order=created_at.desc&limit=20").catch(() => []);
       const memberRows = await rest("tenant_members?" + tid + "&select=user_id").catch(() => []);
       const roomCode = (id) => (rooms.find((r) => r.id === id) || {}).code || "—";
@@ -147,6 +149,17 @@
           contact: r.guest_email || r.guest_phone || "—",
           room: roomCode(r.room_id), inN: dayOff(r.check_in), outN: dayOff(r.check_out),
           status: mapStatus(r.status), total: (r.total_cents || 0) / 100, paid: (r.paid_cents || 0) / 100, notes: r.notes || ""
+        })),
+        tickets: (ticketRows || []).map((t) => ({
+          id: t.id, roomId: t.room_id, roomCode: t.room_id ? roomCode(t.room_id) : "",
+          title: t.title, desc: t.description || "", photo: t.photo_url || "",
+          priority: t.priority || "normal", status: t.status || "open",
+          when: new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        })),
+        icalFeeds: (feedRows || []).map((f) => ({
+          id: f.id, roomId: f.room_id, roomCode: f.room_id ? roomCode(f.room_id) : "",
+          name: f.name, source: f.source || "airbnb", url: f.url,
+          lastSynced: f.last_synced_at, lastError: f.last_error || ""
         })),
         addons: addons.map((a) => ({ id: a.id, name: a.name, price: (a.price_cents || 0) / 100, per: a.per, on: a.active, desc: a.description || "" })),
         taxes: taxes.map((t) => ({ id: t.id, name: t.name, kind: t.kind, value: Number(t.rate), applies: t.applies_to, on: t.active })),
@@ -291,6 +304,36 @@
     if (!res.ok) throw new Error("Upload failed (" + res.status + ")");
     return baseUrl + "/storage/v1/object/public/" + bucket + "/" + encoded;
   }
+  /* ---------------- Maintenance tickets + iCal feeds ---------------- */
+  async function createTicket(t) {
+    if (!ctx.tenantId) return null;
+    const rows = await rest("maintenance_tickets", {
+      method: "POST", headers: rep,
+      body: JSON.stringify({
+        tenant_id: ctx.tenantId, room_id: t.roomId || null, title: t.title,
+        description: t.desc || null, photo_url: t.photo || null, priority: t.priority || "normal", status: "open"
+      })
+    });
+    return rows && rows[0];
+  }
+  async function setTicketStatus(id, status) {
+    if (!id) return;
+    const patch = { status };
+    if (status === "done") patch.resolved_at = new Date().toISOString();
+    if (status === "open") patch.resolved_at = null;
+    await rest("maintenance_tickets?id=eq." + id, { method: "PATCH", body: JSON.stringify(patch) });
+  }
+  async function deleteTicket(id) { if (id) await rest("maintenance_tickets?id=eq." + id, { method: "DELETE" }); }
+  async function createIcalFeed(f) {
+    if (!ctx.tenantId) return null;
+    const rows = await rest("ical_feeds", {
+      method: "POST", headers: rep,
+      body: JSON.stringify({ tenant_id: ctx.tenantId, room_id: f.roomId, name: f.name, source: f.source || "airbnb", url: f.url })
+    });
+    return rows && rows[0];
+  }
+  async function deleteIcalFeed(id) { if (id) await rest("ical_feeds?id=eq." + id, { method: "DELETE" }); }
+
   const hasLive = () => !!ctx.tenantId;
   async function updateTenantSettings(patch) {
     if (!ctx.tenantId) return null;
@@ -345,6 +388,7 @@
     isSystemAdmin, listSupportCases, createSupportCase, listSupportMessages, addSupportMessage, setSupportStatus, adminSubscribers,
     createReservation, setReservationStatus, updateReservationPaid, addTransaction,
     createAddon, setAddonActive, deleteAddon, createTax, deleteTax, createRoom, updateRoom,
-    createRoomType, updateRoomType, deleteRoomType, upsertRateOverrides, deleteRateOverride, uploadPublic
+    createRoomType, updateRoomType, deleteRoomType, upsertRateOverrides, deleteRateOverride, uploadPublic,
+    createTicket, setTicketStatus, deleteTicket, createIcalFeed, deleteIcalFeed
   };
 })();
