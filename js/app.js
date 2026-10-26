@@ -412,7 +412,21 @@ $("#calNext").addEventListener("click", () => { calOffset += 14; renderCalendar(
 $("#calToday").addEventListener("click", () => { calOffset = 0; renderCalendar(); });
 
 /* ---------------- Rooms + housekeeping ---------------- */
+let roomTypeFilter = "all"; // room type id, or "all"
+function roomMatchesType(r, t) {
+  return (r.typeId && r.typeId === t.id) || (!r.typeId && !!t.name && r.typeName === t.name);
+}
+function renderRoomTypeTabs() {
+  const tabs = $("#roomTypeTabs");
+  if (!tabs) return;
+  if (!roomTypes.length) { tabs.innerHTML = ""; return; }
+  if (roomTypeFilter !== "all" && !roomTypes.some((t) => t.id === roomTypeFilter)) roomTypeFilter = "all";
+  const btn = (id, label, count) => `<button type="button" role="tab" data-type-filter="${esc(id)}" class="${roomTypeFilter === id ? "active" : ""}">${esc(label)} · ${count}</button>`;
+  tabs.innerHTML = btn("all", "All rooms", rooms.length) + roomTypes.map((t) => btn(t.id, t.name, rooms.filter((r) => roomMatchesType(r, t)).length)).join("");
+}
 function renderRooms() {
+  renderRoomTypeTabs();
+  const visible = roomTypeFilter === "all" ? rooms : rooms.filter((r) => { const t = roomTypes.find((x) => x.id === roomTypeFilter); return t && roomMatchesType(r, t); });
   if (!rooms.length) {
     $("#roomGrid").innerHTML = `<div class="card card-pad" style="grid-column:1/-1;text-align:center;padding:34px 22px">
       <h3>No rooms yet</h3>
@@ -423,7 +437,11 @@ function renderRooms() {
       </div></div>`;
     return;
   }
-  $("#roomGrid").innerHTML = rooms.map((r) => `
+  if (!visible.length) {
+    $("#roomGrid").innerHTML = `<div class="card card-pad" style="grid-column:1/-1;text-align:center;padding:28px 22px"><h3>No rooms of this type yet</h3><p class="hint" style="margin-top:6px">Add a unit and pick this room type, or choose another tab.</p></div>`;
+    return;
+  }
+  $("#roomGrid").innerHTML = visible.map((r) => `
     <div class="card room-card">
       ${r.photos && r.photos.length ? `<img class="room-cover" src="${esc(r.photos[0])}" alt="${esc(r.name)}">` : ""}
       <div class="room-top"><div><h3>${r.code} · ${esc(r.name)}</h3><div class="meta">${esc(r.type)}</div></div>
@@ -533,6 +551,12 @@ if (pfPolicySel) pfPolicySel.addEventListener("change", () => {
   const wrap = $("#pfPolicyCustomWrap");
   if (wrap) { wrap.hidden = pfPolicySel.selectedIndex !== 3; if (!wrap.hidden) { const t = $("#pfPolicyText"); if (t) t.focus(); } }
 });
+const roomTypeTabsEl = $("#roomTypeTabs");
+if (roomTypeTabsEl) roomTypeTabsEl.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-type-filter]"); if (!b) return;
+  roomTypeFilter = b.dataset.typeFilter;
+  renderRooms();
+});
 const repRange = $("#repRange");
 if (repRange) repRange.addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
@@ -542,7 +566,7 @@ if (repRange) repRange.addEventListener("click", (e) => {
 });
 /* Audit bindings: segmented toggles, property picker, logo upload */
 $$(".seg").forEach((seg) => {
-  if (seg.id === "resFilter" || seg.id === "repRange") return;
+  if (seg.id === "resFilter" || seg.id === "repRange" || seg.id === "roomTypeTabs") return;
   seg.addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;
     $$("button", seg).forEach((x) => x.classList.toggle("active", x === b));
@@ -1523,7 +1547,7 @@ document.addEventListener("click", (e) => {
       toast("Room type added", data.name, "ok");
     }
     renderRooms();
-    openRoomTypes(editId || undefined);
+    closeModal();
   }
   else if (a === "save-edit-room") {
     const r = roomByCode(el.dataset.code);
@@ -1896,14 +1920,21 @@ document.addEventListener("click", (e) => {
     closeModal(); renderTaxes(); toast("Tax rule added", "Totals recalculated everywhere", "ok");
   }
   else if (a === "add-room") {
+    const firstType = roomTypes[0] ? normalizeRoomType(roomTypes[0]) : null;
     openModal({
       title: "Add a room or cabin", sub: "It appears on your booking page immediately",
       body: `<div class="form-2"><div class="field"><label>Code</label><input class="input" id="rmCode" placeholder="e.g. D1"></div>
         <div class="field"><label>Name</label><input class="input" id="rmName" placeholder="e.g. Juniper Lodge"></div></div>
         <div class="field"><label>Room type</label><select class="select" id="rmType">${roomTypes.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("")}</select></div>
         <div class="form-2"><div class="field"><label>Sleeps</label><input class="input" id="rmSleeps" type="number" min="1" value="2"></div>
-        <div class="field"><label>Nightly rate (USD)</label><input class="input mono" id="rmRate" type="number" min="0" value="150"></div></div>`,
+        <div class="field"><label>Nightly rate (USD)</label><input class="input mono" id="rmRate" type="number" min="0" step="0.01" value="${firstType && firstType.rackRate ? firstType.rackRate : 150}"><span class="help">Defaults to the selected type's rack rate — override per room if needed.</span></div></div>`,
       foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Cancel</button><button class="btn btn-primary btn-sm" data-action="save-room" type="button">Add unit</button>`
+    });
+    const typeSelEl = $("#rmType");
+    if (typeSelEl) typeSelEl.addEventListener("change", () => {
+      const t = roomTypes.find((x) => x.id === typeSelEl.value);
+      const rate = t ? normalizeRoomType(t).rackRate : 0;
+      if (rate > 0) $("#rmRate").value = rate;
     });
   }
   else if (a === "save-room") {
