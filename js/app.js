@@ -788,6 +788,26 @@ function planReturn() {
   if (rtpCtx === "page") { closeModal(); renderRateMgmt(); renderRooms(); }
   else openRoomTypeRates(rtpTypeId);
 }
+/* The rate entered when a room type is created IS its Default Rate: nightly
+   price, stay defaults, extra-guest charges and included occupants from the
+   type itself. Extra rates (extended stay, promo...) sit alongside it. */
+function defaultRateSummary(t) {
+  const tn = normalizeRoomType(t);
+  const bits = [money(typeBaseRate(t)) + "/night", (tn.minStay || 1) + "–" + (tn.maxStay || "∞") + " nights"];
+  if (tn.extraAdultRate) bits.push("extra adult " + money(tn.extraAdultRate));
+  if (tn.extraChildRate) bits.push("extra child " + money(tn.extraChildRate));
+  if (tn.extraInfantRate) bits.push("extra infant " + money(tn.extraInfantRate));
+  bits.push("includes " + (tn.includedAdults || 0) + " adult" + (tn.includedAdults === 1 ? "" : "s") + (tn.includedChildren ? " + " + tn.includedChildren + " child" + (tn.includedChildren === 1 ? "" : "ren") : "") + (tn.includedInfants ? " + " + tn.includedInfants + " infant" + (tn.includedInfants === 1 ? "" : "s") : ""));
+  if (tn.maxOccupants) bits.push("max " + tn.maxOccupants + " guests");
+  return bits.join(" · ");
+}
+function defaultRateRow(t) {
+  return `<div class="row-item" style="border-color:var(--brand)"><div class="ri-main"><strong>Default Rate</strong><span>${esc(defaultRateSummary(t))}</span></div>
+    <div class="ri-right" style="display:flex;gap:6px;align-items:center">
+    <span class="pill confirmed"><i></i>Default · Public</span>
+    <button class="btn btn-ghost btn-xs" data-action="rmt-default-edit" data-type="${esc(t.id)}" type="button">Edit</button></div></div>`;
+}
+
 function renderRateMgmt() {
   const wrap = $("#rmtPlans"); if (!wrap) return;
   const typesEl = $("#rmtTypes");
@@ -806,15 +826,16 @@ function renderRateMgmt() {
   wrap.innerHTML = `
     <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px">
       <h3 style="font-size:16px">${esc(t.name)}</h3>
-      <span style="color:var(--muted);font-size:13px">Nightly rate ${money(typeBaseRate(t))} for every room of this type · min stay ${tn.minStay || 1}${tn.maxStay ? "–" + tn.maxStay : "+"} nights</span>
+      <span style="color:var(--muted);font-size:13px">Every room of this type books on the Default Rate unless a better rate below applies</span>
     </div>
     <div class="row-list">
+      ${defaultRateRow(t)}
       ${tn.ratePlans.map((pl) => `
         <div class="row-item"><div class="ri-main"><strong>${esc(pl.name)}</strong><span>${esc(planSummary(pl))}${pl.desc ? " — " + esc(pl.desc) : ""}</span></div>
           <div class="ri-right" style="display:flex;gap:6px;align-items:center">
           ${pl.promoCode ? `<span class="pill progress"><i></i>Promo ${esc(pl.promoCode)}</span>` : `<span class="pill confirmed"><i></i>Public</span>`}
           <button class="btn btn-ghost btn-xs" data-action="rmt-edit" data-type="${esc(t.id)}" data-plan="${esc(pl.id)}" type="button">Edit</button>
-          <button class="btn btn-ghost btn-xs" data-action="rtp-del" data-type="${esc(t.id)}" data-plan="${esc(pl.id)}" type="button">Delete</button></div></div>`).join("") || `<p class="hint" style="padding:8px 0">No extra rates yet — bookings use the standard rate. Add one above, e.g. an Extended stay rate at −10% for 3+ nights.</p>`}
+          <button class="btn btn-ghost btn-xs" data-action="rtp-del" data-type="${esc(t.id)}" data-plan="${esc(pl.id)}" type="button">Delete</button></div></div>`).join("") || `<p class="hint" style="padding:8px 0">No extra rates yet — every booking uses the Default Rate above. Add one, e.g. an Extended stay rate at −10% for 3+ nights.</p>`}
     </div>`;
 }
 function openRoomTypeRates(typeId, planId, fromPage) {
@@ -831,6 +852,7 @@ function openRoomTypeRates(typeId, planId, fromPage) {
     title: `Rate plans · ${t.name}`, sub: "Different prices for longer stays, early bookers or promo codes — based on each room's nightly rate",
     body: `
       ${fromPage ? "" : `<div class="row-list" style="margin-bottom:6px">
+        ${defaultRateRow(t)}
         ${tn.ratePlans.map((pl) => `
           <div class="row-item"><div class="ri-main"><strong>${esc(pl.name)}</strong><span>${esc(planSummary(pl))}</span></div>
             <div class="ri-right" style="display:flex;gap:6px;align-items:center">
@@ -1585,6 +1607,7 @@ document.addEventListener("click", (e) => {
     openRoomTypeRates(ratesTypeId, null, true);
   }
   else if (a === "rmt-edit") openRoomTypeRates(el.dataset.type, el.dataset.plan, true);
+  else if (a === "rmt-default-edit") openRoomTypes(el.dataset.type);
   else if (a === "rt-photos") openRoomTypePhotos(roomTypes[+el.dataset.i].id);
   else if (a === "rt-photo-del") {
     const t = roomTypes.find((x) => x.id === el.dataset.id);
@@ -1621,7 +1644,7 @@ document.addEventListener("click", (e) => {
       const nt = normalizeRoomType({ ...data, id: "local-" + Date.now(), photos: [] });
       roomTypes.push(nt);
       if (window.SHDB && SHDB.hasLive()) SHDB.createRoomType(nt).then((row) => { if (row) nt.id = row.id; }).catch(() => toast("Type saved locally only", "Supabase write failed", "warn"));
-      toast("Room type added", data.name, "ok");
+      toast("Room type added", `${data.name} · its Default Rate (${money(data.rackRate || 0)}/night) is live`, "ok");
     }
     renderRooms();
     closeModal();
