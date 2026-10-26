@@ -367,9 +367,18 @@
       return null;
     }
     const guests = Math.max(1, parseInt($("#guests").value) || 1);
+    const occupantCaps = [state.tenant && state.tenant.maximum_total_occupants, type && type.max_occupants]
+      .map((value) => Number(value)).filter((value) => Number.isFinite(value) && value > 0);
+    const occupantCap = occupantCaps.length ? Math.min(...occupantCaps) : null;
+    if (occupantCap && guests > occupantCap) {
+      $("#summaryBody").innerHTML = `<p class="bk-muted">This booking allows at most ${occupantCap} total occupant${occupantCap > 1 ? "s" : ""}. Reduce the guest count or contact the property for a larger group.</p>`;
+      btn.disabled = true; btn.textContent = `Maximum ${occupantCap} occupants`;
+      return null;
+    }
     const ap = applicablePlan(state.selected, n);
     const included = ap && ap.plan.includedOccupants != null ? ap.plan.includedOccupants
-      : type && type.included_adults != null ? type.included_adults : 2;
+      : type && type.included_adults != null ? type.included_adults
+      : state.tenant && state.tenant.included_occupants != null ? state.tenant.included_occupants : 2;
     const extraGuests = Math.max(0, guests - included);
     const extraRate = ap && ap.plan.extraAdultRate ? ap.plan.extraAdultRate : (type && type.extra_adult_cents ? type.extra_adult_cents / 100 : 0);
     const addonPayload = chosenAddons().map((a) => ({ name: a.name, price: a.price_cents / 100, per: a.per, qty: 1 }));

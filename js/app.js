@@ -576,7 +576,7 @@ function openRoomTypes(editId) {
         <div class="field"><label>Extra infant (USD/night)</label><input class="input mono" id="rtExtraInfant" type="number" min="0" step="0.01" value="${num(editing.extraInfantRate)}" placeholder="0.00"></div>
       </div>
 
-      <h4 class="rt-sec">Occupancy</h4>
+      <h4 class="rt-sec">Occupancies</h4>
       <div class="form-3">
         <div class="field"><label>Included adults</label><input class="input" id="rtIncAdults" type="number" min="0" value="${editing.includedAdults}"><span class="help">Covered by the base rate (default 2)</span></div>
         <div class="field"><label>Included children</label><input class="input" id="rtIncChildren" type="number" min="0" value="${editing.includedChildren}"></div>
@@ -1618,6 +1618,10 @@ document.addEventListener("click", (e) => {
     const url = (id) => { const s = v(id); return s && !/^https?:\/\//i.test(s) ? "https://" + s : s; };
     const intOrNull = (id) => { const n = parseInt(v(id), 10); return Number.isFinite(n) ? n : null; };
     if (!v("#pfName")) { toast("Property name is required", "It shows on your booking page and receipts", "warn"); return; }
+    const includedOccupants = intOrNull("#pfIncludedOccupants") ?? 2;
+    const maximumTotalOccupants = intOrNull("#pfMaximumTotalOccupants");
+    if (includedOccupants < 0 || (maximumTotalOccupants !== null && maximumTotalOccupants < 0)) { toast("Check occupancies", "Occupancy counts cannot be negative", "warn"); return; }
+    if (maximumTotalOccupants !== null && includedOccupants > maximumTotalOccupants) { toast("Check occupancies", "Included occupants cannot exceed maximum total occupants", "warn"); return; }
     const minRate = parseFloat(v("#pfMinRoomRate"));
     const patch = {
       name: v("#pfName"), contact_email: v("#pfEmail") || null,
@@ -1634,7 +1638,9 @@ document.addEventListener("click", (e) => {
       check_in_time: v("#pfCheckIn"), check_out_time: v("#pfCheckOut"),
       cancellation_policy: ["moderate", "flexible", "strict", "custom"][$("#pfPolicy").selectedIndex] || "moderate",
       cancellation_policy_text: ["moderate", "flexible", "strict", "custom"][$("#pfPolicy").selectedIndex] === "custom" ? (v("#pfPolicyText") || null) : null,
-      max_child_age: intOrNull("#pfMaxChildAge"), max_infant_age: intOrNull("#pfMaxInfantAge"),
+      included_occupants: includedOccupants,
+      maximum_adults: intOrNull("#pfMaximumAdults"), maximum_children: intOrNull("#pfMaximumChildren"),
+      maximum_infants: intOrNull("#pfMaximumInfants"), maximum_total_occupants: maximumTotalOccupants,
       min_room_rate_cents: Number.isFinite(minRate) ? Math.round(minRate * 100) : null,
       weekend_starts: v("#pfWeekendStarts") || "saturday",
       allow_decimals: !!($("#pfAllowDecimals") && $("#pfAllowDecimals").checked),
@@ -1865,7 +1871,9 @@ function loadLiveIntoUI() {
       set("#pfDesc", T.description);
       set("#pfTerms", T.rental_terms);
       chk("#pfStarRated", T.star_rated); if (T.star_count) set("#pfStars", String(T.star_count));
-      set("#pfMaxChildAge", T.max_child_age); set("#pfMaxInfantAge", T.max_infant_age);
+      set("#pfIncludedOccupants", T.included_occupants ?? 2);
+      set("#pfMaximumAdults", T.maximum_adults); set("#pfMaximumChildren", T.maximum_children);
+      set("#pfMaximumInfants", T.maximum_infants); set("#pfMaximumTotalOccupants", T.maximum_total_occupants);
       if (T.min_room_rate_cents != null) set("#pfMinRoomRate", (T.min_room_rate_cents / 100).toFixed(2));
       set("#pfWeekendStarts", T.weekend_starts || "saturday");
       chk("#pfAllowDecimals", T.allow_decimals !== false);

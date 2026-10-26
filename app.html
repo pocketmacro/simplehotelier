@@ -554,8 +554,13 @@
           <h4 class="rt-sec">Other settings</h4>
           <div class="grid g-3">
             <div>
-              <div class="field"><label>Maximum child age (in years)</label><input class="input" id="pfMaxChildAge" type="number" min="0" placeholder="e.g. 10"><span class="help">Guests at or under this age count as children for extra-guest rates.</span></div>
-              <div class="field"><label>Maximum infant age (in years)</label><input class="input" id="pfMaxInfantAge" type="number" min="0" placeholder="e.g. 2"></div>
+              <h4 class="rt-sec" style="margin-top:0;padding-top:0;border-top:0">Occupancies</h4>
+              <div class="field"><label>Included occupants</label><input class="input" id="pfIncludedOccupants" type="number" min="0" value="2"><span class="help">Covered by the base rate when a room type or rate plan does not specify its own amount. The default is 2.</span></div>
+              <div class="field"><label>Maximum adults</label><input class="input" id="pfMaximumAdults" type="number" min="0" placeholder="No property-wide limit"></div>
+              <div class="field"><label>Maximum children</label><input class="input" id="pfMaximumChildren" type="number" min="0" placeholder="No property-wide limit"><span class="help">This is the maximum number of children allowed, not a child age.</span></div>
+              <div class="field"><label>Maximum infants</label><input class="input" id="pfMaximumInfants" type="number" min="0" placeholder="No property-wide limit"><span class="help">This is the maximum number of infants allowed, not an infant age.</span></div>
+              <div class="field"><label>Maximum total occupants</label><input class="input" id="pfMaximumTotalOccupants" type="number" min="0" placeholder="No property-wide limit"><span class="help">The booking page will not accept more total guests than this when set.</span></div>
+              <h4 class="rt-sec">Inventory &amp; front desk</h4>
               <div class="field"><label>Minimum room rate (USD)</label><input class="input mono" id="pfMinRoomRate" type="number" min="0" step="0.01" placeholder="10.00"><span class="help">Rate plans and overrides will not price a night below this.</span></div>
               <div class="field"><label>Weekend starts</label><select class="select" id="pfWeekendStarts"><option value="friday">Friday</option><option value="saturday">Saturday</option><option value="sunday">Sunday</option></select></div>
               <label class="check-item"><input type="checkbox" id="pfAllowDecimals" checked><span>Allow decimals in rates</span></label>
