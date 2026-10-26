@@ -1961,20 +1961,22 @@ document.addEventListener("click", (e) => {
   }
   else if (a === "add-room") {
     const firstType = roomTypes[0] ? normalizeRoomType(roomTypes[0]) : null;
+    const typeSleeps = (t) => t ? (t.maxOccupants > 0 ? t.maxOccupants : (t.includedAdults + t.includedChildren + t.includedInfants) || 2) : 2;
     openModal({
       title: "Add a room or cabin", sub: "It appears on your booking page immediately",
       body: `<div class="form-2"><div class="field"><label>Code</label><input class="input" id="rmCode" placeholder="e.g. D1"></div>
         <div class="field"><label>Name</label><input class="input" id="rmName" placeholder="e.g. Juniper Lodge"></div></div>
         <div class="field"><label>Room type</label><select class="select" id="rmType">${roomTypes.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("")}</select></div>
-        <div class="form-2"><div class="field"><label>Sleeps</label><input class="input" id="rmSleeps" type="number" min="1" value="2"></div>
+        <div class="form-2"><div class="field"><label>Sleeps</label><input class="input" id="rmSleeps" type="number" min="1" value="${typeSleeps(firstType)}"><span class="help">Defaults to the type's maximum occupants — shown on your booking page.</span></div>
         <div class="field"><label>Nightly rate (USD)</label><input class="input mono" id="rmRate" type="number" min="0" step="0.01" value="${firstType && firstType.rackRate ? firstType.rackRate : 150}"><span class="help">Defaults to the selected type's rack rate — override per room if needed.</span></div></div>`,
       foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Cancel</button><button class="btn btn-primary btn-sm" data-action="save-room" type="button">Add unit</button>`
     });
     const typeSelEl = $("#rmType");
     if (typeSelEl) typeSelEl.addEventListener("change", () => {
       const t = roomTypes.find((x) => x.id === typeSelEl.value);
-      const rate = t ? normalizeRoomType(t).rackRate : 0;
-      if (rate > 0) $("#rmRate").value = rate;
+      const tn = t ? normalizeRoomType(t) : null;
+      if (tn && tn.rackRate > 0) $("#rmRate").value = tn.rackRate;
+      $("#rmSleeps").value = typeSleeps(tn);
     });
   }
   else if (a === "save-room") {
