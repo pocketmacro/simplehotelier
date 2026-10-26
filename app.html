@@ -395,19 +395,6 @@
           <div class="rate-grid" id="rateGrid"></div>
           <p class="hint" style="margin-top:12px">Select any day to edit its rate, stay limits and closed / closed-to-arrival / closed-to-departure flags. The Bulk updater changes many days, rooms and rate plans at once. Rules apply to new bookings; existing reservations keep the price they booked at.</p>
         </div>
-        <div class="card card-pad mt">
-          <h3>Bulk set rates</h3>
-          <p class="hint">Fastest for seasons, holidays and weekends</p>
-          <div class="form-3">
-            <div class="field"><label>From</label><input class="input" id="rateFrom" type="date"></div>
-            <div class="field"><label>To</label><input class="input" id="rateTo" type="date"></div>
-            <div class="field"><label>Nightly rate (USD)</label><input class="input mono" id="rateBulk" type="number" min="0" placeholder="e.g. 279"></div>
-          </div>
-          <div class="form-2">
-            <div class="field"><label>Apply to</label><select class="select" id="rateMode"><option value="all">Every day in range</option><option value="weekends">Weekends only (Fri-Sun)</option><option value="weekdays">Weekdays only (Mon-Thu)</option></select></div>
-            <div class="field"><label>&nbsp;</label><div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" type="button" data-action="rates-apply">Apply rates</button><button class="btn btn-ghost btn-sm" type="button" data-action="rates-clear">Clear overrides in range</button></div></div>
-          </div>
-        </div>
       </section>
 
       <!-- ===== SUPPORT ===== -->
