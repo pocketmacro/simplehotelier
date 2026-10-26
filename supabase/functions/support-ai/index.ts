@@ -29,25 +29,28 @@ Deno.serve(async (req) => {
     const { question } = await req.json();
     if (!question) return json({ error: "question required" }, 400);
     const model = Deno.env.get("META_MODEL") || "muse-spark-1.3";
-    const res = await fetch("https://api.meta.ai/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        // Reasoning models spend tokens thinking before the final answer;
-        // 500 starved the reply (empty content), so allow real headroom.
-        max_tokens: 1500,
-        messages: [
-          { role: "system", content: SYSTEM },
-          { role: "user", content: String(question).slice(0, 2000) },
-        ],
-      }),
-    });
-    const data: any = await res.json().catch(() => ({}));
-    if (!res.ok) return json({ error: data?.error?.message || "meta_api_error", status: res.status }, 502);
-    const answer = data?.choices?.[0]?.message?.content || "";
-    if (!answer) return json({ error: "empty_answer" }, 502);
-    return json({ answer, model });
+    const messages = [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: String(question).slice(0, 2000) },
+    ];
+    // Reasoning models spend a variable number of tokens thinking before the
+    // final answer. Start at 1500; if the reply comes back empty, retry once
+    // with a much larger budget instead of failing the user.
+    let lastStatus = 0;
+    for (const maxTokens of [1500, 4000]) {
+      const res = await fetch("https://api.meta.ai/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model, max_tokens: maxTokens, messages }),
+      });
+      lastStatus = res.status;
+      const data: any = await res.json().catch(() => ({}));
+      if (!res.ok) return json({ error: data?.error?.message || "meta_api_error", status: res.status }, 502);
+      const raw = data?.choices?.[0]?.message?.content;
+      const answer = Array.isArray(raw) ? raw.map((p: any) => p?.text || "").join("") : (raw || "");
+      if (answer.trim()) return json({ answer, model });
+    }
+    return json({ error: "empty_answer", status: lastStatus }, 502);
   } catch (e: any) {
     return json({ error: e.message ?? "support-ai failed" }, 500);
   }
