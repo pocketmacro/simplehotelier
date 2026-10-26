@@ -52,6 +52,19 @@ See [supabase/README.md](supabase/README.md). Short version:
 - Requires `supabase/migrations/20261027000000_booking.sql`
   (`scripts/apply-booking-migration.ps1` applies it).
 
+## Managing your property
+- **Room Types** (Rooms & Cabins > Room types): create, edit and delete
+  types, then assign them when adding or editing rooms.
+- **Rates**: open Rate Calendar to click any date and set an override, or
+  bulk-set a whole season or weekends only. Days without an override always
+  use the room's default rate, in the dashboard and on the booking page.
+- **Branding and photos**: Settings > Property logo uploads your logo to
+  Supabase Storage (shown on the booking page). Each room card has Photos
+  for gallery uploads; the first photo becomes the booking page cover.
+- Requires `supabase/migrations/20261029000000_rates_photos.sql`
+  (`node scripts/apply-sql.mjs supabase/migrations/20261029000000_rates_photos.sql`).
+- Brand assets: `assets/logo.svg`, `assets/logo-mark.svg`, `assets/favicon.svg`.
+
 ## Accounts
 - **Log in** with your Supabase Auth user to load your property's live data.
 - **Create account** signs you up and creates your property + owner

@@ -8,8 +8,10 @@
   const round2 = (n) => Math.round(n * 100) / 100;
 
   /* Pure price math — covered by tests/book-calc.test.mjs */
-  function quote({ rate, nights, guests, addons, taxes }) {
-    const subtotal = round2((rate || 0) * (nights || 0));
+  function quote({ rate, nights, guests, addons, taxes, nightlyRates }) {
+    const subtotal = nightlyRates && nightlyRates.length
+      ? round2(nightlyRates.reduce((a, b) => a + b, 0))
+      : round2((rate || 0) * (nights || 0));
     let addonsTotal = 0;
     const addonLines = (addons || []).map((a) => {
       const per = a.per || "stay";
@@ -51,7 +53,7 @@
   const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  const state = { tenant: null, rooms: [], addons: [], taxes: [], selected: null, available: null, gaId: "" };
+  const state = { tenant: null, rooms: [], addons: [], taxes: [], selected: null, available: null, gaId: "", overrides: {} };
 
   function showError(msg) {
     const el = $("#bookError");
@@ -125,9 +127,10 @@
       const booked = state.available && !state.available.includes(r.id);
       const sel = state.selected && state.selected.id === r.id;
       return `<article class="bk-room${sel ? " sel" : ""}${booked ? " booked" : ""}">
+        ${r.photos && r.photos.length ? `<img class="bk-room-img" src="${esc(r.photos[0])}" alt="${esc(r.name)}">` : `<div class="bk-room-ph">${esc((r.name || "R").slice(0, 1))}</div>`}
         <h3>${esc(r.name)}</h3>
         <div class="meta">Sleeps ${esc(r.sleeps)} · ${esc(r.code)}</div>
-        <div class="price"><div><b>${money(r.rate_cents / 100)}</b> <span>/ night · ${money(r.rate_cents / 100 * n)} for ${n} night${n > 1 ? "s" : ""}</span></div>
+        <div class="price"><div><b>${money(r.rate_cents / 100)}</b> <span>/ night · ${money(nightlyRatesFor(r).reduce((a, b) => a + b, 0) || r.rate_cents / 100 * n)} for ${n} night${n > 1 ? "s" : ""}</span></div>
         <button class="bk-select" type="button" data-room="${r.id}" ${booked ? "disabled" : ""}>${booked ? "Booked" : sel ? "Selected ✓" : "Select"}</button></div>
       </article>`;
     }).join("") || `<p class="bk-loading">No rooms are listed yet.</p>`;
@@ -142,6 +145,18 @@
       </label>`).join("");
     [...document.querySelectorAll("#addonsList input")].forEach((el) => el.addEventListener("change", renderSummary));
   }
+  function nightlyRatesFor(room) {
+    const rates = [];
+    const d = new Date($("#inDate").value + "T12:00:00");
+    const end = new Date($("#outDate").value + "T12:00:00");
+    while (d < end) {
+      const iso = d.toISOString().slice(0, 10);
+      const over = state.overrides[room.id + "|" + iso];
+      rates.push(over != null ? over : room.rate_cents / 100);
+      d.setDate(d.getDate() + 1);
+    }
+    return rates;
+  }
   function renderSummary() {
     const n = nights();
     const btn = $("#bookBtn");
@@ -152,7 +167,7 @@
       return null;
     }
     const guests = Math.max(1, parseInt($("#guests").value) || 1);
-    const q = quote({ rate: state.selected.rate_cents / 100, nights: n, guests, addons: chosenAddons().map((a) => ({ name: a.name, price: a.price_cents / 100, per: a.per, qty: 1 })), taxes: state.taxes });
+    const q = quote({ rate: state.selected.rate_cents / 100, nights: n, guests, nightlyRates: nightlyRatesFor(state.selected), addons: chosenAddons().map((a) => ({ name: a.name, price: a.price_cents / 100, per: a.per, qty: 1 })), taxes: state.taxes });
     $("#summaryBody").innerHTML =
       `<div class="bk-line"><span>${esc(state.selected.name)} × ${n} night${n > 1 ? "s" : ""}</span><b>${money(q.subtotal)}</b></div>` +
       q.addonLines.map((l) => `<div class="bk-line"><span>${esc(l.name)}</span><b>${money(l.amount)}</b></div>`).join("") +
@@ -198,8 +213,16 @@
         document.documentElement.style.setProperty("--brand", t.brand_color);
         document.documentElement.style.setProperty("--brand-2", t.brand_color);
       }
+      if (t.logo_url) {
+        const mk = $("#propMark");
+        mk.innerHTML = `<img src="${esc(t.logo_url)}" alt="">`;
+        mk.style.background = "none";
+      }
       setupGA();
       const tid = "tenant_id=eq." + t.id;
+      const overrideRows = await api("room_rate_overrides?" + tid + "&select=room_id,date,rate_cents").catch(() => []);
+      state.overrides = {};
+      (overrideRows || []).forEach((o) => { state.overrides[o.room_id + "|" + String(o.date).slice(0, 10)] = o.rate_cents / 100; });
       const [rooms, addons, taxes] = await Promise.all([
         api("rooms?" + tid + "&select=*&order=sort_order.asc"),
         api("addons?" + tid + "&active=eq.true&select=*&order=name.asc"),

@@ -68,12 +68,16 @@
       }
       const tid = "tenant_id=eq." + tenant.id;
       ctx.tenantId = tenant.id;
-      const [rooms, reservations, addons, taxes] = await Promise.all([
+      const [rooms, reservations, addons, taxes, roomTypesRaw, overridesRaw] = await Promise.all([
         rest("rooms?" + tid + "&select=*&order=sort_order.asc"),
         rest("reservations?" + tid + "&select=*&order=check_in.asc"),
         rest("addons?" + tid + "&select=*&order=name.asc"),
-        rest("tax_rules?" + tid + "&select=*&order=sort_order.asc")
+        rest("tax_rules?" + tid + "&select=*&order=sort_order.asc"),
+        rest("room_types?" + tid + "&select=*&order=name.asc").catch(() => []),
+        rest("room_rate_overrides?" + tid + "&select=*").catch(() => [])
       ]);
+      const typeNameById = {};
+      (roomTypesRaw || []).forEach((t) => { typeNameById[t.id] = t.name; });
       ctx.roomIdByCode = {};
       rooms.forEach((r) => { ctx.roomIdByCode[r.code] = r.id; });
       const txnRows = await rest("transactions?" + tid + "&select=*&order=created_at.desc&limit=20").catch(() => []);
@@ -82,10 +86,15 @@
         tenant, user,
         rooms: rooms.map((r) => ({
           id: r.id, code: r.code, name: r.name,
-          type: (r.sleeps ? "Sleeps " + r.sleeps : "Unit"),
+          sleeps: r.sleeps || 2, typeId: r.room_type_id || null,
+          typeName: typeNameById[r.room_type_id] || "",
+          type: ((typeNameById[r.room_type_id] ? typeNameById[r.room_type_id] + " · " : "") + "Sleeps " + (r.sleeps || 2)),
           rate: (r.rate_cents || 0) / 100, status: r.status,
-          hk: r.housekeeping_status, guest: "", note: r.notes || ""
+          hk: r.housekeeping_status, guest: "", note: r.notes || "",
+          photos: Array.isArray(r.photos) ? r.photos : []
         })),
+        roomTypes: (roomTypesRaw || []).map((t) => ({ id: t.id, name: t.name, desc: t.description || "" })),
+        rateOverrides: (overridesRaw || []).map((o) => ({ roomId: o.room_id, roomCode: roomCode(o.room_id), date: String(o.date || "").slice(0, 10), rate: (o.rate_cents || 0) / 100 })),
         reservations: reservations.map((r) => ({
           id: r.id, ref: r.confirmation_code, guest: r.guest_name,
           contact: r.guest_email || r.guest_phone || "—",
@@ -181,9 +190,53 @@
     if (!ctx.tenantId) return null;
     const rows = await rest("rooms", {
       method: "POST", headers: rep,
-      body: JSON.stringify({ tenant_id: ctx.tenantId, code: r.code, name: r.name, sleeps: r.sleeps || 2, rate_cents: Math.round((r.rate || 0) * 100), status: "vacant", housekeeping_status: "clean" })
+      body: JSON.stringify({ tenant_id: ctx.tenantId, code: r.code, name: r.name, sleeps: r.sleeps || 2, rate_cents: Math.round((r.rate || 0) * 100), room_type_id: r.typeId || null, status: "vacant", housekeeping_status: "clean" })
     });
     return rows && rows[0];
+  }
+  async function updateRoom(id, r) {
+    if (!id) return;
+    const patch = {};
+    if (r.name != null) patch.name = r.name;
+    if (r.sleeps != null) patch.sleeps = r.sleeps;
+    if (r.rate != null) patch.rate_cents = Math.round(r.rate * 100);
+    if ("typeId" in r) patch.room_type_id = r.typeId || null;
+    if (r.notes != null) patch.notes = r.notes;
+    if (r.photos != null) patch.photos = r.photos;
+    await rest("rooms?id=eq." + id, { method: "PATCH", body: JSON.stringify(patch) });
+  }
+  async function createRoomType(t) {
+    if (!ctx.tenantId) return null;
+    const rows = await rest("room_types", { method: "POST", headers: rep, body: JSON.stringify({ tenant_id: ctx.tenantId, name: t.name, description: t.desc || null }) });
+    return rows && rows[0];
+  }
+  async function updateRoomType(id, t) {
+    if (!id) return;
+    await rest("room_types?id=eq." + id, { method: "PATCH", body: JSON.stringify({ name: t.name, description: t.desc || null }) });
+  }
+  async function deleteRoomType(id) { if (id) await rest("room_types?id=eq." + id, { method: "DELETE" }); }
+  async function upsertRateOverrides(roomId, roomCodeVal, entries) {
+    if (!ctx.tenantId || !roomId || !entries.length) return;
+    await rest("room_rate_overrides?on_conflict=room_id,date", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(entries.map((e) => ({ tenant_id: ctx.tenantId, room_id: roomId, date: e.date, rate_cents: Math.round(e.rate * 100) })))
+    });
+  }
+  async function deleteRateOverride(roomId, date) {
+    if (!roomId) return;
+    await rest("room_rate_overrides?room_id=eq." + roomId + "&date=eq." + date, { method: "DELETE" });
+  }
+  async function uploadPublic(bucket, path, file) {
+    const baseUrl = cfg.SUPABASE_URL.replace(/\/$/, "");
+    const encoded = path.split("/").map(encodeURIComponent).join("/");
+    const res = await fetch(baseUrl + "/storage/v1/object/" + bucket + "/" + encoded, {
+      method: "POST",
+      headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: "Bearer " + token(), "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" },
+      body: file
+    });
+    if (!res.ok) throw new Error("Upload failed (" + res.status + ")");
+    return baseUrl + "/storage/v1/object/public/" + bucket + "/" + encoded;
   }
   const hasLive = () => !!ctx.tenantId;
   async function updateTenantSettings(patch) {
@@ -238,6 +291,7 @@
     configured, loadLiveData, updateHK, hasLive, updateTenantSettings, tenantId,
     isSystemAdmin, listSupportCases, createSupportCase, listSupportMessages, addSupportMessage, setSupportStatus, adminSubscribers,
     createReservation, setReservationStatus, updateReservationPaid, addTransaction,
-    createAddon, setAddonActive, deleteAddon, createTax, deleteTax, createRoom
+    createAddon, setAddonActive, deleteAddon, createTax, deleteTax, createRoom, updateRoom,
+    createRoomType, updateRoomType, deleteRoomType, upsertRateOverrides, deleteRateOverride, uploadPublic
   };
 })();

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="SimpleHotelier mark">
+  <path d="M9 35.5 32 14l23 21.5" stroke="#0c3b3c" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M19.5 35.5V49h25V35.5" stroke="#0c3b3c" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M32 49v-8.5" stroke="#b97a2a" stroke-width="5.5" stroke-linecap="round"/>
+  <circle cx="32" cy="29.5" r="2.7" fill="#b97a2a"/>
+</svg>

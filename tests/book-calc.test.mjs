@@ -28,6 +28,16 @@ test("quote: room-only percent tax excludes add-ons, per-night fee stacks", () =
   assert.equal(q.total, 503);
 });
 
+test("quote: per-date override rates replace the default nightly rate", () => {
+  const q = window.SHBookCalc.quote({
+    rate: 999, nights: 2, guests: 2, nightlyRates: [200, 320],
+    addons: [], taxes: [{ name: "VAT", kind: "percent", value: 10, applies: "Room + add-ons" }]
+  });
+  assert.equal(q.subtotal, 520);
+  assert.equal(q.taxTotal, 52);
+  assert.equal(q.total, 572);
+});
+
 test("quote: percent on Room + add-ons includes add-ons; per-person scales with guests", () => {
   const q = window.SHBookCalc.quote({
     rate: 100, nights: 1, guests: 3,
