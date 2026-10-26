@@ -1,0 +1,7 @@
+// SimpleHotelier - browser config (auto-written by scripts/setup-supabase.ps1).
+// The publishable key is safe to ship; RLS protects data. Never add service keys here.
+window.SH_CONFIG = {
+  SUPABASE_URL: "https://ybgmwyzizacxkfgxmroy.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_LEuT_5ZXdORDF8E9jaesOg_VYTPiG-Q",
+  TENANT_SLUG: "pinecrest"
+};
