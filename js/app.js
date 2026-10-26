@@ -161,8 +161,8 @@ function confirmAction(title, body, label, cb) {
       <button class="btn btn-danger btn-sm" data-action="confirm-yes" type="button">${esc(label || "Delete")}</button>`
   });
 }
-overlay.addEventListener("click", (e) => { if (e.target === overlay) closeModal(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+/* Modals stay open on outside clicks and Escape so form input is never lost.
+   Only the X, a [data-close] button, or an action that explicitly closes may dismiss one. */
 document.addEventListener("click", (e) => { if (e.target.closest("[data-close]")) closeModal(); });
 
 /* ---------------- Navigation ---------------- */
