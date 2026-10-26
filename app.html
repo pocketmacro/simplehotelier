@@ -42,6 +42,7 @@
     <div class="nav-label">Configure</div>
     <nav class="nav">
       <button class="nav-btn" data-view="addons" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>Add-ons &amp; Taxes</button>
+      <button class="nav-btn" data-view="ratemgmt" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M12 2v20M17 6.5c-.7-1-2.7-1.5-5-1.5-3 0-5 1.1-5 3 0 4.5 10 2.5 10 7 0 1.9-2 3-5 3-2.3 0-4.3-.5-5-1.5"/></svg>Rates</button>
       <button class="nav-btn" data-view="rates" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18M8 15l2 2 4-4"/></svg>Rate Calendar</button>
       <button class="nav-btn" data-view="booking" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 4 5.6 4 9s-1.5 6.4-4 9c-2.5-2.6-4-5.6-4-9s1.5-6.4 4-9z"/></svg>Booking Page</button>
       <button class="nav-btn" data-view="reports" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-8M21 20H3"/></svg>Reports</button>
@@ -394,6 +395,20 @@
           </div>
           <div class="rate-grid" id="rateGrid"></div>
           <p class="hint" style="margin-top:12px">Select any day to edit its rate, stay limits and closed / closed-to-arrival / closed-to-departure flags. The Bulk updater changes many days, rooms and rate plans at once. Rules apply to new bookings; existing reservations keep the price they booked at.</p>
+        </div>
+      </section>
+
+      <!-- ===== RATES MANAGEMENT ===== -->
+      <section class="view" id="view-ratemgmt">
+        <div class="view-head">
+          <div><h1>Rates</h1><p class="sub">Different rates for each room type — extended stays, early bookers, promo-only deals. Every room of a type can book any of its rates when the rules fit.</p></div>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" type="button" data-action="rmt-add">+ Add rate</button>
+        </div>
+        <div class="seg" id="rmtTypes" role="tablist" aria-label="Room type" style="margin-bottom:14px"></div>
+        <div class="card card-pad">
+          <div id="rmtPlans"></div>
+          <p class="hint" style="margin-top:12px">Rates adjust each room's nightly price by a % or $ difference and can carry their own stay rules, release period, extra-guest charges and occupancy limits. A rate with a promotional code stays hidden until a guest enters that code on your booking page (or arrives with <span class="mono">?PROMO=CODE</span> in the link).</p>
         </div>
       </section>
 

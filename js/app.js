@@ -179,6 +179,7 @@ function goto(view) {
   $$("#mainNav .nav-btn, .nav .nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + view));
   if (view === "rates") renderRates();
+  if (view === "ratemgmt") renderRateMgmt();
   if (view === "setup") renderSetupUI();
   document.body.classList.remove("nav-open");
   window.scrollTo({ top: 0 });
@@ -551,6 +552,12 @@ if (pfPolicySel) pfPolicySel.addEventListener("change", () => {
   const wrap = $("#pfPolicyCustomWrap");
   if (wrap) { wrap.hidden = pfPolicySel.selectedIndex !== 3; if (!wrap.hidden) { const t = $("#pfPolicyText"); if (t) t.focus(); } }
 });
+const rmtTypesEl = $("#rmtTypes");
+if (rmtTypesEl) rmtTypesEl.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-rmt-type]"); if (!b) return;
+  ratesTypeId = b.dataset.rmtType;
+  renderRateMgmt();
+});
 const roomTypeTabsEl = $("#roomTypeTabs");
 if (roomTypeTabsEl) roomTypeTabsEl.addEventListener("click", (e) => {
   const b = e.target.closest("[data-type-filter]"); if (!b) return;
@@ -761,9 +768,49 @@ function planSummary(p) {
   if (p.promoCode) bits.push("code " + p.promoCode);
   return bits.join(" · ");
 }
-function openRoomTypeRates(typeId, planId) {
+
+/* ---------------- Rates management page (rate plans per room type) ---------------- */
+let ratesTypeId = null;   // room type selected on the Rates page
+let rtpCtx = "modal";     // where the rate plan editor was opened from: "modal" | "page"
+let rtpTypeId = null;     // room type the open plan editor belongs to
+function planReturn() {
+  if (rtpCtx === "page") { closeModal(); renderRateMgmt(); renderRooms(); }
+  else openRoomTypeRates(rtpTypeId);
+}
+function renderRateMgmt() {
+  const wrap = $("#rmtPlans"); if (!wrap) return;
+  const typesEl = $("#rmtTypes");
+  if (!roomTypes.length) {
+    if (typesEl) typesEl.innerHTML = "";
+    wrap.innerHTML = `<div style="text-align:center;padding:22px"><h3>No room types yet</h3><p class="hint" style="margin:8px auto 14px;max-width:420px">Rates belong to room types. Create a type first, then add its rates here.</p><button class="btn btn-primary btn-sm" data-action="room-types" type="button">Set up room types</button></div>`;
+    return;
+  }
+  if (!ratesTypeId || !roomTypes.some((t) => t.id === ratesTypeId)) ratesTypeId = roomTypes[0].id;
+  if (typesEl) typesEl.innerHTML = roomTypes.map((t) => {
+    const n = normalizeRoomType(t).ratePlans.length;
+    return `<button type="button" role="tab" data-rmt-type="${esc(t.id)}" class="${t.id === ratesTypeId ? "active" : ""}">${esc(t.name)} · ${n} rate${n === 1 ? "" : "s"}</button>`;
+  }).join("");
+  const t = roomTypes.find((x) => x.id === ratesTypeId);
+  const tn = normalizeRoomType(t);
+  wrap.innerHTML = `
+    <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px">
+      <h3 style="font-size:16px">${esc(t.name)}</h3>
+      <span style="color:var(--muted);font-size:13px">Standard rate: each room's own nightly rate ${tn.rackRate ? "· rack " + money(tn.rackRate) : ""} · min stay ${tn.minStay || 1}${tn.maxStay ? "–" + tn.maxStay : "+"} nights</span>
+    </div>
+    <div class="row-list">
+      ${tn.ratePlans.map((pl) => `
+        <div class="row-item"><div class="ri-main"><strong>${esc(pl.name)}</strong><span>${esc(planSummary(pl))}${pl.desc ? " — " + esc(pl.desc) : ""}</span></div>
+          <div class="ri-right" style="display:flex;gap:6px;align-items:center">
+          ${pl.promoCode ? `<span class="pill progress"><i></i>Promo ${esc(pl.promoCode)}</span>` : `<span class="pill confirmed"><i></i>Public</span>`}
+          <button class="btn btn-ghost btn-xs" data-action="rmt-edit" data-type="${esc(t.id)}" data-plan="${esc(pl.id)}" type="button">Edit</button>
+          <button class="btn btn-ghost btn-xs" data-action="rtp-del" data-type="${esc(t.id)}" data-plan="${esc(pl.id)}" type="button">Delete</button></div></div>`).join("") || `<p class="hint" style="padding:8px 0">No extra rates yet — bookings use the standard rate. Add one above, e.g. an Extended stay rate at −10% for 3+ nights.</p>`}
+    </div>`;
+}
+function openRoomTypeRates(typeId, planId, fromPage) {
   const t = roomTypes.find((x) => x.id === typeId);
   if (!t) return;
+  rtpCtx = fromPage ? "page" : "modal";
+  rtpTypeId = t.id;
   const tn = normalizeRoomType(t);
   const editing = planId ? tn.ratePlans.find((p) => p.id === planId) : null;
   const p = editing || normalizeRatePlan({});
@@ -772,13 +819,13 @@ function openRoomTypeRates(typeId, planId) {
   openModal({
     title: `Rate plans · ${t.name}`, sub: "Different prices for longer stays, early bookers or promo codes — based on each room's nightly rate",
     body: `
-      <div class="row-list" style="margin-bottom:6px">
+      ${fromPage ? "" : `<div class="row-list" style="margin-bottom:6px">
         ${tn.ratePlans.map((pl) => `
           <div class="row-item"><div class="ri-main"><strong>${esc(pl.name)}</strong><span>${esc(planSummary(pl))}</span></div>
             <div class="ri-right" style="display:flex;gap:6px;align-items:center">
             <button class="btn btn-ghost btn-xs" data-action="rtp-edit" data-type="${esc(t.id)}" data-plan="${esc(pl.id)}" type="button">Edit</button>
             <button class="btn btn-ghost btn-xs" data-action="rtp-del" data-type="${esc(t.id)}" data-plan="${esc(pl.id)}" type="button">Delete</button></div></div>`).join("") || `<p class="hint">No rate plans yet — every booking uses the standard rate. Add your first below (e.g. an extended-stay discount).</p>`}
-      </div>
+      </div>`}
 
       <h4 class="rt-sec">${isEdit ? "Edit" : "New"} rate plan</h4>
       <div class="field"><label>Plan name *</label><input class="input" id="rpName" value="${isEdit ? esc(p.name) : ""}" placeholder="e.g. Extended stay rate"><span class="help">This is the rate name that displays to online customers when it applies.</span></div>
@@ -812,10 +859,18 @@ function openRoomTypeRates(typeId, planId) {
       </div>
 
       <h4 class="rt-sec">Promotional code</h4>
-      <div class="field"><label>Promo code</label><input class="input mono" id="rpPromo" value="${isEdit ? esc(p.promoCode) : ""}" placeholder="e.g. STAYLONGER" style="text-transform:uppercase"><span class="help">Leave blank if this rate shows to everyone. If you enter a code, the rate is only shown when a guest enters that linked promotional code at checkout.</span></div>`,
-    foot: `<button class="btn btn-ghost btn-sm" data-action="rtp-back" data-type="${esc(t.id)}" type="button">Back to type</button>
+      <label class="check-item"><input type="checkbox" id="rpPromoOnly" ${p.promoCode ? "checked" : ""}><span><strong>Show only when a linked promotional code is entered</strong></span></label>
+      <div class="field" id="rpPromoWrap" ${p.promoCode ? "" : "hidden"} style="margin-top:10px"><label>Promotion code</label><input class="input mono" id="rpPromo" value="${isEdit ? esc(p.promoCode) : ""}" placeholder="e.g. EXTENDED_STAY" style="text-transform:uppercase"><span class="help">Guests enter this on your booking page, or arrive with <span class="mono">?PROMO=CODE</span> in the link. Until then this rate stays hidden.</span></div>`,
+    foot: `${fromPage
+      ? `<button class="btn btn-ghost btn-sm" data-close type="button">Cancel</button>`
+      : `<button class="btn btn-ghost btn-sm" data-action="rtp-back" data-type="${esc(t.id)}" type="button">Back to type</button>`}
       <button class="btn btn-primary btn-sm" data-action="rtp-save" data-type="${esc(t.id)}" data-plan="${isEdit ? esc(p.id) : ""}" type="button">${isEdit ? "Save rate plan" : "Add rate plan"}</button>`,
     wide: true
+  });
+  const promoOnly = $("#rpPromoOnly");
+  if (promoOnly) promoOnly.addEventListener("change", () => {
+    const wrap = $("#rpPromoWrap");
+    if (wrap) { wrap.hidden = !promoOnly.checked; if (promoOnly.checked) { const inp = $("#rpPromo"); if (inp) inp.focus(); } }
   });
 }
 function readRatePlanForm() {
@@ -831,7 +886,7 @@ function readRatePlanForm() {
     extraAdultRate: moneyOr0("#rpExtraAdult"), extraChildRate: moneyOr0("#rpExtraChild"), extraInfantRate: moneyOr0("#rpExtraInfant"),
     includedOccupants: intOrNull("#rpIncOcc"), maxAdults: intOrNull("#rpMaxAdults"), maxChildren: intOrNull("#rpMaxChildren"),
     maxInfants: intOrNull("#rpMaxInfants"), maxOccupants: intOrNull("#rpMaxOcc"),
-    promoCode: val("#rpPromo").toUpperCase()
+    promoCode: ($("#rpPromoOnly") && $("#rpPromoOnly").checked) ? val("#rpPromo").toUpperCase() : ""
   });
 }
 function readRoomTypeForm() {
@@ -1483,6 +1538,7 @@ document.addEventListener("click", (e) => {
   else if (a === "rtp-back") openRoomTypes(el.dataset.type);
   else if (a === "rtp-edit") openRoomTypeRates(el.dataset.type, el.dataset.plan);
   else if (a === "rtp-del") {
+    if (document.querySelector("#view-ratemgmt.active")) rtpCtx = "page";
     const t = roomTypes.find((x) => x.id === el.dataset.type);
     const pl = t && normalizeRoomType(t).ratePlans.find((x) => x.id === el.dataset.plan);
     if (!t || !pl) return;
@@ -1490,7 +1546,7 @@ document.addEventListener("click", (e) => {
       t.ratePlans = normalizeRoomType(t).ratePlans.filter((x) => x.id !== pl.id);
       persistRoomType(t);
       toast(`Deleted rate plan “${pl.name}”`, t.name, "warn");
-      openRoomTypeRates(t.id);
+      planReturn();
     });
   }
   else if (a === "rtp-save") {
@@ -1510,8 +1566,14 @@ document.addEventListener("click", (e) => {
       toast("Rate plan added", `${data.name} · ${t.name}`, "ok");
     }
     persistRoomType(t);
-    openRoomTypeRates(t.id);
+    planReturn();
   }
+  else if (a === "rmt-add") {
+    if (!ratesTypeId && roomTypes.length) ratesTypeId = roomTypes[0].id;
+    if (!ratesTypeId) { toast("Create a room type first", "Rates belong to room types", "warn"); return; }
+    openRoomTypeRates(ratesTypeId, null, true);
+  }
+  else if (a === "rmt-edit") openRoomTypeRates(el.dataset.type, el.dataset.plan, true);
   else if (a === "rt-photos") openRoomTypePhotos(roomTypes[+el.dataset.i].id);
   else if (a === "rt-photo-del") {
     const t = roomTypes.find((x) => x.id === el.dataset.id);
@@ -1941,7 +2003,7 @@ $("#globalSearch").addEventListener("keydown", (e) => {
 /* ---------------- Boot ---------------- */
 renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
 renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns();
-renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview();
+renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview(); renderRateMgmt();
 bindStudio(); updateEmbed(null);
 
 /* ---------------- Onboarding: property first, then card + 30-day trial ---------------- */
@@ -2033,7 +2095,7 @@ function loadLiveIntoUI() {
     liveTenant = live.tenant;
     liveMembersCount = live.membersCount != null ? live.membersCount : 1;
     renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
-    renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns(); renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview();
+    renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns(); renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview(); renderRateMgmt();
     if (live.user) {
       $("#userName").textContent = live.user.email;
       $("#userRole").textContent = "Owner · " + live.tenant.name;

@@ -70,6 +70,10 @@
 
   const state = { tenant: null, rooms: [], types: {}, addons: [], taxes: [], selected: null, available: null, gaId: "", overrides: {}, dep: null, paying: null, stripe: null, cardEl: null };
 
+  /* Promo code can arrive in the link, e.g. book.html?property=you&PROMO=EXTENDED_STAY */
+  const urlPromo = (params.get("PROMO") || params.get("promo") || "").trim().toUpperCase();
+  if (urlPromo && $("#promoCode")) $("#promoCode").value = urlPromo;
+
   function showError(msg) {
     const el = $("#bookError");
     el.textContent = msg || "";

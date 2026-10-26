@@ -27,11 +27,11 @@
   const SCREEN_LINKS = [
     ["Add-ons & Taxes", "addons"], ["Rooms & Cabins", "rooms"], ["Booking Page", "booking"],
     ["Housekeeping", "housekeeping"], ["Maintenance", "maintenance"], ["Reservations", "reservations"], ["Payments", "payments"],
-    ["Calendar", "calendar"], ["Reports", "reports"], ["Settings", "settings"],
+    ["Calendar", "calendar"], ["Reports", "reports"], ["Rates", "ratemgmt"], ["Rate Calendar", "rates"], ["Settings", "settings"],
     ["Overview", "overview"], ["Support", "support"], ["Add unit", "rooms"],
     ["Publish changes", "booking"], ["Plan and billing", "settings"]
   ];
-  const VIEW_LABELS = { addons: "Add-ons & Taxes", rooms: "Rooms & Cabins", booking: "Booking Page", housekeeping: "Housekeeping", maintenance: "Maintenance", reservations: "Reservations", payments: "Payments", calendar: "Calendar", reports: "Reports", settings: "Settings", overview: "Overview", support: "Support" };
+  const VIEW_LABELS = { addons: "Add-ons & Taxes", rooms: "Rooms & Cabins", booking: "Booking Page", housekeeping: "Housekeeping", maintenance: "Maintenance", reservations: "Reservations", payments: "Payments", calendar: "Calendar", reports: "Reports", ratemgmt: "Rates", rates: "Rate Calendar", settings: "Settings", overview: "Overview", support: "Support" };
   function findLinks(text) {
     const lower = String(text || "").toLowerCase();
     const found = [], seen = new Set();
