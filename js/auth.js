@@ -25,6 +25,29 @@
     try { return JSON.parse(localStorage.getItem("sh_user") || "null"); } catch { return null; }
   }
   function accessToken() { return localStorage.getItem("sh_access_token") || ""; }
+
+  /* Exchange the stored refresh token for a fresh session (tokens expire hourly). */
+  async function refreshSession() {
+    if (window.SHDB && SHDB.freshToken) {
+      const before = accessToken();
+      const t = await SHDB.freshToken();
+      if (t && t !== before) return sessionUser();
+    }
+    const refresh = localStorage.getItem("sh_refresh_token");
+    if (!refresh || !configured()) return null;
+    try {
+      const data = await authFetch("token?grant_type=refresh_token", {
+        method: "POST", body: JSON.stringify({ refresh_token: refresh })
+      });
+      saveSession(data);
+      return sessionUser();
+    } catch { return null; }
+  }
+  async function freshAccessToken() {
+    if (window.SHDB && SHDB.freshToken) return SHDB.freshToken();
+    await refreshSession();
+    return accessToken();
+  }
   function clearSession() {
     localStorage.removeItem("sh_access_token");
     localStorage.removeItem("sh_refresh_token");
@@ -75,6 +98,15 @@
       localStorage.setItem("sh_user", JSON.stringify({ id: user.id, email: user.email || "" }));
       return user;
     } catch {
+      // Token may just be expired: refresh and retry before giving up.
+      const refreshed = await refreshSession();
+      if (refreshed) {
+        try {
+          const user = await authFetch("user", {}, true);
+          localStorage.setItem("sh_user", JSON.stringify({ id: user.id, email: user.email || "" }));
+          return user;
+        } catch { /* fall through to clearing */ }
+      }
       clearSession();
       return null;
     }
@@ -88,7 +120,7 @@
     const res = await fetch(base + "/rest/v1/" + path, {
       method: "POST",
       headers: {
-        apikey: anon, Authorization: "Bearer " + accessToken(),
+        apikey: anon, Authorization: "Bearer " + (await freshAccessToken()),
         "Content-Type": "application/json", Prefer: "return=representation"
       },
       body: JSON.stringify(body)
@@ -103,7 +135,7 @@
     try {
       const res = await fetch(base + "/functions/v1/create-checkout", {
         method: "POST",
-        headers: { apikey: anon, Authorization: "Bearer " + accessToken(), "Content-Type": "application/json" },
+        headers: { apikey: anon, Authorization: "Bearer " + (await freshAccessToken()), "Content-Type": "application/json" },
         body: JSON.stringify({ tenant_id: tenant.id, origin: location.origin })
       });
       if (!res.ok) return false;

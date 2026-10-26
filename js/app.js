@@ -512,7 +512,7 @@ function renderIcal() {
 /* Invoke an Edge Function with the signed-in user's token (falls back to anon key). */
 async function fnInvoke(name, body) {
   const c = window.SH_CONFIG || {};
-  const token = localStorage.getItem("sh_access_token") || c.SUPABASE_ANON_KEY;
+  const token = (window.SHDB && SHDB.freshToken) ? await SHDB.freshToken() : (localStorage.getItem("sh_access_token") || c.SUPABASE_ANON_KEY);
   const res = await fetch((c.SUPABASE_URL || "").replace(/\/$/, "") + "/functions/v1/" + name, {
     method: "POST",
     headers: { apikey: c.SUPABASE_ANON_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },
@@ -1972,7 +1972,7 @@ function openPropertySetup() {
 async function startTrialCheckout(tenantId) {
   try {
     const c = window.SH_CONFIG || {};
-    const token = localStorage.getItem("sh_access_token") || c.SUPABASE_ANON_KEY;
+    const token = (window.SHDB && SHDB.freshToken) ? await SHDB.freshToken() : (localStorage.getItem("sh_access_token") || c.SUPABASE_ANON_KEY);
     const res = await fetch((c.SUPABASE_URL || "").replace(/\/$/, "") + "/functions/v1/create-checkout", {
       method: "POST",
       headers: { apikey: c.SUPABASE_ANON_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },

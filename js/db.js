@@ -15,12 +15,51 @@
     catch { return cfg.SUPABASE_ANON_KEY; }
   }
 
+  /* Access tokens expire (1h by default); the refresh token saved at login is
+     exchanged for a fresh pair before it lapses. Without this, every write
+     starts failing with 401 mid-session while public reads keep working. */
+  function tokenExpiry(t) {
+    try {
+      const part = String(t).split(".")[1];
+      const payload = JSON.parse(atob(part.replace(/-/g, "+").replace(/_/g, "/")));
+      return (payload.exp || 0) * 1000;
+    } catch { return 0; }
+  }
+  let refreshInFlight = null;
+  async function freshToken() {
+    const current = token();
+    if (!current || current === cfg.SUPABASE_ANON_KEY) return current;
+    if (tokenExpiry(current) - Date.now() > 120000) return current; // still fresh
+    let refresh = null;
+    try { refresh = localStorage.getItem("sh_refresh_token"); } catch { /* no storage */ }
+    if (!refresh) return current;
+    if (!refreshInFlight) {
+      refreshInFlight = (async () => {
+        try {
+          const res = await fetch(cfg.SUPABASE_URL.replace(/\/$/, "") + "/auth/v1/token?grant_type=refresh_token", {
+            method: "POST",
+            headers: { apikey: cfg.SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh_token: refresh })
+          });
+          if (!res.ok) return null;
+          const data = await res.json();
+          if (data.access_token) localStorage.setItem("sh_access_token", data.access_token);
+          if (data.refresh_token) localStorage.setItem("sh_refresh_token", data.refresh_token);
+          if (data.user) localStorage.setItem("sh_user", JSON.stringify({ id: data.user.id, email: data.user.email || "" }));
+          return data.access_token || null;
+        } catch { return null; }
+        finally { refreshInFlight = null; }
+      })();
+    }
+    return (await refreshInFlight) || current;
+  }
+
   async function rest(path, opts = {}) {
     const res = await fetch(cfg.SUPABASE_URL.replace(/\/$/, "") + "/rest/v1/" + path, {
       ...opts,
       headers: {
         apikey: cfg.SUPABASE_ANON_KEY,
-        Authorization: "Bearer " + token(),
+        Authorization: "Bearer " + (await freshToken()),
         "Content-Type": "application/json",
         ...(opts.headers || {})
       }
@@ -77,7 +116,7 @@
 
   /* Signed-in path: resolve the user's tenant via tenant_members (RLS-safe). */
   async function memberTenant() {
-    const t = token();
+    const t = await freshToken();
     if (!t || t === cfg.SUPABASE_ANON_KEY) return null;
     try {
       const ures = await fetch(cfg.SUPABASE_URL.replace(/\/$/, "") + "/auth/v1/user", {
@@ -298,7 +337,7 @@
     const encoded = path.split("/").map(encodeURIComponent).join("/");
     const res = await fetch(baseUrl + "/storage/v1/object/" + bucket + "/" + encoded, {
       method: "POST",
-      headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: "Bearer " + token(), "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" },
+      headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: "Bearer " + (await freshToken()), "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" },
       body: file
     });
     if (!res.ok) throw new Error("Upload failed (" + res.status + ")");
@@ -384,7 +423,7 @@
   const tenantId = () => ctx.tenantId;
 
   window.SHDB = {
-    configured, loadLiveData, updateHK, hasLive, updateTenantSettings, tenantId,
+    configured, loadLiveData, updateHK, hasLive, updateTenantSettings, tenantId, freshToken,
     isSystemAdmin, listSupportCases, createSupportCase, listSupportMessages, addSupportMessage, setSupportStatus, adminSubscribers,
     createReservation, setReservationStatus, updateReservationPaid, addTransaction,
     createAddon, setAddonActive, deleteAddon, createTax, deleteTax, createRoom, updateRoom,
