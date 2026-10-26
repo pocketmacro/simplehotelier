@@ -99,6 +99,22 @@ test("createRoomType posts full detail payload in cents", async () => {
   assert.equal(post.body.rate_plans[0].difference, -10);
 });
 
+test("upsertRateOverrides sends rate, stay limits and stop-sell flags", async () => {
+  await window.SHDB.upsertRateOverrides(roomId, "A1", [
+    { date: "2026-12-24", rate: 449, minStay: 3, maxStay: null, closed: false, cta: true, ctd: false },
+    { date: "2026-12-25", rate: 449, minStay: null, maxStay: 14, closed: true, cta: false, ctd: true }
+  ]);
+  const post = calls.find((c) => c.method === "POST" && c.url.includes("/rest/v1/room_rate_overrides"));
+  assert.ok(post, "expected a POST to room_rate_overrides");
+  assert.equal(post.body[0].rate_cents, 44900);
+  assert.equal(post.body[0].min_stay, 3);
+  assert.equal(post.body[0].max_stay, null);
+  assert.equal(post.body[0].cta, true);
+  assert.equal(post.body[1].closed, true);
+  assert.equal(post.body[1].ctd, true);
+  assert.equal(post.body[1].max_stay, 14);
+});
+
 test("createAddon converts dollars to cents and scopes to tenant", async () => {
   assert.equal(typeof window.SHDB.createAddon, "function", "SHDB.createAddon must exist");
   await window.SHDB.createAddon({ name: "Firewood bundle", desc: "Stacked at pit", price: 18.5, per: "stay" });

@@ -137,7 +137,11 @@
           photos: Array.isArray(r.photos) && r.photos.length ? r.photos : (typePhotosById[r.room_type_id] || [])
         })),
         roomTypes: (roomTypesRaw || []).map(mapRoomType),
-        rateOverrides: (overridesRaw || []).map((o) => ({ roomId: o.room_id, roomCode: roomCode(o.room_id), date: String(o.date || "").slice(0, 10), rate: (o.rate_cents || 0) / 100 })),
+        rateOverrides: (overridesRaw || []).map((o) => ({
+          roomId: o.room_id, roomCode: roomCode(o.room_id), date: String(o.date || "").slice(0, 10), rate: (o.rate_cents || 0) / 100,
+          minStay: o.min_stay != null ? o.min_stay : null, maxStay: o.max_stay != null ? o.max_stay : null,
+          closed: !!o.closed, cta: !!o.cta, ctd: !!o.ctd
+        })),
         reservations: reservations.map((r) => ({
           id: r.id, ref: r.confirmation_code, guest: r.guest_name,
           contact: r.guest_email || r.guest_phone || "—",
@@ -263,7 +267,13 @@
     await rest("room_rate_overrides?on_conflict=room_id,date", {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify(entries.map((e) => ({ tenant_id: ctx.tenantId, room_id: roomId, date: e.date, rate_cents: Math.round(e.rate * 100) })))
+      body: JSON.stringify(entries.map((e) => ({
+        tenant_id: ctx.tenantId, room_id: roomId, date: e.date,
+        rate_cents: Math.round((e.rate || 0) * 100),
+        min_stay: e.minStay != null ? e.minStay : null,
+        max_stay: e.maxStay != null ? e.maxStay : null,
+        closed: !!e.closed, cta: !!e.cta, ctd: !!e.ctd
+      })))
     });
   }
   async function deleteRateOverride(roomId, date) {

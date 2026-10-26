@@ -77,7 +77,13 @@ let roomTypes = [
 let rateOverrides = { "A2|2026-11-06": 299, "A2|2026-11-07": 299, "C1|2026-12-24": 449, "C1|2026-12-25": 449, "C1|2026-12-26": 449 };
 let ratesRoomCode = null, ratesMonthOff = 0;
 const isoLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-function rateFor(room, iso) { const v = rateOverrides[room.code + "|" + iso]; return v != null ? v : room.rate; }
+function ovFor(room, iso) {
+  const v = rateOverrides[room.code + "|" + iso];
+  if (v == null) return null;
+  if (typeof v === "number") return { rate: v, minStay: null, maxStay: null, closed: false, cta: false, ctd: false };
+  return v;
+}
+function rateFor(room, iso) { const o = ovFor(room, iso); return o && o.rate != null ? o.rate : room.rate; }
 function nightlySum(room, inISO, outISO) {
   let s = 0; const d = new Date(inISO + "T12:00:00"); const end = new Date(outISO + "T12:00:00");
   while (d < end) { s += rateFor(room, isoLocal(d)); d.setDate(d.getDate() + 1); }
@@ -787,27 +793,90 @@ function renderRates() {
   for (let d = 1; d <= days; d++) {
     const dt = new Date(year, mon, d);
     const iso = isoLocal(dt);
-    const over = rateOverrides[room.code + "|" + iso] != null;
-    html += `<button type="button" class="rate-day${over ? " over" : ""}${iso === todayIso ? " today" : ""}${iso < todayIso ? " past" : ""}" data-rate-date="${iso}">
+    const o = ovFor(room, iso);
+    const flags = [];
+    if (o && o.minStay) flags.push("min " + o.minStay + "n");
+    if (o && o.cta) flags.push("CTA");
+    if (o && o.ctd) flags.push("CTD");
+    html += `<button type="button" class="rate-day${o ? " over" : ""}${o && o.closed ? " closed" : ""}${iso === todayIso ? " today" : ""}${iso < todayIso ? " past" : ""}" data-rate-date="${iso}">
       <div class="d">${dt.toLocaleDateString("en-US", { weekday: "short" })} ${d}</div>
-      <div class="p">${money(rateFor(room, iso))}</div>
-      <div class="t">${over ? "Override" : "Default"}</div></button>`;
+      <div class="p">${o && o.closed ? "Closed" : money(rateFor(room, iso))}</div>
+      <div class="t">${o && o.closed ? "Stop sell" : o ? "Override" : "Default"}${flags.length ? " · " + flags.join(" ") : ""}</div></button>`;
   }
   $("#rateGrid").innerHTML = html;
 }
 function openRateDay(iso) {
   const room = ratesRoom();
   if (!room) return;
-  const key = room.code + "|" + iso;
-  const has = rateOverrides[key] != null;
+  const o = ovFor(room, iso);
+  const has = !!o;
   const pretty = new Date(iso + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  const chk = (id, on, label, help) => `<label class="check-item" style="margin-top:8px"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><span><strong>${label}</strong>${help ? `<br><span style="color:var(--faint);font-size:12px">${help}</span>` : ""}</span></label>`;
   openModal({
     title: `${room.code} · ${pretty}`, sub: `Default rate ${money(room.rate)} per night`,
-    body: `<div class="field"><label>Rate for this date (USD)</label><input class="input mono" id="rdRate" type="number" min="0" value="${has ? rateOverrides[key] : room.rate}"></div>
-      <p class="help" style="font-size:12px;color:var(--faint)">${has ? "This date has an override. Clear it to fall back to the default rate." : "Saving creates an override for this date only."}</p>`,
-    foot: `${has ? `<button class="btn btn-ghost btn-sm" data-action="rd-clear" data-date="${iso}" type="button">Use default</button>` : ""}
+    body: `
+      <div class="form-3">
+        <div class="field"><label>Rate for this date (USD)</label><input class="input mono" id="rdRate" type="number" min="0" step="0.01" value="${o && o.rate != null ? o.rate : room.rate}"></div>
+        <div class="field"><label>Min stay (nights)</label><input class="input" id="rdMinStay" type="number" min="0" value="${o && o.minStay ? o.minStay : ""}" placeholder="Type default"></div>
+        <div class="field"><label>Max stay (nights)</label><input class="input" id="rdMaxStay" type="number" min="0" value="${o && o.maxStay ? o.maxStay : ""}" placeholder="No limit"></div>
+      </div>
+      ${chk("rdClosed", o && o.closed, "Closed (stop sell)", "No guest can stay this night.")}
+      ${chk("rdCta", o && o.cta, "Closed to arrival (CTA)", "Guests cannot check in on this date.")}
+      ${chk("rdCtd", o && o.ctd, "Closed to departure (CTD)", "Guests cannot check out on this date.")}
+      <p class="help" style="font-size:12px;color:var(--faint);margin-top:10px">${has ? "This date has its own rules. Clear them to fall back to the defaults." : "Saving creates rules for this date only."}</p>`,
+    foot: `${has ? `<button class="btn btn-ghost btn-sm" data-action="rd-clear" data-date="${iso}" type="button">Use defaults</button>` : ""}
       <button class="btn btn-ghost btn-sm" data-close type="button">Cancel</button>
-      <button class="btn btn-primary btn-sm" data-action="rd-save" data-date="${iso}" type="button">Save rate</button>`
+      <button class="btn btn-primary btn-sm" data-action="rd-save" data-date="${iso}" type="button">Save day rules</button>`,
+    wide: true
+  });
+}
+/* Bulk updater — many days, rooms and rate plans in one pass (like the
+   classic channel-manager tool): date range x weekdays x targets x changes. */
+function openBulkUpdater() {
+  const todayIso = isoLocal(TODAY);
+  const planTargets = [];
+  roomTypes.map(normalizeRoomType).forEach((t) => (t.ratePlans || []).forEach((p) => planTargets.push({ type: t, plan: p })));
+  const dow = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  openModal({
+    title: "Bulk updater", sub: "Update multiple fields at once across rooms and rate plans",
+    body: `
+      <div class="bulk-grid">
+        <div class="bulk-col">
+          <h4>When?</h4>
+          <div class="field"><label>From</label><input class="input" id="buFrom" type="date" value="${todayIso}"></div>
+          <div class="field"><label>To</label><input class="input" id="buTo" type="date" value="${todayIso}"></div>
+          <h4 style="margin-top:14px">Which days?</h4>
+          <div id="buDays">${dow.map((d, i) => `<label class="check-item"><input type="checkbox" class="bu-dow" value="${i}" checked><span>${d}</span></label>`).join("")}</div>
+          <div style="display:flex;gap:6px;margin-top:10px">
+            <button class="btn btn-ghost btn-xs" data-action="bu-days-all" type="button">Select all</button>
+            <button class="btn btn-ghost btn-xs" data-action="bu-days-none" type="button">Unselect all</button>
+          </div>
+        </div>
+        <div class="bulk-col">
+          <h4>Which rooms &amp; rates?</h4>
+          <div id="buTargets">
+            ${rooms.map((r) => `<label class="check-item"><input type="checkbox" class="bu-room" value="${esc(r.code)}" checked><span>${esc(r.code)} · ${esc(r.name)} <span style="color:var(--faint)">(standard rate)</span></span></label>`).join("") || `<p class="hint">Add a room first.</p>`}
+            ${planTargets.map(({ type, plan }) => `<label class="check-item"><input type="checkbox" class="bu-plan" value="${esc(type.id)}|${esc(plan.id)}"><span>${esc(type.name)} · ${esc(plan.name)} <span style="color:var(--faint)">(rate plan — min/max stay only)</span></span></label>`).join("")}
+          </div>
+          <div style="display:flex;gap:6px;margin-top:10px">
+            <button class="btn btn-ghost btn-xs" data-action="bu-targets-all" type="button">Select all</button>
+            <button class="btn btn-ghost btn-xs" data-action="bu-targets-none" type="button">Unselect all</button>
+          </div>
+          <p class="help" style="font-size:12px;color:var(--faint);margin-top:10px">Rate plans keep their % or $ difference, so the Rate field does not apply to them — bulk-edit their minimum and maximum stay instead.</p>
+        </div>
+        <div class="bulk-col">
+          <h4>What changes?</h4>
+          <div class="field"><label>Rate (USD/night)</label><input class="input mono" id="buRate" type="number" min="0" step="0.01" placeholder="Leave blank = unchanged"></div>
+          <div class="field"><label>Min stay (nights)</label><input class="input" id="buMinStay" type="number" min="0" placeholder="Leave blank = unchanged"></div>
+          <div class="field"><label>Max stay (nights)</label><input class="input" id="buMaxStay" type="number" min="0" placeholder="Blank = unchanged · 0 clears"></div>
+          <div class="field"><label>Closed (stop sell)</label><select class="select" id="buClosed"><option value="">Leave as-is</option><option value="1">Close these nights</option><option value="0">Reopen these nights</option></select></div>
+          <div class="field"><label>CTA (closed to arrival)</label><select class="select" id="buCta"><option value="">Leave as-is</option><option value="1">No arrivals</option><option value="0">Allow arrivals</option></select></div>
+          <div class="field"><label>CTD (closed to departure)</label><select class="select" id="buCtd"><option value="">Leave as-is</option><option value="1">No departures</option><option value="0">Allow departures</option></select></div>
+        </div>
+      </div>`,
+    foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Cancel</button>
+      <button class="btn btn-primary btn-sm" data-action="bu-apply" type="button">Update</button>`,
+    wide: true
   });
 }
 function openRoomPhotos(code) {
@@ -1286,10 +1355,16 @@ document.addEventListener("click", (e) => {
     const room = ratesRoom();
     const val = parseFloat($("#rdRate").value);
     if (isNaN(val) || val < 0) { toast("Enter a valid rate", "USD per night", "warn"); return; }
-    rateOverrides[room.code + "|" + el.dataset.date] = val;
-    if (window.SHDB && room.id) SHDB.upsertRateOverrides(room.id, room.code, [{ date: el.dataset.date, rate: val }]).catch(() => toast("Rate saved locally only", "Supabase write failed", "warn"));
+    const intOrNull = (sel) => { const v = parseInt($(sel).value, 10); return Number.isFinite(v) && v > 0 ? v : null; };
+    const entry = {
+      rate: val, minStay: intOrNull("#rdMinStay"), maxStay: intOrNull("#rdMaxStay"),
+      closed: $("#rdClosed").checked, cta: $("#rdCta").checked, ctd: $("#rdCtd").checked
+    };
+    if (entry.minStay && entry.maxStay && entry.minStay > entry.maxStay) { toast("Check stay limits", "Minimum stay is longer than the maximum stay", "warn"); return; }
+    rateOverrides[room.code + "|" + el.dataset.date] = entry;
+    if (window.SHDB && room.id) SHDB.upsertRateOverrides(room.id, room.code, [{ date: el.dataset.date, ...entry }]).catch(() => toast("Rules saved locally only", "Supabase write failed", "warn"));
     closeModal(); renderRates();
-    toast(`${room.code} · ${el.dataset.date}`, `Override set to ${money(val)}`, "ok");
+    toast(`${room.code} · ${el.dataset.date}`, entry.closed ? "Closed (stop sell)" : `Rate ${money(val)}${entry.minStay ? " · min " + entry.minStay + "n" : ""}`, "ok");
   }
   else if (a === "rd-clear") {
     const room = ratesRoom();
@@ -1297,6 +1372,79 @@ document.addEventListener("click", (e) => {
     if (window.SHDB && room.id) SHDB.deleteRateOverride(room.id, el.dataset.date).catch(() => toast("Cleared locally only", "Supabase delete failed", "warn"));
     closeModal(); renderRates();
     toast(`${room.code} · ${el.dataset.date}`, `Back to default ${money(room.rate)}`, "ok");
+  }
+  else if (a === "bulk-open") openBulkUpdater();
+  else if (a === "bu-days-all") $$(".bu-dow").forEach((c) => { c.checked = true; });
+  else if (a === "bu-days-none") $$(".bu-dow").forEach((c) => { c.checked = false; });
+  else if (a === "bu-targets-all") $$("#buTargets input[type='checkbox']").forEach((c) => { c.checked = true; });
+  else if (a === "bu-targets-none") $$("#buTargets input[type='checkbox']").forEach((c) => { c.checked = false; });
+  else if (a === "bu-apply") {
+    const from = $("#buFrom").value, to = $("#buTo").value;
+    if (!from || !to) { toast("Pick the date range", "From and To are both needed", "warn"); return; }
+    if (from > to) { toast("Check the range", "Start date must be before the end date", "warn"); return; }
+    const dows = new Set($$(".bu-dow:checked").map((c) => +c.value));
+    if (!dows.size) { toast("Pick at least one day", "Use the weekday checkboxes", "warn"); return; }
+    const roomTargets = $$(".bu-room:checked").map((c) => roomByCode(c.value)).filter(Boolean);
+    const planTargets = $$(".bu-plan:checked").map((c) => c.value.split("|"));
+    if (!roomTargets.length && !planTargets.length) { toast("Pick at least one room or rate", "Use the middle checkboxes", "warn"); return; }
+    const rateVal = parseFloat($("#buRate").value);
+    const minVal = parseInt($("#buMinStay").value, 10);
+    const maxRaw = $("#buMaxStay").value.trim();
+    const maxVal = maxRaw === "" ? null : parseInt(maxRaw, 10);
+    const selVal = (id) => { const v = $(id).value; return v === "" ? null : v === "1"; };
+    const closedVal = selVal("#buClosed"), ctaVal = selVal("#buCta"), ctdVal = selVal("#buCtd");
+    const hasRate = Number.isFinite(rateVal), hasMin = Number.isFinite(minVal), hasMax = maxRaw !== "";
+    if (!hasRate && !hasMin && !hasMax && closedVal === null && ctaVal === null && ctdVal === null && !planTargets.length) {
+      toast("Nothing to change", "Fill at least one field on the right", "warn"); return;
+    }
+    if (hasMin && hasMax && maxVal > 0 && minVal > maxVal) { toast("Check stay limits", "Minimum stay is longer than the maximum stay", "warn"); return; }
+    // Rate plans: bulk-edit min/max stay only (their price is a % or $ difference).
+    let plansUpdated = 0;
+    planTargets.forEach(([typeId, planId]) => {
+      const t = roomTypes.find((x) => x.id === typeId);
+      if (!t) return;
+      const tn = normalizeRoomType(t);
+      const plan = tn.ratePlans.find((p) => p.id === planId);
+      if (!plan) return;
+      if (hasMin) plan.minStay = minVal;
+      if (hasMax) plan.maxStay = maxVal > 0 ? maxVal : 0;
+      t.ratePlans = tn.ratePlans;
+      plansUpdated++;
+      persistRoomType(t);
+    });
+    // Rooms: merge changes into each matching date's rules.
+    let nightsUpdated = 0;
+    const byRoom = new Map();
+    roomTargets.forEach((room) => {
+      const entries = [];
+      const d = new Date(from + "T12:00:00"), end = new Date(to + "T12:00:00");
+      while (d <= end) {
+        if (dows.has(d.getDay())) {
+          const iso = isoLocal(d);
+          const prev = ovFor(room, iso) || { rate: room.rate, minStay: null, maxStay: null, closed: false, cta: false, ctd: false };
+          const next = {
+            rate: hasRate ? rateVal : prev.rate,
+            minStay: hasMin ? (minVal > 0 ? minVal : null) : prev.minStay,
+            maxStay: hasMax ? (maxVal > 0 ? maxVal : null) : prev.maxStay,
+            closed: closedVal !== null ? closedVal : prev.closed,
+            cta: ctaVal !== null ? ctaVal : prev.cta,
+            ctd: ctdVal !== null ? ctdVal : prev.ctd
+          };
+          rateOverrides[room.code + "|" + iso] = next;
+          entries.push({ date: iso, ...next });
+          nightsUpdated++;
+        }
+        d.setDate(d.getDate() + 1);
+      }
+      if (entries.length) byRoom.set(room, entries);
+    });
+    if (window.SHDB && SHDB.hasLive()) {
+      for (const [room, entries] of byRoom) {
+        if (room.id) SHDB.upsertRateOverrides(room.id, room.code, entries).catch(() => toast("Some rates saved locally only", "Supabase write failed", "warn"));
+      }
+    }
+    closeModal(); renderRates();
+    toast("Bulk update applied", `${nightsUpdated} room-nights${plansUpdated ? ` · ${plansUpdated} rate plan${plansUpdated > 1 ? "s" : ""}` : ""} updated`, "ok");
   }
   else if (a === "rates-apply") {
     const room = ratesRoom();
@@ -1310,8 +1458,10 @@ document.addEventListener("click", (e) => {
       const weekend = dow === 5 || dow === 6 || dow === 0;
       if (mode === "all" || (mode === "weekends" && weekend) || (mode === "weekdays" && !weekend)) {
         const iso = isoLocal(d);
-        rateOverrides[room.code + "|" + iso] = val;
-        entries.push({ date: iso, rate: val });
+        const prev = ovFor(room, iso) || { rate: room.rate, minStay: null, maxStay: null, closed: false, cta: false, ctd: false };
+        const next = { ...prev, rate: val };
+        rateOverrides[room.code + "|" + iso] = next;
+        entries.push({ date: iso, ...next });
       }
       d.setDate(d.getDate() + 1);
     }
@@ -1647,7 +1797,7 @@ function loadLiveIntoUI() {
     addons.splice(0, addons.length, ...live.addons);
     taxes.splice(0, taxes.length, ...live.taxes);
     roomTypes = (live.roomTypes || []).map(normalizeRoomType);
-    if (live.rateOverrides) { rateOverrides = {}; live.rateOverrides.forEach((o) => { if (o.roomCode) rateOverrides[o.roomCode + "|" + o.date] = o.rate; }); }
+    if (live.rateOverrides) { rateOverrides = {}; live.rateOverrides.forEach((o) => { if (o.roomCode) rateOverrides[o.roomCode + "|" + o.date] = { rate: o.rate, minStay: o.minStay != null ? o.minStay : null, maxStay: o.maxStay != null ? o.maxStay : null, closed: !!o.closed, cta: !!o.cta, ctd: !!o.ctd }; }); }
     txns.splice(0, txns.length, ...(live.txns || []));
     tenantDisplayName = live.tenant.name || "";
     liveTenant = live.tenant;

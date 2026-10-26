@@ -177,6 +177,24 @@
     [...document.querySelectorAll("#addonsList input")].forEach((el) => el.addEventListener("change", renderSummary));
   }
   function typeFor(room) { return state.types[room.room_type_id] || null; }
+  /* Per-date rules from the Rate Calendar: closed nights, CTA/CTD, stay limits. */
+  function ruleBlock(room) {
+    const n = nights();
+    if (!room || !n || n < 1) return null;
+    const inIso = $("#inDate").value, outIso = $("#outDate").value;
+    const dayRule = (iso) => state.overrides[room.id + "|" + iso] || null;
+    for (let i = 0; i < n; i++) {
+      const d = new Date(inIso + "T12:00:00"); d.setDate(d.getDate() + i);
+      const r = dayRule(d.toISOString().slice(0, 10));
+      if (r && r.closed) return "This room is closed for part of this stay. Try different dates.";
+    }
+    const inRule = dayRule(inIso), outRule = dayRule(outIso);
+    if (inRule && inRule.cta) return "This room does not accept arrivals on your check-in date.";
+    if (outRule && outRule.ctd) return "This room does not accept departures on your check-out date.";
+    if (inRule && inRule.minStay && n < inRule.minStay) return `This stay needs at least ${inRule.minStay} nights from that check-in date.`;
+    if (inRule && inRule.maxStay && n > inRule.maxStay) return `This stay allows at most ${inRule.maxStay} nights from that check-in date.`;
+    return null;
+  }
   function daysUntilCheckIn() {
     const t = new Date(); t.setHours(12, 0, 0, 0);
     const d = new Date($("#inDate").value + "T12:00:00");
@@ -207,7 +225,7 @@
       const iso = d.toISOString().slice(0, 10);
       const over = state.overrides[room.id + "|" + iso];
       const floor = state.tenant && state.tenant.min_room_rate_cents ? state.tenant.min_room_rate_cents / 100 : 0;
-      rates.push(Math.max(floor, over != null ? over : room.rate_cents / 100));
+      rates.push(Math.max(floor, over ? over.rate : room.rate_cents / 100));
       d.setDate(d.getDate() + 1);
     }
     return rates;
@@ -305,6 +323,12 @@
       btn.disabled = true; btn.textContent = `Maximum stay ${type.max_stay} nights`;
       return null;
     }
+    const rb = ruleBlock(state.selected);
+    if (rb) {
+      $("#summaryBody").innerHTML = `<p class="bk-muted">${esc(rb)}</p>`;
+      btn.disabled = true; btn.textContent = "Not available for these dates";
+      return null;
+    }
     const guests = Math.max(1, parseInt($("#guests").value) || 1);
     const ap = applicablePlan(state.selected, n);
     const included = ap && ap.plan.includedOccupants != null ? ap.plan.includedOccupants
@@ -347,7 +371,8 @@
         method: "POST",
         body: JSON.stringify({ p_tenant: state.tenant.id, p_check_in: $("#inDate").value, p_check_out: $("#outDate").value })
       });
-      state.available = (rows || []).map((r) => (typeof r === "string" ? r : r.get_available_room_ids));
+      state.available = (rows || []).map((r) => (typeof r === "string" ? r : r.get_available_room_ids))
+        .filter((id) => { const room = state.rooms.find((x) => x.id === id); return room && !ruleBlock(room); });
       $("#availNote").hidden = false;
       $("#availNote").textContent = state.available.length + " of " + state.rooms.length + " rooms available for these dates.";
     } catch {
@@ -407,9 +432,15 @@
       }
       setupGA();
       const tid = "tenant_id=eq." + t.id;
-      const overrideRows = await api("room_rate_overrides?" + tid + "&select=room_id,date,rate_cents").catch(() => []);
+      const overrideRows = await api("room_rate_overrides?" + tid + "&select=room_id,date,rate_cents,min_stay,max_stay,closed,cta,ctd").catch(() => []);
       state.overrides = {};
-      (overrideRows || []).forEach((o) => { state.overrides[o.room_id + "|" + String(o.date).slice(0, 10)] = o.rate_cents / 100; });
+      (overrideRows || []).forEach((o) => {
+        state.overrides[o.room_id + "|" + String(o.date).slice(0, 10)] = {
+          rate: (o.rate_cents || 0) / 100,
+          minStay: o.min_stay != null ? o.min_stay : null, maxStay: o.max_stay != null ? o.max_stay : null,
+          closed: !!o.closed, cta: !!o.cta, ctd: !!o.ctd
+        };
+      });
       const [rooms, addons, taxes, typeRows] = await Promise.all([
         api("rooms?" + tid + "&select=*&order=sort_order.asc"),
         api("addons?" + tid + "&active=eq.true&select=*&order=name.asc"),
