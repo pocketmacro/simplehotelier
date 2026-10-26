@@ -58,7 +58,15 @@
     <aside class="bk-summary" id="summaryCard">
       <h2 class="bk-h2" style="margin-top:0">Your stay</h2>
       <div id="summaryBody"><p class="bk-muted">Pick dates and a room to see your total.</p></div>
+      <label class="bk-consent" id="depAckWrap" hidden><input type="checkbox" id="depAck"><span id="depAckText"></span></label>
       <button class="bk-btn bk-btn-main bk-book" id="bookBtn" type="button" disabled>Select a room to continue</button>
+      <div id="payPanel" hidden>
+        <h3 class="bk-h2" style="margin:16px 0 8px">Deposit payment</h3>
+        <p class="bk-muted" id="payText" style="margin:0 0 10px"></p>
+        <div id="cardElement" class="bk-cardel"></div>
+        <p class="bk-error" id="payError" hidden style="margin-top:10px"></p>
+        <p class="bk-secure">Payments are processed securely by Stripe for this property. SimpleHotelier never sees your card number.</p>
+      </div>
       <p class="bk-secure">No payment taken now unless the property requires a deposit. Free cancellation per property policy.</p>
     </aside>
   </div>

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
 <title>SimpleHotelier — Property Dashboard</title>
 <meta name="description" content="SimpleHotelier: reservations, rooms, housekeeping, payments and reports for cabins and boutique hotels.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -258,10 +259,10 @@
               <button class="swatch" style="background:#6d2440" data-c="#6d2440" type="button" aria-label="Berry"></button>
             </div></div>
             <div class="field"><label for="bkUrl">Page address</label><input class="input mono" id="bkUrl" value="pinecrest.simplehotelier.com"></div>
-            <div class="toggle-row"><div>Accept online payments<small>Cards + Apple / Google Pay</small></div><span class="switch"><input type="checkbox" checked><span class="tr"></span></span></div>
-            <div class="toggle-row"><div>Show add-ons at checkout<small id="bkAddonCount">6 add-ons enabled</small></div><span class="switch"><input type="checkbox" checked><span class="tr"></span></span></div>
-            <div class="toggle-row"><div>Require damage deposit<small>$150 hold, auto-released</small></div><span class="switch"><input type="checkbox" checked><span class="tr"></span></span></div>
-            <div class="toggle-row"><div>Instant confirmation<small>Or review each request first</small></div><span class="switch"><input type="checkbox"><span class="tr"></span></span></div>
+            <div class="toggle-row"><div>Show add-ons at checkout<small id="bkAddonCount">6 add-ons enabled</small></div><span class="switch"><input type="checkbox" checked disabled><span class="tr"></span></span></div>
+            <div class="section-title" style="margin:20px 0 10px"><h2 style="font-size:14px">Booking deposit</h2><div class="line"></div></div>
+            <div class="toggle-row"><div>Require a deposit to book<small>Collected by card before the booking confirms</small></div><span class="switch"><input type="checkbox" id="bkDepositOn"><span class="tr"></span></span></div>
+            <div class="field"><label for="bkDepositPct">Deposit percent of total</label><input class="input mono" id="bkDepositPct" type="number" min="1" max="100" step="1" value="25"><span class="help">Guests pay this percent by card on your booking page through your connected Stripe account. The rest shows as balance due. Connect Stripe in Settings → Setup checklist first; until then guests acknowledge the deposit and you collect it manually. Saved with Publish changes.</span></div>
             <div class="section-title" style="margin:20px 0 10px"><h2 style="font-size:14px">Conversion tracking</h2><div class="line"></div></div>
             <div class="field"><label for="bkGa">Google Analytics Measurement ID</label><input class="input mono" id="bkGa" placeholder="G-XXXXXXXXXX"><span class="help">Fires a GA4 <strong>purchase</strong> + <strong>booking_complete</strong> event (value + confirmation code) when a booking completes. System-wide default can be set in js/config.js.</span></div>
             <div class="field"><label for="bkRedirect">Redirect after booking (optional)</label><input class="input mono" id="bkRedirect" placeholder="https://yoursite.com/thank-you"><span class="help">Guests are sent here after booking with <span class="mono">?booking_ref=&amp;total=&amp;currency=</span> appended — ideal for ads/GA conversion pages. Leave empty for the built-in thank-you screen.</span></div>

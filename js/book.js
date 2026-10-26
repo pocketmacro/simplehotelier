@@ -68,7 +68,7 @@
   const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  const state = { tenant: null, rooms: [], types: {}, addons: [], taxes: [], selected: null, available: null, gaId: "", overrides: {} };
+  const state = { tenant: null, rooms: [], types: {}, addons: [], taxes: [], selected: null, available: null, gaId: "", overrides: {}, dep: null, paying: null, stripe: null, cardEl: null };
 
   function showError(msg) {
     const el = $("#bookError");
@@ -212,6 +212,79 @@
     }
     return rates;
   }
+  /* Deposit: property decides if a booking needs one, and what percent.
+     Collected by card when the property finished Stripe Connect and a
+     publishable key is configured; otherwise the guest acknowledges it and
+     the property collects it (flagged on the reservation). */
+  function depositInfo(total) {
+    const t = state.tenant || {};
+    if (!t.deposit_enabled) return null;
+    const pct = Math.min(100, Math.max(1, parseInt(t.deposit_percent, 10) || 25));
+    const collectible = !!(t.stripe_onboarding_complete && t.stripe_account_id && cfg.STRIPE_PUBLISHABLE_KEY);
+    return { pct, due: round2((total || 0) * pct / 100), collectible };
+  }
+  async function fnPost(name, body) {
+    const res = await fetch(base + "/functions/v1/" + name, {
+      method: "POST",
+      headers: { apikey: anon, Authorization: "Bearer " + anon, "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ("Payment service failed (" + res.status + ")"));
+    return data;
+  }
+  function loadStripeJs() {
+    if (window.Stripe) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://js.stripe.com/v3";
+      s.onload = resolve; s.onerror = () => reject(new Error("Could not load Stripe"));
+      document.head.appendChild(s);
+    });
+  }
+  async function mountCard() {
+    if (state.cardEl) return;
+    await loadStripeJs();
+    state.stripe = window.Stripe(cfg.STRIPE_PUBLISHABLE_KEY, { stripeAccount: state.tenant.stripe_account_id });
+    const elements = state.stripe.elements();
+    state.cardEl = elements.create("card", { style: { base: { fontFamily: "'Public Sans', sans-serif", fontSize: "15px", color: "#101f1e" } } });
+    state.cardEl.mount("#cardElement");
+  }
+  function showSuccess(code, total, extra) {
+    document.querySelector(".bk-layout").style.display = "none";
+    $("#searchForm").style.display = "none";
+    $("#availNote").hidden = true;
+    $("#successText").textContent = "Thanks " + $("#gName").value.trim().split(" ")[0] + " — " + state.tenant.name + " will confirm your " + state.selected.name + " stay by email shortly." + (extra || "");
+    $("#successCode").textContent = "Confirmation " + code + " · Total " + money(total);
+    const panel = $("#successPanel");
+    panel.hidden = false;
+    panel.scrollIntoView({ behavior: "smooth", block: "center" });
+    trackConversion(code, total);
+    postHeight();
+  }
+  async function payDeposit() {
+    const btn = $("#bookBtn");
+    const pErr = $("#payError");
+    pErr.hidden = true;
+    btn.disabled = true; btn.textContent = "Processing…";
+    try {
+      const { paymentIntent, error } = await state.stripe.confirmCardPayment(state.paying.clientSecret, {
+        payment_method: { card: state.cardEl, billing_details: { name: $("#gName").value.trim(), email: $("#gEmail").value.trim() } }
+      });
+      if (error) throw new Error(error.message || "Card declined");
+      if (!paymentIntent || paymentIntent.status !== "succeeded") throw new Error("Payment did not complete. Please try another card.");
+      await fnPost("charge-guest", { action: "confirm", tenant_id: state.tenant.id, payment_intent_id: paymentIntent.id }).catch(() => {});
+      const { code, total, due } = state.paying;
+      showSuccess(code, total, ` Your ${money(due)} deposit is paid — the remaining balance is due at the property.`);
+    } catch (e) {
+      pErr.textContent = e.message || "Payment failed. Please check the card and try again.";
+      pErr.hidden = false;
+      btn.disabled = false;
+      btn.textContent = "Pay " + money(state.paying.due) + " deposit";
+      postHeight();
+    }
+  }
+
   function renderSummary() {
     const n = nights();
     const btn = $("#bookBtn");
@@ -242,15 +315,28 @@
     if (extraGuests > 0 && extraRate > 0) addonPayload.push({ name: `Extra guests × ${extraGuests}`, price: extraRate, per: "night", qty: 1 });
     const q = quote({ rate: state.selected.rate_cents / 100, nights: n, guests, nightlyRates: ap ? ap.rates : nightlyRatesFor(state.selected), addons: addonPayload, taxes: state.taxes });
     const code = ($("#promoCode").value || "").trim().toUpperCase();
+    const dep = depositInfo(q.total);
+    state.dep = dep;
+    const ackWrap = $("#depAckWrap");
+    const needsAck = !!(dep && !dep.collectible);
+    if (needsAck) {
+      ackWrap.hidden = false;
+      $("#depAckText").textContent = `I understand a deposit of ${money(dep.due)} (${dep.pct}% of the total) is required to confirm this booking. The property will arrange collection.`;
+    } else ackWrap.hidden = true;
     $("#summaryBody").innerHTML =
       `<div class="bk-line"><span>${esc(state.selected.name)} × ${n} night${n > 1 ? "s" : ""}</span><b>${money(q.subtotal)}</b></div>` +
       (ap ? `<div class="bk-line"><span>${esc(ap.plan.name)} applied</span><b>−${money(ap.saved)}</b></div>` : "") +
       (!ap && code ? `<div class="bk-line"><span>Code ${esc(code)} didn't apply to this room or stay length</span><b></b></div>` : "") +
       q.addonLines.map((l) => `<div class="bk-line"><span>${esc(l.name)}</span><b>${money(l.amount)}</b></div>`).join("") +
       q.taxLines.map((l) => `<div class="bk-line"><span>${esc(l.name)}</span><b>${money(l.amount)}</b></div>`).join("") +
-      `<div class="bk-line total"><span>Total</span><b>${money(q.total)}</b></div>`;
-    btn.disabled = false;
-    btn.textContent = "Request booking · " + money(q.total);
+      `<div class="bk-line total"><span>Total</span><b>${money(q.total)}</b></div>` +
+      (dep ? `<div class="bk-line"><span>Deposit due today (${dep.pct}%)</span><b>${money(dep.due)}</b></div><div class="bk-line"><span>Balance at the property</span><b>${money(round2(q.total - dep.due))}</b></div>` : "");
+    if (state.paying) { btn.disabled = false; btn.textContent = "Pay " + money(state.paying.due) + " deposit"; }
+    else if (needsAck && !$("#depAck").checked) { btn.disabled = true; btn.textContent = "Tick the deposit box to continue"; }
+    else {
+      btn.disabled = false;
+      btn.textContent = dep && dep.collectible ? "Book & pay " + money(dep.due) + " deposit" : "Request booking · " + money(q.total);
+    }
     postHeight();
     return q;
   }
@@ -368,7 +454,9 @@
   ["guests", "promoCode"].forEach((id) => $("#" + id).addEventListener("change", () => { renderRooms(); renderSummary(); }));
   $("#searchForm").addEventListener("submit", (e) => { e.preventDefault(); showError(""); checkAvailability(); });
 
+  $("#depAck").addEventListener("change", () => renderSummary());
   $("#bookBtn").addEventListener("click", async () => {
+    if (state.paying) { await payDeposit(); return; }
     showError("");
     const name = $("#gName").value.trim();
     const email = $("#gEmail").value.trim();
@@ -386,7 +474,8 @@
     const notes = [$("#gNotes").value.trim(), selAddons.length ? "Add-ons: " + selAddons.map((a) => a.name).join(", ") : "",
       apNow ? "Rate plan: " + apNow.plan.name : "",
       ($("#promoCode").value || "").trim() ? "Promo code: " + $("#promoCode").value.trim().toUpperCase() : "",
-      consentEl && !$("#gConsentWrap").hidden && consentEl.checked ? "Marketing consent: yes" : ""].filter(Boolean).join(" · ");
+      consentEl && !$("#gConsentWrap").hidden && consentEl.checked ? "Marketing consent: yes" : "",
+    state.dep ? `Deposit ${state.dep.collectible ? "to pay by card" : "acknowledged, to be collected by property"}: ${money(state.dep.due)} (${state.dep.pct}%)` : ""].filter(Boolean).join(" · ");
     try {
       await api("reservations", {
         method: "POST", headers: { Prefer: "return=minimal" },
@@ -407,16 +496,25 @@
           body: JSON.stringify({ tenant_id: state.tenant.id, reservation_id: resId, addon_id: a.id, name_snapshot: a.name, price_cents: a.price_cents, qty: 1 })
         }).catch(() => {});
       }
-      document.querySelector(".bk-layout").style.display = "none";
-      $("#searchForm").style.display = "none";
-      $("#availNote").hidden = true;
-      $("#successText").textContent = "Thanks " + name.split(" ")[0] + " — " + state.tenant.name + " will confirm your " + state.selected.name + " stay by email shortly.";
-      $("#successCode").textContent = "Confirmation " + code + " · Total " + money(q.total);
-      const panel = $("#successPanel");
-      panel.hidden = false;
-      panel.scrollIntoView({ behavior: "smooth", block: "center" });
-      trackConversion(code, q.total);
-      postHeight();
+      if (state.dep && state.dep.collectible) {
+        // Deposit required: create the card charge and switch the button to Pay.
+        btn.textContent = "Preparing secure payment…";
+        const pi = await fnPost("charge-guest", {
+          tenant_id: state.tenant.id, reservation_id: resId,
+          amount_cents: Math.round(state.dep.due * 100),
+          description: "Booking deposit · " + code + " · " + state.selected.name
+        });
+        state.paying = { resId, code, total: q.total, due: state.dep.due, clientSecret: pi.client_secret };
+        $("#payText").textContent = `A deposit of ${money(state.dep.due)} (${state.dep.pct}% of ${money(q.total)}) is due today to confirm ${state.selected.name}. The balance is due at the property.`;
+        $("#payPanel").hidden = false;
+        await mountCard();
+        btn.disabled = false;
+        btn.textContent = "Pay " + money(state.dep.due) + " deposit";
+        $("#payPanel").scrollIntoView({ behavior: "smooth", block: "center" });
+        postHeight();
+        return;
+      }
+      showSuccess(code, q.total, state.dep ? ` A deposit of ${money(state.dep.due)} (${state.dep.pct}%) is required to confirm — the property will arrange collection.` : "");
     } catch (e) {
       btn.disabled = false; btn.textContent = "Request booking";
       showError(/exclusion|conflict|duplicate|409/i.test(e.message)

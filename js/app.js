@@ -972,6 +972,7 @@ function openResDetail(ref) {
         <dt>Total</dt><dd class="mono">${money(r.total)}</dd>
         <dt>Paid</dt><dd class="mono">${money(r.paid)}</dd>
         <dt>Balance</dt><dd class="mono">${money(balance(r))}</dd>
+        ${r.notes ? `<dt>Booking notes</dt><dd>${esc(r.notes)}</dd>` : ""}
       </div>`,
     foot: `
       ${r.status === "pending" ? `<button class="btn btn-primary btn-sm" data-action="confirm-res" data-ref="${r.ref}" type="button">Confirm reservation</button>` : ""}
@@ -1318,7 +1319,9 @@ document.addEventListener("click", (e) => {
         booking_subheading: $("#bkSub").value.trim(),
         brand_color: document.body.dataset.brand || "#0c3b3c",
         ga_measurement_id: $("#bkGa").value.trim() || null,
-        booking_redirect_url: $("#bkRedirect").value.trim() || null
+        booking_redirect_url: $("#bkRedirect").value.trim() || null,
+        deposit_enabled: !!($("#bkDepositOn") && $("#bkDepositOn").checked),
+        deposit_percent: Math.min(100, Math.max(1, parseInt($("#bkDepositPct") ? $("#bkDepositPct").value : "25", 10) || 25))
       }).then(() => { updateEmbed({ slug: slugVal }); toast("Booking page published", "Settings saved to Supabase", "ok"); })
         .catch(() => toast("Could not save settings", "Apply the booking migration (20261027000000), then retry", "warn"));
     } else {
@@ -1605,6 +1608,8 @@ function loadLiveIntoUI() {
     }
     if ($("#bkGa")) $("#bkGa").value = live.tenant.ga_measurement_id || "";
     if ($("#bkRedirect")) $("#bkRedirect").value = live.tenant.booking_redirect_url || "";
+    if ($("#bkDepositOn")) $("#bkDepositOn").checked = !!live.tenant.deposit_enabled;
+    if ($("#bkDepositPct") && live.tenant.deposit_percent) $("#bkDepositPct").value = live.tenant.deposit_percent;
     if (live.tenant.booking_headline && $("#bkHead")) { $("#bkHead").value = live.tenant.booking_headline; $("#mockHead").textContent = live.tenant.booking_headline; }
     if (live.tenant.booking_subheading && $("#bkSub")) { $("#bkSub").value = live.tenant.booking_subheading; $("#mockSub").textContent = live.tenant.booking_subheading; }
     updateEmbed(live.tenant);

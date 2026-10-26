@@ -4,5 +4,6 @@ window.SH_CONFIG = {
   SUPABASE_URL: "https://ybgmwyzizacxkfgxmroy.supabase.co",
   SUPABASE_ANON_KEY: "sb_publishable_LEuT_5ZXdORDF8E9jaesOg_VYTPiG-Q",
   TENANT_SLUG: "pinecrest",
-  GOOGLE_ANALYTICS_ID: "" // system-wide GA4 fallback (G-...); a property's own ID in Booking Studio wins
+  GOOGLE_ANALYTICS_ID: "", // system-wide GA4 fallback (G-...); a property's own ID in Booking Studio wins
+  STRIPE_PUBLISHABLE_KEY: "" // pk_test_... / pk_live_... from Stripe > Developers > API keys. Publishable, safe to ship; needed to collect booking deposits by card.
 };

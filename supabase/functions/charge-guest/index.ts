@@ -18,10 +18,35 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+/* Verify a deposit PaymentIntent server-side and mark it paid (idempotent).
+   The browser's word is never trusted: status comes from Stripe itself. */
+async function markDepositPaid(tenant: any, intent: any) {
+  if (!intent || intent.status !== "succeeded") return false;
+  const reservationId = intent.metadata?.reservation_id;
+  const { data: txn } = await admin.from("transactions")
+    .select("id, status, amount_cents").eq("stripe_payment_intent_id", intent.id).maybeSingle();
+  if (!txn || txn.status === "paid") return true; // already recorded: do not double-count
+  await admin.from("transactions").update({ status: "paid" }).eq("id", txn.id);
+  if (reservationId) {
+    const { data: resv } = await admin.from("reservations").select("paid_cents").eq("id", reservationId).single();
+    if (resv) await admin.from("reservations").update({ paid_cents: (resv.paid_cents || 0) + (txn.amount_cents || intent.amount) }).eq("id", reservationId);
+  }
+  return true;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
-    const { tenant_id, reservation_id, amount_cents, description } = await req.json();
+    const body = await req.json();
+    const { tenant_id, reservation_id, amount_cents, description } = body;
+    if (body.action === "confirm") {
+      if (!tenant_id || !body.payment_intent_id) return json({ error: "tenant_id and payment_intent_id required" }, 400);
+      const { data: tenant } = await admin.from("tenants").select("stripe_account_id").eq("id", tenant_id).single();
+      if (!tenant?.stripe_account_id) return json({ error: "property has not connected Stripe" }, 400);
+      const intent = await stripe.paymentIntents.retrieve(String(body.payment_intent_id), {}, { stripeAccount: tenant.stripe_account_id });
+      const paid = await markDepositPaid(tenant, intent);
+      return json({ paid, status: intent.status });
+    }
     if (!tenant_id || !reservation_id || !amount_cents) {
       return json({ error: "tenant_id, reservation_id, amount_cents required" }, 400);
     }

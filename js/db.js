@@ -141,7 +141,7 @@
           id: r.id, ref: r.confirmation_code, guest: r.guest_name,
           contact: r.guest_email || r.guest_phone || "—",
           room: roomCode(r.room_id), inN: dayOff(r.check_in), outN: dayOff(r.check_out),
-          status: mapStatus(r.status), total: (r.total_cents || 0) / 100, paid: (r.paid_cents || 0) / 100
+          status: mapStatus(r.status), total: (r.total_cents || 0) / 100, paid: (r.paid_cents || 0) / 100, notes: r.notes || ""
         })),
         addons: addons.map((a) => ({ id: a.id, name: a.name, price: (a.price_cents || 0) / 100, per: a.per, on: a.active, desc: a.description || "" })),
         taxes: taxes.map((t) => ({ id: t.id, name: t.name, kind: t.kind, value: Number(t.rate), applies: t.applies_to, on: t.active })),

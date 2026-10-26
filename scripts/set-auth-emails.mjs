@@ -99,7 +99,7 @@ const body = {
   site_url: "https://simplehotelier.com",
   uri_allow_list: "https://simplehotelier.com/**,https://simplehotelier.pocketmacro.workers.dev/**,http://localhost:3000/**",
   smtp_host: SES_SMTP_HOST,
-  smtp_port: Number(env.SES_SMTP_PORT || 587),
+  smtp_port: String(env.SES_SMTP_PORT || 587),
   smtp_user: SES_SMTP_USER,
   smtp_pass: SES_SMTP_PASS,
   smtp_admin_email: FROM,
