@@ -27,3 +27,10 @@ test("unknown question falls back and offers a support case", () => {
   assert.equal(a.fallback, true);
   assert.match(a.body, /support case/i);
 });
+
+test("findLinks maps screen names in answers to app views", () => {
+  assert.equal(typeof window.SHSupport.findLinks, "function", "SHSupport.findLinks must exist");
+  const links = window.SHSupport.findLinks("Open Add-ons & Taxes and choose Add-on. See the Booking Page too.");
+  assert.deepEqual(links.map((l) => l.view), ["addons", "booking"]);
+  assert.equal(window.SHSupport.findLinks("Go to Payments, then Payments again").length, 1);
+});

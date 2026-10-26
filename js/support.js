@@ -20,6 +20,27 @@
     { id: "billing", keys: ["subscription", "billing", "$30", "30/month", "cancel", "plan", "invoice"], title: "Your $30/month subscription", body: "SimpleHotelier is one flat $30 per month with every feature included. Manage it in Settings, under Plan and billing. Checkout and invoices run through Stripe. Cancel any time there; your data stays readable until the end of the paid month. This subscription is separate from guest payments, which go to your own Stripe account." },
   ];
 
+  /* Screen names in answers become buttons that jump to that view. */
+  const SCREEN_LINKS = [
+    ["Add-ons & Taxes", "addons"], ["Rooms & Cabins", "rooms"], ["Booking Page", "booking"],
+    ["Housekeeping", "housekeeping"], ["Reservations", "reservations"], ["Payments", "payments"],
+    ["Calendar", "calendar"], ["Reports", "reports"], ["Settings", "settings"],
+    ["Overview", "overview"], ["Support", "support"], ["Add unit", "rooms"],
+    ["Publish changes", "booking"], ["Plan and billing", "settings"]
+  ];
+  const VIEW_LABELS = { addons: "Add-ons & Taxes", rooms: "Rooms & Cabins", booking: "Booking Page", housekeeping: "Housekeeping", reservations: "Reservations", payments: "Payments", calendar: "Calendar", reports: "Reports", settings: "Settings", overview: "Overview", support: "Support" };
+  function findLinks(text) {
+    const lower = String(text || "").toLowerCase();
+    const found = [], seen = new Set();
+    [...SCREEN_LINKS].sort((a, b) => b[0].length - a[0].length).forEach(([name, view]) => {
+      if (lower.includes(name.toLowerCase()) && !seen.has(view)) {
+        seen.add(view);
+        found.push({ name, view, label: VIEW_LABELS[view] || name });
+      }
+    });
+    return found;
+  }
+
   function answer(question) {
     const q = " " + String(question || "").toLowerCase().replace(/[^a-z0-9$ ]+/g, " ") + " ";
     let best = null, bestScore = 0;
@@ -36,7 +57,7 @@
       body: "I do not have a confident answer for that yet. Two fast options:\n1. Rephrase with the feature name (rooms, taxes, charging, booking page, embed).\n2. Open a support case below and our team will reply in this thread. Your question is saved with the case, so you will not need to repeat it."
     };
   }
-  window.SHSupport = { answer, ARTICLES };
+  window.SHSupport = { answer, ARTICLES, findLinks };
 
   /* ---- DOM app ---- */
   if (!document.querySelector || !document.querySelector("#chatLog")) return;
@@ -47,13 +68,32 @@
   let lastQuestion = "";
   let tenantNames = {};
 
+  const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  function linkify(text) {
+    const names = [...SCREEN_LINKS].sort((a, b) => b[0].length - a[0].length);
+    const re = new RegExp("(" + names.map(([n]) => escapeRe(n)).join("|") + ")", "gi");
+    let out = "", last = 0, m;
+    while ((m = re.exec(text))) {
+      out += esc(text.slice(last, m.index));
+      const entry = names.find(([n]) => n.toLowerCase() === m[0].toLowerCase());
+      out += `<button type="button" class="chat-link" data-goto-view="${entry[1]}">${esc(m[0])}</button>`;
+      last = m.index + m[0].length;
+    }
+    return out + esc(text.slice(last));
+  }
+  function answerHTML(title, text) {
+    const links = findLinks((title || "") + " " + text);
+    return (title ? `<p><strong>${esc(title)}</strong></p>` : "") +
+      text.split("\n").map((l) => `<p>${linkify(l)}</p>`).join("") +
+      (links.length ? `<div class="chat-actions">${links.slice(0, 2).map((l) => `<button class="btn btn-primary btn-xs" type="button" data-goto-view="${l.view}">Open ${esc(l.label)} →</button>`).join("")}</div>` : "");
+  }
   function bubble(who, title, text) {
     const log = $("#chatLog");
     const d = document.createElement("div");
     d.className = "msg " + (who === "me" ? "me" : "ai");
-    d.innerHTML = (who === "ai" ? `<strong class="who">Spark</strong>` : "") +
-      (title ? `<p><strong>${esc(title)}</strong></p>` : "") +
-      text.split("\n").map((l) => `<p>${esc(l)}</p>`).join("");
+    d.innerHTML = who === "ai"
+      ? `<strong class="who">Spark</strong>` + answerHTML(title, text)
+      : text.split("\n").map((l) => `<p>${esc(l)}</p>`).join("");
     log.appendChild(d);
     log.scrollTop = log.scrollHeight;
     return d;
@@ -80,8 +120,7 @@
       if (res.ok) { const d = await res.json(); if (d.answer) answered = { title: "Spark", body: d.answer }; }
     } catch { /* offline or function not deployed: local articles below */ }
     if (!answered) answered = answer(q);
-    thinking.innerHTML = `<strong class="who">Spark</strong><p><strong>${esc(answered.title)}</strong></p>` +
-      answered.body.split("\n").map((l) => `<p>${esc(l)}</p>`).join("");
+    thinking.innerHTML = `<strong class="who">Spark</strong>` + answerHTML(answered.title, answered.body);
     $("#chatLog").scrollTop = $("#chatLog").scrollHeight;
   }
 
@@ -225,6 +264,10 @@
     const act = e.target.closest("[data-action]");
     if (act && act.dataset.action === "billing-checkout") startCheckout();
     if (act && act.dataset.action === "billing-help") { goto("support"); $("#caseCategory").value = "billing"; }
+  });
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-goto-view]");
+    if (b && typeof goto === "function") goto(b.dataset.gotoView);
   });
   window.addEventListener("sh-auth", () => { checkAdmin(); loadMyCases(); });
   if (new URLSearchParams(location.search).get("checkout") === "success") {
