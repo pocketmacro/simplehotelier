@@ -186,9 +186,14 @@
     return rows && rows[0];
   }
   const hasLive = () => !!ctx.tenantId;
+  async function updateTenantSettings(patch) {
+    if (!ctx.tenantId) return null;
+    await rest("tenants?id=eq." + ctx.tenantId, { method: "PATCH", body: JSON.stringify(patch) });
+    return true;
+  }
 
   window.SHDB = {
-    configured, loadLiveData, updateHK, hasLive,
+    configured, loadLiveData, updateHK, hasLive, updateTenantSettings,
     createReservation, setReservationStatus, updateReservationPaid, addTransaction,
     createAddon, setAddonActive, deleteAddon, createTax, deleteTax, createRoom
   };

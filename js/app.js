@@ -292,6 +292,17 @@ function renderTaxes() {
 }
 
 /* ---------------- Booking studio ---------------- */
+function bookingBase() {
+  return location.protocol.startsWith("http") ? location.origin : "https://simplehotelier.pocketmacro.workers.dev";
+}
+function updateEmbed(tenant) {
+  const slug = (tenant && tenant.slug) || "pinecrest";
+  const src = bookingBase() + "/book.html?property=" + encodeURIComponent(slug) + "&embed=1";
+  const el = $("#bkEmbed");
+  if (el) el.value = `<div style="max-width:720px;margin:0 auto"><iframe id="sh-book" src="${src}" style="width:100%;border:0;border-radius:14px;min-height:640px" loading="lazy" title="Book your stay"></iframe></div>\n<script>window.addEventListener("message",function(e){if(e.data&&e.data.type==="simplehotelier:height"){var f=document.getElementById("sh-book");if(f)f.style.height=e.data.height+"px"}});<\/script>`;
+  const open = $("#bkOpenLink");
+  if (open) open.href = bookingBase() + "/book.html?property=" + encodeURIComponent(slug);
+}
 function renderMockRooms() {
   const imgs = ["linear-gradient(135deg,#285b5c,#0c3b3c)", "linear-gradient(135deg,#7a5a33,#3d2c14)", "linear-gradient(135deg,#3f6b8a,#1f3a5f)"];
   $("#mockRooms").innerHTML = rooms.slice(0, 3).map((r, i) => `
@@ -307,6 +318,7 @@ function bindStudio() {
   $("#bkColors").addEventListener("click", (e) => {
     const b = e.target.closest(".swatch"); if (!b) return;
     $$("#bkColors .swatch").forEach((s) => s.classList.toggle("sel", s === b));
+    document.body.dataset.brand = b.dataset.c;
     $("#mockHero").style.background = `linear-gradient(180deg, ${b.dataset.c}e8, ${b.dataset.c}c2), repeating-linear-gradient(115deg, ${b.dataset.c} 0 26px, rgb(0 0 0 / 22%) 26px 52px)`;
   });
 }
@@ -476,7 +488,26 @@ document.addEventListener("click", (e) => {
     navigator.clipboard?.writeText("https://" + $("#bkUrl").value).catch(() => {});
     toast("Link copied", $("#bkUrl").value, "ok");
   }
-  else if (a === "publish-page") toast("Booking page published", $("#bkUrl").value, "ok");
+  else if (a === "publish-page") {
+    if (window.SHDB && SHDB.hasLive()) {
+      SHDB.updateTenantSettings({
+        name: $("#bkName").value.trim(),
+        booking_headline: $("#bkHead").value.trim(),
+        booking_subheading: $("#bkSub").value.trim(),
+        brand_color: document.body.dataset.brand || "#0c3b3c",
+        ga_measurement_id: $("#bkGa").value.trim() || null,
+        booking_redirect_url: $("#bkRedirect").value.trim() || null
+      }).then(() => toast("Booking page published", "Settings saved to Supabase", "ok"))
+        .catch(() => toast("Could not save settings", "Apply the booking migration (20261027000000), then retry", "warn"));
+    } else {
+      toast("Booking page published", $("#bkUrl").value, "ok");
+    }
+  }
+  else if (a === "copy-embed") {
+    const ta = $("#bkEmbed");
+    if (ta) { navigator.clipboard?.writeText(ta.value).catch(() => {}); ta.select(); }
+    toast("Embed code copied", "Paste it into your website", "ok");
+  }
   else if (a === "mock-search") toast("Demo preview", "Availability search runs on the live page", "");
   else if (a === "connect-bank") toast("Payouts", "Bank connection opens in the full product", "");
   else if (a === "invite") toast("Invite sent", "cleaners@pinecrestcabins.com", "ok");
@@ -560,7 +591,7 @@ $("#globalSearch").addEventListener("keydown", (e) => {
 renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
 renderRooms(); renderHK(); renderFolios(); renderTxns();
 renderAddons(); renderTaxes(); renderMockRooms(); renderReports();
-bindStudio();
+bindStudio(); updateEmbed(null);
 
 /* Live Supabase data (falls back silently to demo data when unconfigured).
    Reservations require a signed-in member under RLS; rooms/add-ons/taxes are public. */
@@ -592,6 +623,11 @@ function loadLiveIntoUI() {
       $("#userRole").textContent = "Owner · " + live.tenant.name;
       $("#userAvatar").textContent = (live.user.email || "U").slice(0, 2).toUpperCase();
     }
+    if ($("#bkGa")) $("#bkGa").value = live.tenant.ga_measurement_id || "";
+    if ($("#bkRedirect")) $("#bkRedirect").value = live.tenant.booking_redirect_url || "";
+    if (live.tenant.booking_headline && $("#bkHead")) { $("#bkHead").value = live.tenant.booking_headline; $("#mockHead").textContent = live.tenant.booking_headline; }
+    if (live.tenant.booking_subheading && $("#bkSub")) { $("#bkSub").value = live.tenant.booking_subheading; $("#mockSub").textContent = live.tenant.booking_subheading; }
+    updateEmbed(live.tenant);
     if (statusEl) statusEl.textContent = "Data source: Supabase · " + live.tenant.name + " (live" + (live.user ? " · " + live.user.email : "") + ")";
     toast("Connected to Supabase", live.tenant.name + " loaded live", "ok");
   });

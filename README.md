@@ -22,6 +22,22 @@ See [supabase/README.md](supabase/README.md). Short version:
    to apply schema/seed and write `js/config.js` automatically.
    Claim the demo tenant with `scripts/claim-tenant.ps1`.
 
+## Public booking page + embed
+- Guest page: `book.html?property={slug}` (e.g. `book.html?property=pinecrest`).
+  It loads rooms/add-ons/taxes publicly, checks availability via the
+  `get_available_room_ids` function (guests never see reservation data),
+  computes taxes, and creates a `pending` request. The no-overlap
+  constraint makes double-booking impossible.
+- Embed on any website: Booking Studio shows a copy-paste iframe snippet
+  (`&embed=1`) that is mobile-friendly and auto-resizes via postMessage.
+- Conversion tracking (Booking Studio per property): a Google Analytics
+  Measurement ID fires GA4 `purchase` + `booking_complete` on completion,
+  and/or set a redirect URL — guests land there with
+  `?booking_ref=&total=&currency=` appended. A system-wide GA default
+  lives in `js/config.js` (`GOOGLE_ANALYTICS_ID`).
+- Requires `supabase/migrations/20261027000000_booking.sql`
+  (`scripts/apply-booking-migration.ps1` applies it).
+
 ## Accounts
 - **Log in** with your Supabase Auth user to load your property's live data.
 - **Create account** signs you up and creates your property + owner
