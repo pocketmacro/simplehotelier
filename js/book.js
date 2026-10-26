@@ -165,7 +165,7 @@
         ${type && type.description ? `<div class="meta">${esc(type.description)}</div>` : ""}
         ${ap ? `<div class="bk-feats"><span class="bk-feat bk-plan">${esc(ap.plan.name)} · save ${money(ap.saved)}</span></div>` : ""}
         ${feats.length ? `<div class="bk-feats">${feats.map((f) => `<span class="bk-feat">${esc(f)}</span>`).join("")}</div>` : ""}
-        <div class="price"><div><b>${money(r.rate_cents / 100)}</b> <span>/ night · ${money(nightlyRatesFor(r).reduce((a, b) => a + b, 0) || r.rate_cents / 100 * n)} for ${n} night${n > 1 ? "s" : ""}</span></div>
+        <div class="price"><div><b>${money(baseRate(r))}</b> <span>/ night · ${money(nightlyRatesFor(r).reduce((a, b) => a + b, 0) || baseRate(r) * n)} for ${n} night${n > 1 ? "s" : ""}</span></div>
         <button class="bk-select" type="button" data-room="${r.id}" ${booked ? "disabled" : ""}>${booked ? "Booked" : sel ? "Selected ✓" : "Select"}</button></div>
       </article>`;
     }).join("") || `<p class="bk-loading">No rooms are listed yet.</p>`;
@@ -181,12 +181,18 @@
     [...document.querySelectorAll("#addonsList input")].forEach((el) => el.addEventListener("change", renderSummary));
   }
   function typeFor(room) { return state.types[room.room_type_id] || null; }
+  /* Pricing lives on the room type (hotels price King/Queen/Suite, not units):
+     the type's nightly rate wins; the room's stored rate is a legacy fallback. */
+  function baseRate(room) {
+    const t = typeFor(room);
+    return t && t.rack_rate_cents > 0 ? t.rack_rate_cents / 100 : (room.rate_cents || 0) / 100;
+  }
   /* Per-date rules from the Rate Calendar: closed nights, CTA/CTD, stay limits. */
   function ruleBlock(room) {
     const n = nights();
     if (!room || !n || n < 1) return null;
     const inIso = $("#inDate").value, outIso = $("#outDate").value;
-    const dayRule = (iso) => state.overrides[room.id + "|" + iso] || null;
+    const dayRule = (iso) => (room.room_type_id ? state.overrides[room.room_type_id + "|" + iso] : null) || null;
     for (let i = 0; i < n; i++) {
       const d = new Date(inIso + "T12:00:00"); d.setDate(d.getDate() + i);
       const r = dayRule(d.toISOString().slice(0, 10));
@@ -227,9 +233,9 @@
     const end = new Date($("#outDate").value + "T12:00:00");
     while (d < end) {
       const iso = d.toISOString().slice(0, 10);
-      const over = state.overrides[room.id + "|" + iso];
+      const over = room.room_type_id ? state.overrides[room.room_type_id + "|" + iso] : null;
       const floor = state.tenant && state.tenant.min_room_rate_cents ? state.tenant.min_room_rate_cents / 100 : 0;
-      rates.push(Math.max(floor, over ? over.rate : room.rate_cents / 100));
+      rates.push(Math.max(floor, over ? over.rate : baseRate(room)));
       d.setDate(d.getDate() + 1);
     }
     return rates;
@@ -388,7 +394,7 @@
     const extraRate = ap && ap.plan.extraAdultRate ? ap.plan.extraAdultRate : (type && type.extra_adult_cents ? type.extra_adult_cents / 100 : 0);
     const addonPayload = chosenAddons().map((a) => ({ name: a.name, price: a.price_cents / 100, per: a.per, qty: 1 }));
     if (extraGuests > 0 && extraRate > 0) addonPayload.push({ name: `Extra guests × ${extraGuests}`, price: extraRate, per: "night", qty: 1 });
-    const q = quote({ rate: state.selected.rate_cents / 100, nights: n, guests, nightlyRates: ap ? ap.rates : nightlyRatesFor(state.selected), addons: addonPayload, taxes: state.taxes });
+    const q = quote({ rate: baseRate(state.selected), nights: n, guests, nightlyRates: ap ? ap.rates : nightlyRatesFor(state.selected), addons: addonPayload, taxes: state.taxes });
     const code = ($("#promoCode").value || "").trim().toUpperCase();
     const dep = depositInfo(q.total);
     state.dep = dep;
@@ -484,10 +490,10 @@
       }
       setupGA();
       const tid = "tenant_id=eq." + t.id;
-      const overrideRows = await api("room_rate_overrides?" + tid + "&select=room_id,date,rate_cents,min_stay,max_stay,closed,cta,ctd").catch(() => []);
+      const overrideRows = await api("room_rate_overrides?" + tid + "&select=room_type_id,date,rate_cents,min_stay,max_stay,closed,cta,ctd").catch(() => []);
       state.overrides = {};
       (overrideRows || []).forEach((o) => {
-        state.overrides[o.room_id + "|" + String(o.date).slice(0, 10)] = {
+        state.overrides[o.room_type_id + "|" + String(o.date).slice(0, 10)] = {
           rate: (o.rate_cents || 0) / 100,
           minStay: o.min_stay != null ? o.min_stay : null, maxStay: o.max_stay != null ? o.max_stay : null,
           closed: !!o.closed, cta: !!o.cta, ctd: !!o.ctd

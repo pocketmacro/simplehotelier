@@ -100,12 +100,13 @@ test("createRoomType posts full detail payload in cents", async () => {
 });
 
 test("upsertRateOverrides sends rate, stay limits and stop-sell flags", async () => {
-  await window.SHDB.upsertRateOverrides(roomId, "A1", [
+  await window.SHDB.upsertRateOverrides("type-1", [
     { date: "2026-12-24", rate: 449, minStay: 3, maxStay: null, closed: false, cta: true, ctd: false },
     { date: "2026-12-25", rate: 449, minStay: null, maxStay: 14, closed: true, cta: false, ctd: true }
   ]);
   const post = calls.find((c) => c.method === "POST" && c.url.includes("/rest/v1/room_rate_overrides"));
   assert.ok(post, "expected a POST to room_rate_overrides");
+  assert.equal(post.body[0].room_type_id, "type-1");
   assert.equal(post.body[0].rate_cents, 44900);
   assert.equal(post.body[0].min_stay, 3);
   assert.equal(post.body[0].max_stay, null);

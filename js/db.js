@@ -179,7 +179,7 @@
         })),
         roomTypes: (roomTypesRaw || []).map(mapRoomType),
         rateOverrides: (overridesRaw || []).map((o) => ({
-          roomId: o.room_id, roomCode: roomCode(o.room_id), date: String(o.date || "").slice(0, 10), rate: (o.rate_cents || 0) / 100,
+          typeId: o.room_type_id, date: String(o.date || "").slice(0, 10), rate: (o.rate_cents || 0) / 100,
           minStay: o.min_stay != null ? o.min_stay : null, maxStay: o.max_stay != null ? o.max_stay : null,
           closed: !!o.closed, cta: !!o.cta, ctd: !!o.ctd
         })),
@@ -314,13 +314,13 @@
     await rest("room_types?id=eq." + id, { method: "PATCH", body: JSON.stringify(roomTypePayload(t)) });
   }
   async function deleteRoomType(id) { if (id) await rest("room_types?id=eq." + id, { method: "DELETE" }); }
-  async function upsertRateOverrides(roomId, roomCodeVal, entries) {
-    if (!ctx.tenantId || !roomId || !entries.length) return;
-    await rest("room_rate_overrides?on_conflict=room_id,date", {
+  async function upsertRateOverrides(typeId, entries) {
+    if (!ctx.tenantId || !typeId || !entries.length) return;
+    await rest("room_rate_overrides?on_conflict=room_type_id,date", {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify(entries.map((e) => ({
-        tenant_id: ctx.tenantId, room_id: roomId, date: e.date,
+        tenant_id: ctx.tenantId, room_type_id: typeId, date: e.date,
         rate_cents: Math.round((e.rate || 0) * 100),
         min_stay: e.minStay != null ? e.minStay : null,
         max_stay: e.maxStay != null ? e.maxStay : null,
@@ -328,9 +328,9 @@
       })))
     });
   }
-  async function deleteRateOverride(roomId, date) {
-    if (!roomId) return;
-    await rest("room_rate_overrides?room_id=eq." + roomId + "&date=eq." + date, { method: "DELETE" });
+  async function deleteRateOverride(typeId, date) {
+    if (!typeId) return;
+    await rest("room_rate_overrides?room_type_id=eq." + typeId + "&date=eq." + date, { method: "DELETE" });
   }
   async function uploadPublic(bucket, path, file) {
     const baseUrl = cfg.SUPABASE_URL.replace(/\/$/, "");
