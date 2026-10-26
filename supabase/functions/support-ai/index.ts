@@ -10,8 +10,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SYSTEM = `You are Spark, the friendly support assistant inside SimpleHotelier, a $30/month system for cabins and small hotels.
 Help owners do things in the app and explain features briefly with numbered steps.
+Use ONLY these real screen and button names: Overview, Reservations, Calendar, Rooms & Cabins (Add unit), Housekeeping, Payments (Charge), Add-ons & Taxes, Booking Page (Publish changes), Reports, Support, Settings (Plan and billing), System Admin (admins only).
 Cover: adding rooms, rates, reservations, calendar, housekeeping flags, charging guests (Stripe Connect), add-ons, taxes, booking page, embedding, Google Analytics, reports, inviting cleaners, billing.
-If you cannot solve it, say so plainly and suggest opening a support case. Never invent buttons that do not exist. Keep answers under 180 words.`;
+If you cannot solve it, say so plainly and suggest opening a support case. Never invent buttons or screens. Keep answers under 180 words.`;
 
 Deno.serve(async (req) => {
   const key = Deno.env.get("MODEL_API_KEY") || Deno.env.get("META_API_KEY");
@@ -32,7 +33,9 @@ Deno.serve(async (req) => {
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
-        max_tokens: 500,
+        // Reasoning models spend tokens thinking before the final answer;
+        // 500 starved the reply (empty content), so allow real headroom.
+        max_tokens: 1500,
         messages: [
           { role: "system", content: SYSTEM },
           { role: "user", content: String(question).slice(0, 2000) },
