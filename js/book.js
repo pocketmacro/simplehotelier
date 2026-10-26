@@ -53,7 +53,7 @@
   const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  const state = { tenant: null, rooms: [], addons: [], taxes: [], selected: null, available: null, gaId: "", overrides: {} };
+  const state = { tenant: null, rooms: [], types: {}, addons: [], taxes: [], selected: null, available: null, gaId: "", overrides: {} };
 
   function showError(msg) {
     const el = $("#bookError");
@@ -126,10 +126,24 @@
     $("#roomsList").innerHTML = state.rooms.map((r) => {
       const booked = state.available && !state.available.includes(r.id);
       const sel = state.selected && state.selected.id === r.id;
+      const type = state.types[r.room_type_id] || null;
+      const photos = (r.photos && r.photos.length ? r.photos : (type && type.photos) || []);
+      const meta = [`Sleeps ${esc(r.sleeps)}`, esc(r.code)];
+      if (type) {
+        if (type.bathrooms) meta.push(esc(type.bathrooms) + " bath");
+        if (type.view) meta.push(esc(type.view));
+        if (type.max_occupants) meta.push("max " + esc(type.max_occupants) + " guests");
+        if (type.smoking_policy === "non-smoking") meta.push("Non-smoking");
+        if (type.handicap_accessible) meta.push("Accessible");
+        if (Array.isArray(type.beds) && type.beds.length) meta.push(type.beds.map((b) => (Number(b.qty) || 1) + "× " + b.type).join(", "));
+      }
+      const feats = type && Array.isArray(type.features) ? type.features.slice(0, 8) : [];
       return `<article class="bk-room${sel ? " sel" : ""}${booked ? " booked" : ""}">
-        ${r.photos && r.photos.length ? `<img class="bk-room-img" src="${esc(r.photos[0])}" alt="${esc(r.name)}">` : `<div class="bk-room-ph">${esc((r.name || "R").slice(0, 1))}</div>`}
+        ${photos.length ? `<img class="bk-room-img" src="${esc(photos[0])}" alt="${esc(r.name)}">` : `<div class="bk-room-ph">${esc((r.name || "R").slice(0, 1))}</div>`}
         <h3>${esc(r.name)}</h3>
-        <div class="meta">Sleeps ${esc(r.sleeps)} · ${esc(r.code)}</div>
+        <div class="meta">${meta.join(" · ")}</div>
+        ${type && type.description ? `<div class="meta">${esc(type.description)}</div>` : ""}
+        ${feats.length ? `<div class="bk-feats">${feats.map((f) => `<span class="bk-feat">${esc(f)}</span>`).join("")}</div>` : ""}
         <div class="price"><div><b>${money(r.rate_cents / 100)}</b> <span>/ night · ${money(nightlyRatesFor(r).reduce((a, b) => a + b, 0) || r.rate_cents / 100 * n)} for ${n} night${n > 1 ? "s" : ""}</span></div>
         <button class="bk-select" type="button" data-room="${r.id}" ${booked ? "disabled" : ""}>${booked ? "Booked" : sel ? "Selected ✓" : "Select"}</button></div>
       </article>`;
@@ -223,11 +237,14 @@
       const overrideRows = await api("room_rate_overrides?" + tid + "&select=room_id,date,rate_cents").catch(() => []);
       state.overrides = {};
       (overrideRows || []).forEach((o) => { state.overrides[o.room_id + "|" + String(o.date).slice(0, 10)] = o.rate_cents / 100; });
-      const [rooms, addons, taxes] = await Promise.all([
+      const [rooms, addons, taxes, typeRows] = await Promise.all([
         api("rooms?" + tid + "&select=*&order=sort_order.asc"),
         api("addons?" + tid + "&active=eq.true&select=*&order=name.asc"),
-        api("tax_rules?" + tid + "&active=eq.true&select=*&order=sort_order.asc")
+        api("tax_rules?" + tid + "&active=eq.true&select=*&order=sort_order.asc"),
+        api("room_types?" + tid + "&select=*&order=name.asc").catch(() => [])
       ]);
+      state.types = {};
+      (typeRows || []).forEach((t) => { state.types[t.id] = t; });
       state.rooms = rooms || [];
       state.addons = addons || [];
       state.taxes = (taxes || []).map((x) => ({ name: x.name, kind: x.kind, value: Number(x.rate), applies: x.applies_to }));

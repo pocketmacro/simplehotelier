@@ -28,12 +28,36 @@ rooms.forEach((r) => {
   r.typeName = String(r.type || "Cabin").split("·")[0].trim();
   r.photos = r.photos || [];
 });
+/* ---- Room type detail vocabularies ---- */
+const RT_VIEWS = ["", "No particular view", "Garden view", "Courtyard view", "City view", "Forest / woodland view", "Mountain view", "Valley view", "Lake view", "River view", "Ocean view", "Partial ocean view", "Beachfront", "Pool view", "Desert view", "Ski slope view", "Landmark view", "Panoramic view"];
+const RT_SMOKING = [["non-smoking", "Non-smoking"], ["outdoor-only", "Smoking outdoors / balcony only"], ["smoking-allowed", "Smoking allowed"]];
+const RT_BED_TYPES = ["King", "California King", "Queen", "Full / Double", "Twin XL", "Twin", "Bunk bed", "Sofa bed", "Daybed", "Futon", "Murphy bed", "Rollaway", "Air mattress", "Crib"];
+const RT_ACCESS_FEATURES = ["Step-free entry", "Ground floor", "Elevator access", "Wide doorways (32 in+)", "Accessible parking nearby", "Accessible route to room", "Roll-in shower", "Grab bars in shower", "Grab bars by toilet", "Shower seat / bench", "Handheld showerhead", "Raised toilet", "Lowered sink / vanity", "Lowered counters", "Lever door handles", "Lowered light switches", "Lowered bed", "Transfer space beside bed", "Visual fire alarm", "Visual doorbell / hearing kit", "Braille signage", "Service animals welcome"];
+const RT_FEATURES = ["Air conditioning", "Ceiling fan", "Heating", "Fireplace", "Blackout curtains", "Soundproofing", "Windows that open", "Alarm clock", "Reading light", "Extra pillows & blankets", "Linens provided", "Towels provided", "Wardrobe / closet", "Dresser", "Nightstands", "Sofa", "Armchair", "Desk / workspace", "Dining table", "Safe", "Iron & ironing board", "Hair dryer", "Bath", "Shower", "Bathtub & shower", "Soaking tub", "Jetted tub", "Bidet", "Double vanity", "Rain shower", "Handheld shower", "Bathrobes", "Slippers", "Toiletries", "Flat-screen TV", "Cable TV", "Streaming TV", "Free WiFi", "High-speed WiFi", "Ethernet connection", "USB chargers", "Bluetooth speaker", "Board games", "Books", "Full kitchen", "Kitchenette", "Plates & glassware", "Cutlery", "Pots & pans", "Mini fridge", "Full-size fridge", "Microwave", "Oven", "Stovetop", "Dishwasher", "Coffee maker", "Espresso machine", "Kettle", "Toaster", "BBQ utensils", "Washer", "Dryer", "Washer / dryer", "Laundry service", "Private balcony", "Private patio", "Deck / porch", "Outdoor furniture", "BBQ / grill", "Fire pit", "Hot tub", "Private entrance", "24-hour security", "Keyless entry", "Smart lock", "Daily housekeeping", "Free parking", "Garage", "EV charger", "Bike storage", "Ski storage", "Pool access", "Gym access", "Sauna", "Beach access", "Lake access", "Pet friendly", "High chair", "Pack 'n play / crib"];
+function normalizeRoomType(t) {
+  const n = { ...(t || {}) };
+  n.bathrooms = n.bathrooms != null ? Number(n.bathrooms) : 1;
+  n.view = n.view || ""; n.smoking = n.smoking || "non-smoking";
+  n.minStay = n.minStay != null ? n.minStay : 1; n.maxStay = n.maxStay || 0;
+  ["rackRate", "extraAdultRate", "extraChildRate", "extraInfantRate"].forEach((k) => { n[k] = Number(n[k]) || 0; });
+  n.includedAdults = n.includedAdults != null ? n.includedAdults : 2;
+  n.includedChildren = n.includedChildren || 0; n.includedInfants = n.includedInfants || 0;
+  n.maxAdults = n.maxAdults || 0; n.maxChildren = n.maxChildren || 0;
+  n.maxInfants = n.maxInfants || 0; n.maxOccupants = n.maxOccupants || 0;
+  n.adultsRequired = n.adultsRequired != null ? n.adultsRequired : 1;
+  n.beds = Array.isArray(n.beds) ? n.beds : [];
+  n.handicapAccessible = !!n.handicapAccessible;
+  n.accessibleFeatures = Array.isArray(n.accessibleFeatures) ? n.accessibleFeatures : [];
+  n.features = Array.isArray(n.features) ? n.features : [];
+  n.photos = Array.isArray(n.photos) ? n.photos : [];
+  return n;
+}
 let roomTypes = [
-  { id: "demo-cabin", name: "Cabin", desc: "Standalone cabin" },
+  { id: "demo-cabin", name: "Cabin", desc: "Standalone cabin", bathrooms: 1, view: "Forest / woodland view", smoking: "outdoor-only", rackRate: 249, minStay: 2, includedAdults: 2, maxAdults: 4, maxChildren: 2, maxInfants: 1, maxOccupants: 6, adultsRequired: 1, beds: [{ qty: 1, type: "Queen" }, { qty: 2, type: "Twin" }], features: ["Air conditioning", "Heating", "Fireplace", "Full kitchen", "Plates & glassware", "Flat-screen TV", "Free WiFi", "Deck / porch", "Fire pit", "Towels provided", "Linens provided"] },
   { id: "demo-suite", name: "Suite", desc: "Suite in the main lodge" },
   { id: "demo-loft", name: "Loft", desc: "Upper loft unit" },
   { id: "demo-house", name: "House", desc: "Full vacation house" }
-];
+].map(normalizeRoomType);
 /* Per-date rate overrides: "CODE|YYYY-MM-DD" -> nightly USD. No entry = default rate. */
 let rateOverrides = { "A2|2026-11-06": 299, "A2|2026-11-07": 299, "C1|2026-12-24": 449, "C1|2026-12-25": 449, "C1|2026-12-26": 449 };
 let ratesRoomCode = null, ratesMonthOff = 0;
@@ -335,25 +359,160 @@ document.addEventListener("click", (e) => {
 function typeRoomCount(t) {
   return rooms.filter((r) => (r.typeId && r.typeId === t.id) || (!r.typeId && r.typeName === t.name)).length;
 }
+function rtSummary(t) {
+  const bits = [];
+  if (t.bathrooms) bits.push(t.bathrooms + " bath");
+  if (t.view) bits.push(t.view);
+  if (t.maxOccupants) bits.push("max " + t.maxOccupants + " guests");
+  if (t.rackRate) bits.push("rack " + money(t.rackRate));
+  if (t.beds && t.beds.length) bits.push(t.beds.reduce((n, b) => n + (Number(b.qty) || 0), 0) + " bed(s)");
+  if (t.features && t.features.length) bits.push(t.features.length + " features");
+  if (t.photos && t.photos.length) bits.push(t.photos.length + " photo(s)");
+  if (t.handicapAccessible) bits.push("accessible");
+  return bits.join(" · ");
+}
+function bedRowHtml(bed) {
+  const b = bed || { qty: 1, type: "Queen" };
+  const types = RT_BED_TYPES.includes(b.type) ? RT_BED_TYPES : [b.type, ...RT_BED_TYPES];
+  return `<div class="bed-row"><input class="input rt-bed-qty" type="number" min="1" max="20" value="${Number(b.qty) || 1}" aria-label="Number of beds">
+    <select class="select rt-bed-type" aria-label="Bed type">${types.map((x) => `<option ${x === b.type ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>
+    <button class="btn btn-ghost btn-xs" data-action="rt-bed-del" type="button">Remove</button></div>`;
+}
+function checkGridHtml(id, items, selected) {
+  const sel = new Set(selected || []);
+  return `<div class="check-grid" id="${id}">${items.map((f) => `<label class="check-item"><input type="checkbox" value="${esc(f)}" ${sel.has(f) ? "checked" : ""}><span>${esc(f)}</span></label>`).join("")}</div>`;
+}
 function openRoomTypes(editId) {
-  const editing = roomTypes.find((t) => t.id === editId);
+  const editing = editId ? normalizeRoomType(roomTypes.find((t) => t.id === editId)) : normalizeRoomType({});
+  const isEdit = !!editId;
+  const num = (v) => (v === 0 || v ? v : "");
   openModal({
-    title: "Room types", sub: "Group rooms for booking, rates and reports",
+    title: "Room types", sub: "Guest-facing details, occupancy, rates and features for each type",
     body: `
-      <div class="row-list" style="margin-bottom:14px">
+      <div class="row-list" style="margin-bottom:6px">
         ${roomTypes.map((t, i) => `
-          <div class="row-item"><div class="ri-main"><strong>${esc(t.name)}</strong><span>${esc(t.desc || "No description")}</span></div>
+          <div class="row-item"><div class="ri-main"><strong>${esc(t.name)}</strong><span>${esc(rtSummary(normalizeRoomType(t)) || t.desc || "No details yet")}</span></div>
             <div class="ri-right" style="display:flex;gap:6px;align-items:center"><span class="tag">${typeRoomCount(t)} rooms</span>
+            <button class="btn btn-ghost btn-xs" data-action="rt-photos" data-i="${i}" type="button">Photos${t.photos && t.photos.length ? " (" + t.photos.length + ")" : ""}</button>
             <button class="btn btn-ghost btn-xs" data-action="rt-edit" data-i="${i}" type="button">Edit</button>
             <button class="btn btn-ghost btn-xs" data-action="rt-del" data-i="${i}" type="button">Delete</button></div></div>`).join("") || `<p class="hint">No room types yet. Add your first below.</p>`}
       </div>
+
+      <h4 class="rt-sec">${isEdit ? "Edit" : "New"} room type</h4>
       <div class="form-2">
-        <div class="field"><label>${editing ? "Edit" : "New"} type name</label><input class="input" id="rtName" value="${editing ? esc(editing.name) : ""}" placeholder="e.g. Cabin"></div>
-        <div class="field"><label>Description</label><input class="input" id="rtDesc" value="${editing ? esc(editing.desc || "") : ""}" placeholder="Short guest-facing text"></div>
-      </div>`,
+        <div class="field"><label>Type name</label><input class="input" id="rtName" value="${isEdit ? esc(editing.name || "") : ""}" placeholder="e.g. Cabin"></div>
+        <div class="field"><label>Bathrooms</label><input class="input" id="rtBathrooms" type="number" min="0" step="0.5" value="${editing.bathrooms}"></div>
+      </div>
+      <div class="field"><label>Description</label><textarea class="textarea" id="rtDesc" placeholder="Short guest-facing text shown on your booking page">${isEdit ? esc(editing.desc || "") : ""}</textarea></div>
+      <div class="form-2">
+        <div class="field"><label>Room view</label><select class="select" id="rtView">${RT_VIEWS.map((v) => `<option value="${esc(v)}" ${v === editing.view ? "selected" : ""}>${v || "Select a view…"}</option>`).join("")}</select></div>
+        <div class="field"><label>Smoking policy</label><select class="select" id="rtSmoking">${RT_SMOKING.map(([v, l]) => `<option value="${v}" ${v === editing.smoking ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+      </div>
+
+      <h4 class="rt-sec">Stay &amp; rates (defaults)</h4>
+      <div class="form-3">
+        <div class="field"><label>Min stay (nights)</label><input class="input" id="rtMinStay" type="number" min="0" value="${editing.minStay}"></div>
+        <div class="field"><label>Max stay (nights)</label><input class="input" id="rtMaxStay" type="number" min="0" value="${num(editing.maxStay)}" placeholder="No limit"></div>
+        <div class="field"><label>Rack rate (USD/night)</label><input class="input mono" id="rtRackRate" type="number" min="0" step="0.01" value="${num(editing.rackRate)}" placeholder="0.00"></div>
+      </div>
+      <div class="form-3">
+        <div class="field"><label>Extra adult (USD/night)</label><input class="input mono" id="rtExtraAdult" type="number" min="0" step="0.01" value="${num(editing.extraAdultRate)}" placeholder="0.00"></div>
+        <div class="field"><label>Extra child (USD/night)</label><input class="input mono" id="rtExtraChild" type="number" min="0" step="0.01" value="${num(editing.extraChildRate)}" placeholder="0.00"></div>
+        <div class="field"><label>Extra infant (USD/night)</label><input class="input mono" id="rtExtraInfant" type="number" min="0" step="0.01" value="${num(editing.extraInfantRate)}" placeholder="0.00"></div>
+      </div>
+
+      <h4 class="rt-sec">Occupancy</h4>
+      <div class="form-3">
+        <div class="field"><label>Included adults</label><input class="input" id="rtIncAdults" type="number" min="0" value="${editing.includedAdults}"><span class="help">Covered by the base rate (default 2)</span></div>
+        <div class="field"><label>Included children</label><input class="input" id="rtIncChildren" type="number" min="0" value="${editing.includedChildren}"></div>
+        <div class="field"><label>Included infants</label><input class="input" id="rtIncInfants" type="number" min="0" value="${editing.includedInfants}"></div>
+      </div>
+      <div class="form-3">
+        <div class="field"><label>Max adults</label><input class="input" id="rtMaxAdults" type="number" min="0" value="${num(editing.maxAdults)}" placeholder="No limit"></div>
+        <div class="field"><label>Max children</label><input class="input" id="rtMaxChildren" type="number" min="0" value="${num(editing.maxChildren)}" placeholder="No limit"></div>
+        <div class="field"><label>Max infants</label><input class="input" id="rtMaxInfants" type="number" min="0" value="${num(editing.maxInfants)}" placeholder="No limit"></div>
+      </div>
+      <div class="form-2">
+        <div class="field"><label>Max occupants (total)</label><input class="input" id="rtMaxOccupants" type="number" min="0" value="${num(editing.maxOccupants)}" placeholder="No limit"></div>
+        <div class="field"><label>Adults required (minimum)</label><input class="input" id="rtAdultsRequired" type="number" min="0" value="${editing.adultsRequired}"><span class="help">At least this many adults per booking</span></div>
+      </div>
+
+      <h4 class="rt-sec">Beds</h4>
+      <div id="rtBeds">${(editing.beds.length ? editing.beds : [{ qty: 1, type: "Queen" }]).map(bedRowHtml).join("")}</div>
+      <button class="btn btn-ghost btn-sm" data-action="rt-bed-add" type="button">+ Add a bed</button>
+
+      <h4 class="rt-sec">Accessibility</h4>
+      <label class="check-item rt-access-toggle"><input type="checkbox" id="rtHandicap" ${editing.handicapAccessible ? "checked" : ""}><span><strong>Handicap / wheelchair accessible</strong></span></label>
+      <div class="field" style="margin-top:10px"><label>Accessible features</label>${checkGridHtml("rtAccessGrid", RT_ACCESS_FEATURES, editing.accessibleFeatures)}</div>
+
+      <h4 class="rt-sec">Features &amp; amenities</h4>
+      <div class="field"><input class="input" id="rtFeatureSearch" type="search" placeholder="Filter features… (e.g. bath, tv, plates)"><span class="help">Tick everything this room type includes — shown on your booking page.</span></div>
+      ${checkGridHtml("rtFeatureGrid", RT_FEATURES, editing.features)}
+      <p class="hint" style="margin-top:12px">Photos: use the Photos button next to the type above. Type photos are the fallback on the booking page when a room has none of its own.</p>`,
     foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Close</button>
-      <button class="btn btn-primary btn-sm" data-action="rt-save" data-edit="${editing ? editing.id : ""}" type="button">${editing ? "Save type" : "Add type"}</button>`,
+      <button class="btn btn-primary btn-sm" data-action="rt-save" data-edit="${isEdit ? editing.id : ""}" type="button">${isEdit ? "Save type" : "Add type"}</button>`,
     wide: true
+  });
+  const search = $("#rtFeatureSearch");
+  if (search) search.addEventListener("input", () => {
+    const q = search.value.trim().toLowerCase();
+    $$("#rtFeatureGrid .check-item").forEach((el) => { el.style.display = !q || el.textContent.toLowerCase().includes(q) ? "" : "none"; });
+  });
+}
+function openRoomTypePhotos(id) {
+  const t = roomTypes.find((x) => x.id === id);
+  if (!t) return;
+  t.photos = Array.isArray(t.photos) ? t.photos : [];
+  openModal({
+    title: `Photos · ${t.name}`, sub: "Type photos show on the booking page when a room has none of its own",
+    body: `
+      <div class="photo-grid">${t.photos.map((p, i) => `<figure><img src="${esc(p)}" alt=""><button type="button" data-action="rt-photo-del" data-id="${esc(t.id)}" data-i="${i}" aria-label="Remove photo">✕</button></figure>`).join("") || `<p class="hint">No photos yet. Upload the first below.</p>`}</div>
+      <div style="margin-top:14px;display:flex;gap:8px;align-items:center">
+        <label class="btn btn-primary btn-sm" for="rtPhotoFile" style="cursor:pointer">Upload photos</label>
+        <input type="file" id="rtPhotoFile" accept="image/*" multiple hidden>
+        <span class="help" style="font-size:12px;color:var(--faint)">JPG or PNG, up to 5 MB each</span>
+      </div>`,
+    foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Done</button>`,
+    wide: true
+  });
+  $("#rtPhotoFile").addEventListener("change", async (e) => {
+    const files = [...e.target.files];
+    if (!files.length) return;
+    for (const f of files) {
+      if (f.size > 5 * 1024 * 1024) { toast("Skipped a large photo", f.name + " is over 5 MB", "warn"); continue; }
+      try {
+        let url;
+        if (window.SHDB && SHDB.hasLive() && t.id && !String(t.id).startsWith("demo-") && !String(t.id).startsWith("local-")) {
+          url = await SHDB.uploadPublic("room-photos", `${SHDB.tenantId()}/types/${t.id}/${Date.now()}-${f.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`, f);
+        } else {
+          url = URL.createObjectURL(f);
+          toast("Photo preview only", "Sign in live to save photos to your property", "warn");
+        }
+        t.photos.push(url);
+      } catch { toast("Upload failed", f.name, "err"); }
+    }
+    if (window.SHDB && SHDB.hasLive() && t.id && !String(t.id).startsWith("demo-") && !String(t.id).startsWith("local-")) SHDB.updateRoomType(t.id, normalizeRoomType(t)).catch(() => toast("Photos saved locally only", "Storage sync failed", "warn"));
+    openRoomTypePhotos(t.id);
+  });
+}
+function readRoomTypeForm() {
+  const checked = (grid) => $$("#" + grid + " input:checked").map((el) => el.value);
+  const val = (sel) => { const el = $(sel); return el ? el.value.trim() : ""; };
+  const intVal = (sel, d) => { const v = parseInt(val(sel), 10); return Number.isFinite(v) ? v : d; };
+  const moneyVal = (sel) => { const v = parseFloat(val(sel)); return Number.isFinite(v) && v > 0 ? v : 0; };
+  return normalizeRoomType({
+    name: val("#rtName"), desc: val("#rtDesc"),
+    bathrooms: parseFloat(val("#rtBathrooms")) || 1,
+    view: val("#rtView"), smoking: val("#rtSmoking") || "non-smoking",
+    minStay: intVal("#rtMinStay", 1), maxStay: intVal("#rtMaxStay", 0),
+    rackRate: moneyVal("#rtRackRate"),
+    extraAdultRate: moneyVal("#rtExtraAdult"), extraChildRate: moneyVal("#rtExtraChild"), extraInfantRate: moneyVal("#rtExtraInfant"),
+    includedAdults: intVal("#rtIncAdults", 2), includedChildren: intVal("#rtIncChildren", 0), includedInfants: intVal("#rtIncInfants", 0),
+    maxAdults: intVal("#rtMaxAdults", 0), maxChildren: intVal("#rtMaxChildren", 0), maxInfants: intVal("#rtMaxInfants", 0),
+    maxOccupants: intVal("#rtMaxOccupants", 0), adultsRequired: intVal("#rtAdultsRequired", 1),
+    beds: $$("#rtBeds .bed-row").map((row) => ({ qty: Math.max(1, parseInt($(".rt-bed-qty", row).value, 10) || 1), type: $(".rt-bed-type", row).value })).filter((b) => b.type),
+    handicapAccessible: !!($("#rtHandicap") && $("#rtHandicap").checked),
+    accessibleFeatures: checked("rtAccessGrid"), features: checked("rtFeatureGrid")
   });
 }
 function openEditRoom(code) {
@@ -741,27 +900,46 @@ document.addEventListener("click", (e) => {
     toast(`Deleted type “${gone.name}”`, "Rooms keep their own names and rates", "warn");
     openRoomTypes();
   }
+  else if (a === "rt-photos") openRoomTypePhotos(roomTypes[+el.dataset.i].id);
+  else if (a === "rt-photo-del") {
+    const t = roomTypes.find((x) => x.id === el.dataset.id);
+    if (t) {
+      t.photos.splice(+el.dataset.i, 1);
+      if (window.SHDB && SHDB.hasLive() && !String(t.id).startsWith("demo-") && !String(t.id).startsWith("local-")) SHDB.updateRoomType(t.id, normalizeRoomType(t)).catch(() => {});
+      openRoomTypePhotos(t.id);
+    }
+  }
+  else if (a === "rt-bed-add") {
+    const wrap = $("#rtBeds");
+    if (wrap) { wrap.insertAdjacentHTML("beforeend", bedRowHtml()); const qty = wrap.lastElementChild && $(".rt-bed-qty", wrap.lastElementChild); if (qty) qty.focus(); }
+  }
+  else if (a === "rt-bed-del") {
+    const row = el.closest(".bed-row");
+    if (row) row.remove();
+  }
   else if (a === "rt-save") {
-    const name = $("#rtName").value.trim();
-    if (!name) { toast("Give the type a name", "e.g. Cabin, Suite, Loft", "warn"); return; }
-    const desc = $("#rtDesc").value.trim();
+    const data = readRoomTypeForm();
+    if (!data.name) { toast("Give the type a name", "e.g. Cabin, Suite, Loft", "warn"); return; }
+    if (data.maxStay > 0 && data.minStay > data.maxStay) { toast("Check stay limits", "Minimum stay is longer than the maximum stay", "warn"); return; }
+    const included = data.includedAdults + data.includedChildren + data.includedInfants;
+    if (data.maxOccupants > 0 && included > data.maxOccupants) { toast("Check occupancy", "Included occupants exceed the maximum occupants", "warn"); return; }
     const editId = el.dataset.edit;
     if (editId) {
       const t = roomTypes.find((x) => x.id === editId);
       const oldName = t.name;
-      t.name = name; t.desc = desc;
-      rooms.forEach((r) => { if (r.typeId === t.id || r.typeName === oldName) { r.typeName = name; syncRoomType(r); } });
-      if (window.SHDB && SHDB.hasLive() && !String(t.id).startsWith("demo-")) SHDB.updateRoomType(t.id, t).catch(() => toast("Type saved locally only", "Supabase write failed", "warn"));
-      else if (window.SHDB && SHDB.hasLive()) SHDB.createRoomType(t).then((row) => { if (row) t.id = row.id; }).catch(() => {});
-      toast("Room type saved", name, "ok");
+      Object.assign(t, data, { photos: Array.isArray(t.photos) ? t.photos : [] });
+      rooms.forEach((r) => { if (r.typeId === t.id || r.typeName === oldName) { r.typeName = data.name; syncRoomType(r); } });
+      if (window.SHDB && SHDB.hasLive() && !String(t.id).startsWith("demo-")) SHDB.updateRoomType(t.id, normalizeRoomType(t)).catch(() => toast("Type saved locally only", "Supabase write failed", "warn"));
+      else if (window.SHDB && SHDB.hasLive()) SHDB.createRoomType(normalizeRoomType(t)).then((row) => { if (row) t.id = row.id; }).catch(() => {});
+      toast("Room type saved", data.name, "ok");
     } else {
-      const nt = { id: "local-" + Date.now(), name, desc };
+      const nt = normalizeRoomType({ ...data, id: "local-" + Date.now(), photos: [] });
       roomTypes.push(nt);
       if (window.SHDB && SHDB.hasLive()) SHDB.createRoomType(nt).then((row) => { if (row) nt.id = row.id; }).catch(() => toast("Type saved locally only", "Supabase write failed", "warn"));
-      toast("Room type added", name, "ok");
+      toast("Room type added", data.name, "ok");
     }
     renderRooms();
-    openRoomTypes();
+    openRoomTypes(editId || undefined);
   }
   else if (a === "save-edit-room") {
     const r = roomByCode(el.dataset.code);
@@ -1021,7 +1199,7 @@ function loadLiveIntoUI() {
     if (live.reservations.length) { reservations.splice(0, reservations.length, ...live.reservations); }
     if (live.addons.length) { addons.splice(0, addons.length, ...live.addons); }
     if (live.taxes.length) { taxes.splice(0, taxes.length, ...live.taxes); }
-    if (live.roomTypes && live.roomTypes.length) roomTypes = live.roomTypes;
+    if (live.roomTypes && live.roomTypes.length) roomTypes = live.roomTypes.map(normalizeRoomType);
     if (live.rateOverrides) { rateOverrides = {}; live.rateOverrides.forEach((o) => { if (o.roomCode) rateOverrides[o.roomCode + "|" + o.date] = o.rate; }); }
     if (live.txns && live.txns.length) { txns.splice(0, txns.length, ...live.txns); }
     renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();

@@ -39,6 +39,8 @@ h1, h2 { font-family: "Sora", "Segoe UI", sans-serif; color: var(--ink); letter-
 .bk-room.booked { opacity: .55; }
 .bk-room h3 { margin: 0; font-family: "Sora", sans-serif; font-size: 16px; color: var(--ink); }
 .bk-room .meta { font-size: 12.8px; color: var(--muted); }
+.bk-feats { display: flex; flex-wrap: wrap; gap: 5px; }
+.bk-feat { font-size: 11px; font-weight: 600; color: var(--brand); background: #eef4f2; border: 1px solid #d8e4e0; border-radius: 999px; padding: 2px 8px; }
 .bk-room .price { margin-top: auto; padding-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .bk-room .price b { font-family: "Sora", sans-serif; color: var(--ink); font-size: 17px; }
 .bk-room .price span { font-size: 11.8px; color: var(--faint); }

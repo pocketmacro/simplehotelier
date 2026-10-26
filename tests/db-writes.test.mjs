@@ -29,6 +29,9 @@ globalThis.fetch = async (url, opts = {}) => {
   if (u.includes("/rest/v1/addons?")) return json([]);
   if (u.includes("/rest/v1/tax_rules?")) return json([]);
   if (u.includes("/rest/v1/transactions?")) return json([]);
+  if (u.includes("/rest/v1/room_types") && opts.method === "POST") return json([{ id: "type-2" }], 201);
+  if (u.includes("/rest/v1/room_types") && opts.method === "PATCH") return json([{ id: "type-1" }]);
+  if (u.includes("/rest/v1/room_types?")) return json([{ id: "type-1", tenant_id: tenantId, name: "Cabin", description: "Standalone", bathrooms: 1.5, view: "Mountain view", smoking_policy: "non-smoking", min_stay: 2, max_stay: 14, rack_rate_cents: 24900, extra_adult_cents: 2500, extra_child_cents: 1000, extra_infant_cents: 0, included_adults: 2, included_children: 0, included_infants: 0, max_adults: 4, max_children: 2, max_infants: 1, max_occupants: 6, adults_required: 1, beds: [{ qty: 1, type: "Queen" }], handicap_accessible: true, accessible_features: ["Step-free entry"], features: ["Hot tub"], photos: ["https://example.com/y.jpg"] }]);
   if (u.includes("/rest/v1/reservations") && opts.method === "POST") return json([{ id: "res-1", confirmation_code: opts.body ? JSON.parse(opts.body).confirmation_code : null }], 201);
   if (u.includes("/rest/v1/addons") && opts.method === "POST") return json([{ id: "addon-1" }], 201);
   return json([], 200);
@@ -52,6 +55,42 @@ test("createReservation posts a tenant-scoped payload with room UUID and cents",
   assert.equal(post.body.guest_email, "guest@example.com");
   assert.equal(post.body.total_cents, 40824);
   assert.equal(created.id, "res-1");
+});
+
+test("room type details map cents and JSONB lists on load", async () => {
+  const live = await window.SHDB.loadLiveData();
+  const t = live.roomTypes[0];
+  assert.equal(t.name, "Cabin");
+  assert.equal(t.bathrooms, 1.5);
+  assert.equal(t.view, "Mountain view");
+  assert.equal(t.rackRate, 249);
+  assert.equal(t.extraAdultRate, 25);
+  assert.equal(t.includedAdults, 2);
+  assert.equal(t.maxOccupants, 6);
+  assert.deepEqual(t.beds, [{ qty: 1, type: "Queen" }]);
+  assert.equal(t.handicapAccessible, true);
+  assert.deepEqual(t.features, ["Hot tub"]);
+  assert.deepEqual(t.photos, ["https://example.com/y.jpg"]);
+});
+
+test("createRoomType posts full detail payload in cents", async () => {
+  await window.SHDB.createRoomType({
+    name: "Loft", desc: "Upper loft", bathrooms: 1, view: "City view", smoking: "non-smoking",
+    minStay: 1, maxStay: 0, rackRate: 300, extraAdultRate: 30, extraChildRate: 15, extraInfantRate: 5,
+    includedAdults: 2, includedChildren: 1, includedInfants: 0,
+    maxAdults: 3, maxChildren: 2, maxInfants: 1, maxOccupants: 5, adultsRequired: 1,
+    beds: [{ qty: 1, type: "King" }, { qty: 2, type: "Twin" }],
+    handicapAccessible: false, accessibleFeatures: [], features: ["Air conditioning"], photos: []
+  });
+  const post = calls.find((c) => c.method === "POST" && c.url.includes("/rest/v1/room_types"));
+  assert.ok(post, "expected a POST to room_types");
+  assert.equal(post.body.tenant_id, tenantId);
+  assert.equal(post.body.rack_rate_cents, 30000);
+  assert.equal(post.body.extra_infant_cents, 500);
+  assert.equal(post.body.included_adults, 2);
+  assert.equal(post.body.max_occupants, 5);
+  assert.deepEqual(post.body.beds, [{ qty: 1, type: "King" }, { qty: 2, type: "Twin" }]);
+  assert.deepEqual(post.body.features, ["Air conditioning"]);
 });
 
 test("createAddon converts dollars to cents and scopes to tenant", async () => {

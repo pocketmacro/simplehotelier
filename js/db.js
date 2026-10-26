@@ -29,6 +29,45 @@
     return res.status === 204 ? null : res.json();
   }
 
+  /* Room types: DB columns (cents, snake_case) <-> app shape (dollars, camelCase). */
+  const arr = (v) => (Array.isArray(v) ? v : []);
+  function mapRoomType(t) {
+    return {
+      id: t.id, name: t.name, desc: t.description || "",
+      bathrooms: t.bathrooms != null ? Number(t.bathrooms) : 1,
+      view: t.view || "", smoking: t.smoking_policy || "non-smoking",
+      minStay: t.min_stay != null ? t.min_stay : 1, maxStay: t.max_stay || 0,
+      rackRate: (t.rack_rate_cents || 0) / 100,
+      extraAdultRate: (t.extra_adult_cents || 0) / 100,
+      extraChildRate: (t.extra_child_cents || 0) / 100,
+      extraInfantRate: (t.extra_infant_cents || 0) / 100,
+      includedAdults: t.included_adults != null ? t.included_adults : 2,
+      includedChildren: t.included_children || 0, includedInfants: t.included_infants || 0,
+      maxAdults: t.max_adults || 0, maxChildren: t.max_children || 0,
+      maxInfants: t.max_infants || 0, maxOccupants: t.max_occupants || 0,
+      adultsRequired: t.adults_required != null ? t.adults_required : 1,
+      beds: arr(t.beds), handicapAccessible: !!t.handicap_accessible,
+      accessibleFeatures: arr(t.accessible_features), features: arr(t.features), photos: arr(t.photos)
+    };
+  }
+  function roomTypePayload(t) {
+    const cents = (n) => Math.round((Number(n) || 0) * 100);
+    const int = (n, d) => { const v = parseInt(n, 10); return Number.isFinite(v) ? v : d; };
+    return {
+      name: t.name, description: t.desc || null,
+      bathrooms: Number(t.bathrooms) || 1, view: t.view || null,
+      smoking_policy: t.smoking || "non-smoking",
+      min_stay: int(t.minStay, 1), max_stay: int(t.maxStay, 0),
+      rack_rate_cents: cents(t.rackRate),
+      extra_adult_cents: cents(t.extraAdultRate), extra_child_cents: cents(t.extraChildRate), extra_infant_cents: cents(t.extraInfantRate),
+      included_adults: int(t.includedAdults, 2), included_children: int(t.includedChildren, 0), included_infants: int(t.includedInfants, 0),
+      max_adults: int(t.maxAdults, 0), max_children: int(t.maxChildren, 0), max_infants: int(t.maxInfants, 0), max_occupants: int(t.maxOccupants, 0),
+      adults_required: int(t.adultsRequired, 1),
+      beds: arr(t.beds), handicap_accessible: !!t.handicapAccessible,
+      accessible_features: arr(t.accessibleFeatures), features: arr(t.features), photos: arr(t.photos)
+    };
+  }
+
   const dayOff = (iso) => Math.round((new Date(iso + "T12:00:00") - ANCHOR) / DAY);
   const mapStatus = (s) => ({ checked_in: "checked-in", checked_out: "checked-out" }[s] || s);
   const statusIn = (s) => ({ "checked-in": "checked_in", "checked-out": "checked_out" }[s] || s);
@@ -77,7 +116,8 @@
         rest("room_rate_overrides?" + tid + "&select=*").catch(() => [])
       ]);
       const typeNameById = {};
-      (roomTypesRaw || []).forEach((t) => { typeNameById[t.id] = t.name; });
+      const typePhotosById = {};
+      (roomTypesRaw || []).forEach((t) => { typeNameById[t.id] = t.name; typePhotosById[t.id] = arr(t.photos); });
       ctx.roomIdByCode = {};
       rooms.forEach((r) => { ctx.roomIdByCode[r.code] = r.id; });
       const txnRows = await rest("transactions?" + tid + "&select=*&order=created_at.desc&limit=20").catch(() => []);
@@ -91,9 +131,9 @@
           type: ((typeNameById[r.room_type_id] ? typeNameById[r.room_type_id] + " · " : "") + "Sleeps " + (r.sleeps || 2)),
           rate: (r.rate_cents || 0) / 100, status: r.status,
           hk: r.housekeeping_status, guest: "", note: r.notes || "",
-          photos: Array.isArray(r.photos) ? r.photos : []
+          photos: Array.isArray(r.photos) && r.photos.length ? r.photos : (typePhotosById[r.room_type_id] || [])
         })),
-        roomTypes: (roomTypesRaw || []).map((t) => ({ id: t.id, name: t.name, desc: t.description || "" })),
+        roomTypes: (roomTypesRaw || []).map(mapRoomType),
         rateOverrides: (overridesRaw || []).map((o) => ({ roomId: o.room_id, roomCode: roomCode(o.room_id), date: String(o.date || "").slice(0, 10), rate: (o.rate_cents || 0) / 100 })),
         reservations: reservations.map((r) => ({
           id: r.id, ref: r.confirmation_code, guest: r.guest_name,
@@ -207,12 +247,12 @@
   }
   async function createRoomType(t) {
     if (!ctx.tenantId) return null;
-    const rows = await rest("room_types", { method: "POST", headers: rep, body: JSON.stringify({ tenant_id: ctx.tenantId, name: t.name, description: t.desc || null }) });
+    const rows = await rest("room_types", { method: "POST", headers: rep, body: JSON.stringify({ tenant_id: ctx.tenantId, ...roomTypePayload(t) }) });
     return rows && rows[0];
   }
   async function updateRoomType(id, t) {
     if (!id) return;
-    await rest("room_types?id=eq." + id, { method: "PATCH", body: JSON.stringify({ name: t.name, description: t.desc || null }) });
+    await rest("room_types?id=eq." + id, { method: "PATCH", body: JSON.stringify(roomTypePayload(t)) });
   }
   async function deleteRoomType(id) { if (id) await rest("room_types?id=eq." + id, { method: "DELETE" }); }
   async function upsertRateOverrides(roomId, roomCodeVal, entries) {
