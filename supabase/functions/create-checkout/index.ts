@@ -51,7 +51,9 @@ Deno.serve(async (req) => {
       success_url: base + "/app.html?checkout=success",
       cancel_url: base + "/app.html?checkout=cancelled",
       metadata: { tenant_id: tenant.id },
-      subscription_data: { metadata: { tenant_id: tenant.id } },
+      // Card is required up front; billing starts after a 30-day free trial.
+      payment_method_collection: "always",
+      subscription_data: { trial_period_days: 30, metadata: { tenant_id: tenant.id } },
     });
     return json({ url: session.url });
   } catch (e: any) {

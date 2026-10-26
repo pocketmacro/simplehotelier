@@ -50,7 +50,13 @@
   }
 
   async function signup(email, password) {
-    const data = await authFetch("signup", {
+    // Send confirmation links back to this app (not the Site URL landing page,
+    // and never localhost). Must be covered by the auth redirect allowlist.
+    let redirect = "";
+    try {
+      if (location.protocol.startsWith("http")) redirect = "?redirect_to=" + encodeURIComponent(location.origin + location.pathname);
+    } catch { /* file:// or tests: default Site URL applies */ }
+    const data = await authFetch("signup" + redirect, {
       method: "POST", body: JSON.stringify({ email, password })
     });
     saveSession(data);
@@ -196,6 +202,6 @@
     }
   }
 
-  window.SHAuth = { configured, sessionUser, logout, validateSession, wire };
+  window.SHAuth = { configured, sessionUser, logout, validateSession, wire, createProperty };
   wire();
 })();

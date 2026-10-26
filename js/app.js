@@ -252,6 +252,16 @@ function renderOverview() {
   const pend = active.filter((r) => r.status === "pending");
   if (pend.length) items.push(`<div class="row-item"><span class="pill pending"><i></i>Pending</span><div class="ri-main"><strong>${pend.length} request${pend.length > 1 ? "s" : ""} await confirmation</strong><span>${pend.map((r) => esc(r.guest)).slice(0, 2).join(", ")}</span></div><div class="ri-right"><button class="btn btn-ghost btn-xs" data-goto="reservations" type="button">Review</button></div></div>`);
   $("#attentionList").innerHTML = items.join("") || `<div class="empty">All caught up. Nothing needs attention.</div>`;
+  // Keep the Settings setup checklist honest for brand-new (empty) accounts.
+  const chkItems = $$("#checklist .check");
+  const setChk = (ix, done, label) => {
+    const row = chkItems[ix]; if (!row) return;
+    row.classList.toggle("done", done);
+    const box = row.querySelector(".box"); if (box) box.textContent = done ? "✓" : "";
+    const strong = row.querySelector("strong"); if (strong && label) strong.textContent = label;
+  };
+  setChk(1, rooms.length > 0, rooms.length ? `${rooms.length} room${rooms.length > 1 ? "s" : ""} added with rates` : "Add your rooms and rates");
+  setChk(3, taxes.length > 0, taxes.length ? "Taxes configured" : "Configure taxes");
   const kv = $("#bkPerfKv");
   if (kv) kv.innerHTML = `
     <dt>Rooms listed</dt><dd class="mono">${rooms.length}</dd>
@@ -344,6 +354,16 @@ $("#calToday").addEventListener("click", () => { calOffset = 0; renderCalendar()
 
 /* ---------------- Rooms + housekeeping ---------------- */
 function renderRooms() {
+  if (!rooms.length) {
+    $("#roomGrid").innerHTML = `<div class="card card-pad" style="grid-column:1/-1;text-align:center;padding:34px 22px">
+      <h3>No rooms yet</h3>
+      <p class="hint" style="max-width:460px;margin:8px auto 16px">Add your first cabin or room to set rates, take bookings and appear on your booking page. Room Types first if several units share the same layout.</p>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" data-action="add-room" type="button">Add your first room</button>
+        <button class="btn btn-ghost btn-sm" data-action="room-types" type="button">Set up room types</button>
+      </div></div>`;
+    return;
+  }
   $("#roomGrid").innerHTML = rooms.map((r) => `
     <div class="card room-card">
       ${r.photos && r.photos.length ? `<img class="room-cover" src="${esc(r.photos[0])}" alt="${esc(r.name)}">` : ""}
@@ -1345,6 +1365,23 @@ document.addEventListener("click", (e) => {
     closeModal();
     toast("Email draft opened", email || "Address it to your cleaner", "ok");
   }
+  else if (a === "setup-property") {
+    const name = $("#obPropertyName") ? $("#obPropertyName").value.trim() : "";
+    if (!name) { toast("Give your property a name", "It becomes your booking page title", "warn"); return; }
+    if (!window.SHAuth || !SHAuth.createProperty) { toast("Please log in again", "Your session needs a refresh before setup", "warn"); return; }
+    el.disabled = true; el.textContent = "Creating…";
+    SHAuth.createProperty(name)
+      .then(async (tenant) => {
+        closeModal();
+        toast("Property created", name + " · now start your free trial", "ok");
+        const started = await startTrialCheckout(tenant.id);
+        if (!started) loadLiveIntoUI();
+      })
+      .catch((err) => {
+        el.disabled = false; el.textContent = "Create property & continue";
+        toast("Could not create the property", err.message || "Try a different name", "err");
+      });
+  }
   else if (a === "save-settings") {
     const v = (id) => { const el = $(id); return el ? el.value.trim() : ""; };
     const url = (id) => { const s = v(id); return s && !/^https?:\/\//i.test(s) ? "https://" + s : s; };
@@ -1475,6 +1512,54 @@ renderRooms(); renderHK(); renderFolios(); renderTxns();
 renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview();
 bindStudio(); updateEmbed(null);
 
+/* ---------------- Onboarding: property first, then card + 30-day trial ---------------- */
+function clearAllData() {
+  rooms.splice(0, rooms.length);
+  reservations.splice(0, reservations.length);
+  addons.splice(0, addons.length);
+  taxes.splice(0, taxes.length);
+  roomTypes = [];
+  txns.splice(0, txns.length);
+  rateOverrides = {};
+}
+function renderAll() {
+  renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
+  renderRooms(); renderHK(); renderFolios(); renderTxns();
+  renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview();
+}
+function openPropertySetup() {
+  openModal({
+    title: "Set up your property", sub: "Name it, then add a card to start your 30-day free trial",
+    body: `
+      <div class="field"><label>Property name</label><input class="input" id="obPropertyName" placeholder="e.g. Pinecrest Cabins"><span class="help">This becomes your booking page title. You can add address, photos, rooms and rates right after.</span></div>
+      <div class="kv" style="margin-top:6px">
+        <dt>Plan</dt><dd>SimpleHotelier · $30 / month</dd>
+        <dt>Free trial</dt><dd>30 days · card required, nothing charged today</dd>
+        <dt>Then</dt><dd>Add rooms, set rates, publish your booking page</dd>
+      </div>`,
+    foot: `<button class="btn btn-ghost btn-sm" data-close type="button">I'll do this later</button>
+      <button class="btn btn-primary btn-sm" data-action="setup-property" type="button">Create property &amp; continue</button>`,
+    wide: true
+  });
+  const inp = $("#obPropertyName"); if (inp) inp.focus();
+}
+async function startTrialCheckout(tenantId) {
+  try {
+    const c = window.SH_CONFIG || {};
+    const token = localStorage.getItem("sh_access_token") || c.SUPABASE_ANON_KEY;
+    const res = await fetch((c.SUPABASE_URL || "").replace(/\/$/, "") + "/functions/v1/create-checkout", {
+      method: "POST",
+      headers: { apikey: c.SUPABASE_ANON_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ tenant_id: tenantId, origin: location.origin })
+    });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok && d.url) { location.href = d.url; return true; }
+    toast("Property created", "Finish your trial setup anytime from Settings → Plan and billing", "warn");
+  } catch { toast("Property created", "Finish your trial setup anytime from Settings → Plan and billing", "warn"); }
+  return false;
+}
+let checkoutToastShown = false, billingReminderShown = false;
+
 /* Live Supabase data (falls back silently to demo data when unconfigured).
    Reservations require a signed-in member under RLS; rooms/add-ons/taxes are public. */
 function loadLiveIntoUI() {
@@ -1489,17 +1574,22 @@ function loadLiveIntoUI() {
       return;
     }
     if (!live.tenant) {
-      if (statusEl) statusEl.textContent = "Signed in as " + (live.user ? live.user.email : "") + " — no property linked yet. Create one from the signup screen.";
-      toast("No property linked yet", "Sign out, then Create account to add your property", "warn");
+      // Signed in but no property yet: never show the demo property. Start blank
+      // and walk them through setup (property name, then card + free trial).
+      if (statusEl) statusEl.textContent = "Signed in as " + (live.user ? live.user.email : "") + " — set up your property to get started.";
+      clearAllData();
+      renderAll();
+      openPropertySetup();
       return;
     }
-    if (live.rooms.length) { rooms.splice(0, rooms.length, ...live.rooms); }
-    if (live.reservations.length) { reservations.splice(0, reservations.length, ...live.reservations); }
-    if (live.addons.length) { addons.splice(0, addons.length, ...live.addons); }
-    if (live.taxes.length) { taxes.splice(0, taxes.length, ...live.taxes); }
-    if (live.roomTypes && live.roomTypes.length) roomTypes = live.roomTypes.map(normalizeRoomType);
+    // Real account: replace wholesale, even when empty — demo data must never leak in.
+    rooms.splice(0, rooms.length, ...live.rooms);
+    reservations.splice(0, reservations.length, ...live.reservations);
+    addons.splice(0, addons.length, ...live.addons);
+    taxes.splice(0, taxes.length, ...live.taxes);
+    roomTypes = (live.roomTypes || []).map(normalizeRoomType);
     if (live.rateOverrides) { rateOverrides = {}; live.rateOverrides.forEach((o) => { if (o.roomCode) rateOverrides[o.roomCode + "|" + o.date] = o.rate; }); }
-    if (live.txns && live.txns.length) { txns.splice(0, txns.length, ...live.txns); }
+    txns.splice(0, txns.length, ...(live.txns || []));
     tenantDisplayName = live.tenant.name || "";
     renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
     renderRooms(); renderHK(); renderFolios(); renderTxns(); renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview();
@@ -1545,6 +1635,16 @@ function loadLiveIntoUI() {
     if ($("#billPeriod")) $("#billPeriod").textContent = live.tenant.current_period_end ? new Date(live.tenant.current_period_end).toLocaleDateString() : "-";
     if (statusEl) statusEl.textContent = "Data source: Supabase · " + live.tenant.name + " (live" + (live.user ? " · " + live.user.email : "") + ")";
     toast("Connected to Supabase", live.tenant.name + " loaded live", "ok");
+    if (!checkoutToastShown) {
+      checkoutToastShown = true;
+      const co = new URLSearchParams(location.search).get("checkout");
+      if (co === "success") setTimeout(() => toast("Your 30-day free trial is active", "$30/month after the trial · manage it in Settings", "ok"), 600);
+      else if (co === "cancelled") setTimeout(() => toast("Checkout not finished", "Start your free trial anytime from Settings → Plan and billing", "warn"), 600);
+      else if (!live.tenant.stripe_customer_id && !billingReminderShown) {
+        billingReminderShown = true;
+        setTimeout(() => toast("One step left: start your free trial", "Add a card in Settings → Plan and billing · 30 days free, then $30/month", "warn"), 900);
+      }
+    }
   });
 }
 loadLiveIntoUI();
