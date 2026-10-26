@@ -53,6 +53,16 @@
           <div class="bk-field" id="gConsentWrap" hidden><label class="bk-consent"><input type="checkbox" id="gConsent"><span>I'd like to receive offers and news from this property by email. You can unsubscribe at any time.</span></label></div>
         </form>
       </section>
+      <section id="termsSection" hidden>
+        <h2 class="bk-h2">Good to know</h2>
+        <div class="bk-terms">
+          <div class="bk-term-times" id="termsTimes"></div>
+          <p class="bk-term-policy" id="termsCancellation"></p>
+          <h3 id="termsTitle">Property terms &amp; house rules</h3>
+          <ul class="bk-term-list" id="termsList"></ul>
+          <label class="bk-consent" id="termsAckWrap" hidden><input type="checkbox" id="gTermsAck"><span>I have read and agree to this property's terms and house rules.</span></label>
+        </div>
+      </section>
     </div>
 
     <aside class="bk-summary" id="summaryCard">
@@ -67,7 +77,7 @@
         <p class="bk-error" id="payError" hidden style="margin-top:10px"></p>
         <p class="bk-secure">Payments are processed securely by Stripe for this property. SimpleHotelier never sees your card number.</p>
       </div>
-      <p class="bk-secure">No payment taken now unless the property requires a deposit. Free cancellation per property policy.</p>
+      <p class="bk-secure" id="summaryPolicyNote">No payment taken now unless the property requires a deposit. Cancellation is subject to the property policy shown on this page.</p>
     </aside>
   </div>
 

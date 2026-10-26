@@ -52,6 +52,13 @@ h1, h2 { font-family: "Sora", "Segoe UI", sans-serif; color: var(--ink); letter-
 .bk-consent input { margin-top: 3px; accent-color: var(--brand); }
 .bk-cardel { border: 1px solid var(--line); border-radius: 10px; padding: 13px 14px; background: #fff; }
 .bk-cardel.StripeElement--invalid { border-color: #b3261e; }
+.bk-terms { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+.bk-term-times { display: flex; flex-wrap: wrap; gap: 8px 22px; color: var(--ink); font-weight: 700; margin-bottom: 10px; }
+.bk-term-policy { color: var(--muted); line-height: 1.6; margin: 0 0 14px; }
+.bk-terms h3 { font-family: "Sora", sans-serif; font-size: 15px; color: var(--ink); margin: 0 0 8px; }
+.bk-term-list { color: var(--ink-2); line-height: 1.55; margin: 0 0 14px; padding-left: 20px; }
+.bk-term-list li { margin: 6px 0; }
+.bk-terms .bk-consent { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px; }
 .bk-room .price { margin-top: auto; padding-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .bk-room .price b { font-family: "Sora", sans-serif; color: var(--ink); font-size: 17px; }
 .bk-room .price span { font-size: 11.8px; color: var(--faint); }

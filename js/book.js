@@ -272,7 +272,7 @@
     document.querySelector(".bk-layout").style.display = "none";
     $("#searchForm").style.display = "none";
     $("#availNote").hidden = true;
-    $("#successText").textContent = "Thanks " + $("#gName").value.trim().split(" ")[0] + " — " + state.tenant.name + " will confirm your " + state.selected.name + " stay by email shortly." + (extra || "");
+    $("#successText").textContent = "Thanks " + $("#gName").value.trim().split(" ")[0] + " — " + state.tenant.name + " will confirm your " + state.selected.name + " stay by email shortly." + (state.tenant.check_out_time ? " Check-out is by " + state.tenant.check_out_time + "." : "") + (extra || "");
     $("#successCode").textContent = "Confirmation " + code + " · Total " + money(total);
     const panel = $("#successPanel");
     panel.hidden = false;
@@ -301,6 +301,43 @@
       btn.textContent = "Pay " + money(state.paying.due) + " deposit";
       postHeight();
     }
+  }
+
+  function cancellationText(t) {
+    if (!t) return "";
+    if (t.cancellation_policy === "custom") return (t.cancellation_policy_text || "").trim();
+    return {
+      flexible: "Flexible cancellation: full refund if you cancel at least 48 hours before check-in.",
+      moderate: "Moderate cancellation: full refund if you cancel at least 7 days before check-in.",
+      strict: "Strict cancellation: 50% refund if you cancel at least 14 days before check-in."
+    }[t.cancellation_policy] || "";
+  }
+  function termsRequired() {
+    const wrap = $("#termsAckWrap");
+    return !!(wrap && !wrap.hidden);
+  }
+  function renderTerms() {
+    const t = state.tenant;
+    if (!t) return;
+    const rawTerms = (t.rental_terms || "").trim();
+    const lines = rawTerms.split(/\r?\n/).map((line) => line.trim().replace(/^[-•*]\s*/, "").replace(/^\d+[.)]\s*/, "")).filter(Boolean);
+    const policy = cancellationText(t);
+    const hasTimes = !!(t.check_in_time || t.check_out_time);
+    const section = $("#termsSection");
+    section.hidden = !(lines.length || policy || hasTimes);
+    if (section.hidden) return;
+    const times = [];
+    if (t.check_in_time) times.push(`<span>Check-in: ${esc(t.check_in_time)}</span>`);
+    if (t.check_out_time) times.push(`<span>Check-out: ${esc(t.check_out_time)}</span>`);
+    $("#termsTimes").innerHTML = times.join("");
+    const policyEl = $("#termsCancellation");
+    policyEl.textContent = policy;
+    policyEl.hidden = !policy;
+    $("#termsTitle").hidden = !lines.length;
+    $("#termsList").innerHTML = lines.map((line) => `<li>${esc(line)}</li>`).join("");
+    $("#termsAckWrap").hidden = !lines.length;
+    const note = $("#summaryPolicyNote");
+    if (note) note.textContent = policy || "No payment taken now unless the property requires a deposit.";
   }
 
   function renderSummary() {
@@ -356,6 +393,7 @@
       `<div class="bk-line total"><span>Total</span><b>${money(q.total)}</b></div>` +
       (dep ? `<div class="bk-line"><span>Deposit due today (${dep.pct}%)</span><b>${money(dep.due)}</b></div><div class="bk-line"><span>Balance at the property</span><b>${money(round2(q.total - dep.due))}</b></div>` : "");
     if (state.paying) { btn.disabled = false; btn.textContent = "Pay " + money(state.paying.due) + " deposit"; }
+    else if (termsRequired() && !$("#gTermsAck").checked) { btn.disabled = true; btn.textContent = "Agree to the property terms to continue"; }
     else if (needsAck && !$("#depAck").checked) { btn.disabled = true; btn.textContent = "Tick the deposit box to continue"; }
     else {
       btn.disabled = false;
@@ -452,6 +490,7 @@
       state.rooms = rooms || [];
       state.addons = addons || [];
       state.taxes = (taxes || []).map((x) => ({ name: x.name, kind: x.kind, value: Number(x.rate), applies: x.applies_to }));
+      renderTerms();
       renderRooms(); renderAddons(); renderSummary(); postHeight();
     } catch (e) {
       showError("Booking is temporarily unavailable. Please contact the property directly.");
@@ -486,6 +525,7 @@
   $("#searchForm").addEventListener("submit", (e) => { e.preventDefault(); showError(""); checkAvailability(); });
 
   $("#depAck").addEventListener("change", () => renderSummary());
+  $("#gTermsAck").addEventListener("change", () => renderSummary());
   $("#bookBtn").addEventListener("click", async () => {
     if (state.paying) { await payDeposit(); return; }
     showError("");
@@ -493,6 +533,7 @@
     const email = $("#gEmail").value.trim();
     if (!state.selected) { showError("Please select a room first."); return; }
     if (!name || !email) { showError("Please add your name and email so the property can confirm."); $("#gName").focus(); return; }
+    if (termsRequired() && !$("#gTermsAck").checked) { showError("Please read and agree to the property's terms and house rules before booking."); $("#gTermsAck").focus(); return; }
     const q = renderSummary();
     if (!q) { showError("Please fix your dates."); return; }
     const btn = $("#bookBtn");
@@ -506,6 +547,7 @@
       apNow ? "Rate plan: " + apNow.plan.name : "",
       ($("#promoCode").value || "").trim() ? "Promo code: " + $("#promoCode").value.trim().toUpperCase() : "",
       consentEl && !$("#gConsentWrap").hidden && consentEl.checked ? "Marketing consent: yes" : "",
+      termsRequired() ? "Guest agreed to property terms & house rules" : "",
     state.dep ? `Deposit ${state.dep.collectible ? "to pay by card" : "acknowledged, to be collected by property"}: ${money(state.dep.due)} (${state.dep.pct}%)` : ""].filter(Boolean).join(" · ");
     try {
       await api("reservations", {

@@ -544,7 +544,10 @@
                 <div class="field"><label>Check-in</label><input class="input" id="pfCheckIn" value="3:00 PM"></div>
                 <div class="field"><label>Check-out</label><input class="input" id="pfCheckOut" value="11:00 AM"></div>
               </div>
-              <div class="field"><label>Cancellation policy</label><select class="select" id="pfPolicy"><option>Moderate — full refund to 7 days</option><option>Flexible — full refund to 48 hours</option><option>Strict — 50% refund to 14 days</option></select></div>
+              <div class="field"><label>Cancellation policy</label><select class="select" id="pfPolicy"><option>Moderate — full refund to 7 days</option><option>Flexible — full refund to 48 hours</option><option>Strict — 50% refund to 14 days</option><option>Custom — write your own</option></select></div>
+              <div class="field" id="pfPolicyCustomWrap" hidden><label>Your cancellation policy</label><textarea class="textarea" id="pfPolicyText" rows="3" placeholder="e.g. You can cancel your reservation up to 30 days before your stay, but you won't receive a refund if you cancel after that."></textarea><span class="help">Shown word-for-word on your booking page before guests book.</span></div>
+              <div class="field"><label>Guest terms &amp; house rules</label><textarea class="textarea" id="pfTerms" rows="12" placeholder="Add one rule per line. These show on your booking page, and guests must agree to them before booking."></textarea><span class="help">Your Check-out time above is shown with these terms automatically. Leave this blank to hide the terms section and agreement checkbox.</span></div>
+              <button class="btn btn-ghost btn-sm" type="button" data-action="load-example-terms">Use example cabin terms</button>
             </div>
           </div>
 

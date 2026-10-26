@@ -453,6 +453,11 @@ if (ratePrevBtn) ratePrevBtn.addEventListener("click", () => { ratesMonthOff--; 
 if (rateNextBtn) rateNextBtn.addEventListener("click", () => { ratesMonthOff++; renderRates(); });
 if (rateTodayBtn2) rateTodayBtn2.addEventListener("click", () => { ratesMonthOff = 0; renderRates(); });
 if (rateRoomSel) rateRoomSel.addEventListener("change", () => { ratesRoomCode = rateRoomSel.value; renderRates(); });
+const pfPolicySel = $("#pfPolicy");
+if (pfPolicySel) pfPolicySel.addEventListener("change", () => {
+  const wrap = $("#pfPolicyCustomWrap");
+  if (wrap) { wrap.hidden = pfPolicySel.selectedIndex !== 3; if (!wrap.hidden) { const t = $("#pfPolicyText"); if (t) t.focus(); } }
+});
 const repRange = $("#repRange");
 if (repRange) repRange.addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
@@ -1573,6 +1578,24 @@ document.addEventListener("click", (e) => {
     if (step.action === "connect-bank") { const b = document.querySelector('#checklist [data-action="connect-bank"]'); if (b) b.click(); else goto("settings"); }
     if (step.action === "invite") { const b = document.querySelector('#checklist [data-action="invite"]'); if (b) b.click(); else goto("settings"); }
   }
+  else if (a === "load-example-terms") {
+    const field = $("#pfTerms");
+    if (!field) return;
+    field.value = [
+      "Wash your dishes and put them away dry.",
+      "Put dirty towels in the shower when you leave.",
+      "Put your trash in the dumpster on your way out, and please tie the bags shut.",
+      "No smoking in cabins. Put cigarette butts in the receptacle on the porch, not on the grass.",
+      "Do not throw food out in the yard.",
+      "Do not dump grease on the lawn.",
+      "No dogs allowed on beds. Thank you for helping us keep the linens clean. Pets must be kenneled if left in cabins unattended. If there is evidence of pets on beds, an extra cleaning fee will be assessed.",
+      "Pet owners must pick up after their pets inside and outside the cabins during their stay.",
+      "Extreme uncleanliness in or around cabins will be charged an additional cleaning fee of up to $100.",
+      "Thank you for staying with us, and please come again!"
+    ].join("\n");
+    field.focus();
+    toast("Example terms loaded", "Edit anything that does not fit your property, then save", "ok");
+  }
   else if (a === "setup-property") {
     const name = $("#obPropertyName") ? $("#obPropertyName").value.trim() : "";
     if (!name) { toast("Give your property a name", "It becomes your booking page title", "warn"); return; }
@@ -1605,10 +1628,12 @@ document.addEventListener("click", (e) => {
       website_url: url("#pfWebsite") || null, facebook_url: url("#pfFacebook") || null,
       instagram_url: url("#pfInstagram") || null, twitter_url: url("#pfTwitter") || null, youtube_url: url("#pfYoutube") || null,
       description: v("#pfDesc") || null,
+      rental_terms: v("#pfTerms") || null,
       star_rated: !!($("#pfStarRated") && $("#pfStarRated").checked),
       star_count: ($("#pfStarRated") && $("#pfStarRated").checked) ? intOrNull("#pfStars") : null,
       check_in_time: v("#pfCheckIn"), check_out_time: v("#pfCheckOut"),
-      cancellation_policy: ["moderate", "flexible", "strict"][$("#pfPolicy").selectedIndex] || "moderate",
+      cancellation_policy: ["moderate", "flexible", "strict", "custom"][$("#pfPolicy").selectedIndex] || "moderate",
+      cancellation_policy_text: ["moderate", "flexible", "strict", "custom"][$("#pfPolicy").selectedIndex] === "custom" ? (v("#pfPolicyText") || null) : null,
       max_child_age: intOrNull("#pfMaxChildAge"), max_infant_age: intOrNull("#pfMaxInfantAge"),
       min_room_rate_cents: Number.isFinite(minRate) ? Math.round(minRate * 100) : null,
       weekend_starts: v("#pfWeekendStarts") || "saturday",
@@ -1820,7 +1845,12 @@ function loadLiveIntoUI() {
     if ($("#pfEmail")) $("#pfEmail").value = live.tenant.contact_email || "";
     if ($("#pfCheckIn")) $("#pfCheckIn").value = live.tenant.check_in_time || "3:00 PM";
     if ($("#pfCheckOut")) $("#pfCheckOut").value = live.tenant.check_out_time || "11:00 AM";
-    if ($("#pfPolicy")) { const ix = ["moderate", "flexible", "strict"].indexOf(live.tenant.cancellation_policy); $("#pfPolicy").selectedIndex = ix >= 0 ? ix : 0; }
+    if ($("#pfPolicy")) {
+      const ix = ["moderate", "flexible", "strict", "custom"].indexOf(live.tenant.cancellation_policy);
+      $("#pfPolicy").selectedIndex = ix >= 0 ? ix : 0;
+      const wrap = $("#pfPolicyCustomWrap"); if (wrap) wrap.hidden = live.tenant.cancellation_policy !== "custom";
+      if (live.tenant.cancellation_policy_text && $("#pfPolicyText")) $("#pfPolicyText").value = live.tenant.cancellation_policy_text;
+    }
     {
       const T = live.tenant;
       const set = (id, val) => { const el = $(id); if (el && val != null) el.value = val; };
@@ -1833,6 +1863,7 @@ function loadLiveIntoUI() {
       set("#pfWebsite", T.website_url); set("#pfFacebook", T.facebook_url); set("#pfInstagram", T.instagram_url);
       set("#pfTwitter", T.twitter_url); set("#pfYoutube", T.youtube_url);
       set("#pfDesc", T.description);
+      set("#pfTerms", T.rental_terms);
       chk("#pfStarRated", T.star_rated); if (T.star_count) set("#pfStars", String(T.star_count));
       set("#pfMaxChildAge", T.max_child_age); set("#pfMaxInfantAge", T.max_infant_age);
       if (T.min_room_rate_cents != null) set("#pfMinRoomRate", (T.min_room_rate_cents / 100).toFixed(2));
