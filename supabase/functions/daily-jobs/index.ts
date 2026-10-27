@@ -7,7 +7,7 @@
 // Deploy: supabase functions deploy daily-jobs  (verify_jwt off: secret-gated)
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "../_shared/deps.ts";
-import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured } from "../_shared/email.ts";
+import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured, propertyBrand } from "../_shared/email.ts";
 import { syncFeed } from "../_shared/sync.js";
 import { computeWeeklyStats } from "../_shared/report.js";
 import { addDaysISO } from "../_shared/ical.js";
@@ -31,7 +31,7 @@ async function reminders(kind: "checkin" | "checkout", out: Record<string, numbe
   const statuses = kind === "checkin" ? ["pending", "confirmed"] : ["confirmed", "checked_in"];
   // Collect every candidate first: sending flags rows, which would shift pages.
   const rows = await allRows(() => admin.from("reservations")
-    .select("*, tenants(name, contact_phone, contact_email, currency), rooms(code, name)")
+    .select("*, tenants(name, contact_phone, contact_email, currency, logo_url, booking_theme, booking_email, enquiry_email, phone, address_line1, city, state, postcode, website_url), rooms(code, name)")
     .eq(dateCol, tomorrow)
     .in("status", statuses)
     .not("guest_email", "is", null)
@@ -43,18 +43,24 @@ async function reminders(kind: "checkin" | "checkout", out: Record<string, numbe
     const room: any = (r as any).rooms || {};
     const property = tenant.name || "Your property";
     const first = String(r.guest_name || "").split(" ")[0] || "there";
+    const brand = propertyBrand(tenant);
     const html = kind === "checkin"
       ? emailShell("See you tomorrow",
           p(`Hi ${esc(first)},`) +
           p(`We're looking forward to welcoming you to <strong>${esc(property)}</strong> tomorrow.`) +
           kv([["Confirmation code", r.confirmation_code], ["Room", `${room.code || ""} ${room.name || ""}`.trim()], ["Check-in", fmtDate(r.check_in)], ["Check-out", fmtDate(r.check_out)]]),
-          tenant.contact_phone ? `Running late or have a question? Call ${esc(property)} at ${esc(tenant.contact_phone)}.` : "")
+          brand.replyTo || brand.phone
+            ? `Running late or have a question? ${brand.replyTo ? "Just reply to this email" : `Call ${esc(property)}`}${brand.phone ? `${brand.replyTo ? " or call" : " at"} ${esc(brand.phone)}` : ""}.`
+            : "", brand)
       : emailShell("Checkout tomorrow",
           p(`Hi ${esc(first)},`) +
           p(`A quick reminder that checkout at <strong>${esc(property)}</strong> is tomorrow, ${fmtDate(r.check_out)}. We hope you enjoyed your stay.`) +
-          kv([["Confirmation code", r.confirmation_code], ["Room", `${room.code || ""} ${room.name || ""}`.trim()], ["Check-out", fmtDate(r.check_out)]]));
+          kv([["Confirmation code", r.confirmation_code], ["Room", `${room.code || ""} ${room.name || ""}`.trim()], ["Check-out", fmtDate(r.check_out)]]),
+          brand.replyTo ? "Questions? Just reply to this email." : "", brand);
     const res = await sendMail({
       to: r.guest_email,
+      fromName: brand.name,
+      replyTo: brand.replyTo,
       subject: kind === "checkin" ? `See you tomorrow · ${property}` : `Checkout tomorrow · ${property}`,
       html
     }).catch(() => ({ sent: false }));

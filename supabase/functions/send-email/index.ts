@@ -12,7 +12,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "../_shared/deps.ts";
 import { withCors } from "../_shared/cors.ts";
-import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured } from "../_shared/email.ts";
+import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured, propertyBrand } from "../_shared/email.ts";
 import { appOrigin, callerUser, memberRole } from "../_shared/guard.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -80,6 +80,8 @@ async function bookingConfirmation(reservationId: string, force = false) {
     ["Total", money(r.total_cents, tenant?.currency)],
     ...(balance > 0 ? [["Balance due at property", money(balance, tenant?.currency)] as [string, string]] : [["Payment", "Paid in full"] as [string, string]])
   ];
+  // Guests see the property (its brand, its contact details) and reply to it.
+  const brand = propertyBrand(tenant);
   const guestHtml = emailShell(
     pending ? "Booking request received" : "Booking confirmed",
     p(`Hi ${esc(firstName(r.guest_name))},`) +
@@ -89,14 +91,17 @@ async function bookingConfirmation(reservationId: string, force = false) {
     kv(rows) +
     (policy ? p(`<strong>Cancellation policy:</strong> ${esc(policy)}`) : "") +
     (tenant?.rental_terms ? p(`<strong>Good to know:</strong> ${esc(String(tenant.rental_terms).slice(0, 600))}`) : ""),
-    tenant?.contact_phone || tenant?.contact_email
-      ? `Questions about your stay? Contact ${esc(property)}${tenant?.contact_phone ? ` at ${esc(tenant.contact_phone)}` : ""}${tenant?.contact_email ? ` or ${esc(tenant.contact_email)}` : ""}.`
-      : ""
+    brand.replyTo || brand.phone
+      ? `Questions about your stay? ${brand.replyTo ? "Just reply to this email" : `Call ${esc(property)}`}${brand.phone ? `${brand.replyTo ? " or call" : " at"} ${esc(brand.phone)}` : ""}.`
+      : "",
+    brand
   );
   const guest = await sendMail({
     to: r.guest_email,
     subject: `${pending ? "Request received" : "Booking confirmed"} · ${r.confirmation_code} · ${property}`,
-    html: guestHtml
+    html: guestHtml,
+    fromName: brand.name,
+    replyTo: brand.replyTo
   });
 
   // Notify the property (best effort).
@@ -107,8 +112,9 @@ async function bookingConfirmation(reservationId: string, force = false) {
       to: ownerTo,
       subject: `New booking ${r.confirmation_code} · ${r.guest_name} · ${fmtDate(r.check_in)}`,
       html: emailShell("New booking received",
-        p(`<strong>${esc(r.guest_name)}</strong> just booked through your SimpleHotelier page.`) +
-        kv([...rows, ["Guest email", r.guest_email], ...(r.guest_phone ? [["Guest phone", r.guest_phone] as [string, string]] : [])]))
+        p(`<strong>${esc(r.guest_name)}</strong> just booked through your booking page. Reply to this email to write to them.`) +
+        kv([...rows, ["Guest email", r.guest_email], ...(r.guest_phone ? [["Guest phone", r.guest_phone] as [string, string]] : [])])),
+      replyTo: r.guest_email
     }).catch(() => ({ sent: false }));
     ownerSent = !!res.sent;
   }
@@ -130,9 +136,12 @@ async function chargeReceipt(body: any) {
 
   const balance = (r.total_cents || 0) - (r.paid_cents || 0);
   const property = tenant?.name || "Your property";
+  const brand = propertyBrand(tenant);
   const res = await sendMail({
     to: r.guest_email,
     subject: `Payment receipt · ${r.confirmation_code} · ${property}`,
+    fromName: brand.name,
+    replyTo: brand.replyTo,
     html: emailShell("Payment received",
       p(`Hi ${esc(firstName(r.guest_name))}, thanks — we received your payment for your stay at <strong>${esc(property)}</strong>.`) +
       kv([
@@ -141,7 +150,7 @@ async function chargeReceipt(body: any) {
         ["Amount paid", money(txn.amount_cents, tenant?.currency)],
         ["Date", new Date(txn.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })],
         ...(balance > 0 ? [["Remaining balance", money(balance, tenant?.currency)] as [string, string]] : [["Balance", "Paid in full"] as [string, string]])
-      ]))
+      ]), brand.replyTo ? "Questions? Just reply to this email." : "", brand)
   });
   return json({ sent: res.sent });
 }

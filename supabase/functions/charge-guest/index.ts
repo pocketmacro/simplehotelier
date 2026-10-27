@@ -28,7 +28,7 @@ import { createClient, Stripe } from "../_shared/deps.ts";
 import { withCors } from "../_shared/cors.ts";
 import { appOrigin, callerUser, memberRole } from "../_shared/guard.ts";
 import { ensureCustomer, saveCardFromIntent } from "../_shared/cards.ts";
-import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured } from "../_shared/email.ts";
+import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured, propertyBrand, button } from "../_shared/email.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2024-06-20" });
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -256,15 +256,18 @@ async function paymentRequest(req: Request, tenant: any, body: any) {
 
   let emailed = false;
   if (body.send_email !== false && resv.guest_email && emailConfigured()) {
+    const brand = propertyBrand(tenant);
     const res = await sendMail({
       to: resv.guest_email,
+      fromName: brand.name,
+      replyTo: brand.replyTo,
       subject: `Payment request · ${resv.confirmation_code} · ${tenant.name}`,
       html: emailShell("Payment request",
         p(`Hi ${esc(String(resv.guest_name || "").trim().split(/\s+/)[0] || "there")},`) +
         p(`<strong>${esc(tenant.name)}</strong> has requested a payment of <strong>${esc(money(amount, tenant.currency))}</strong> for your booking.`) +
         kv([["Confirmation code", resv.confirmation_code], ["Check-in", fmtDate(resv.check_in)], ["Check-out", fmtDate(resv.check_out)], ["Amount", money(amount, tenant.currency)]]) +
-        p(`<a href="${esc(session.url)}" style="display:inline-block;background:#0c3b3c;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;padding:12px 22px;border-radius:10px">Pay ${esc(money(amount, tenant.currency))} securely</a>`),
-        "Payments are processed by Stripe for this property. The link works for 24 hours.")
+        p(button(session.url, `Pay ${money(amount, tenant.currency)} securely`, brand)),
+        `Payments are processed securely by Stripe. The link works for 24 hours.${brand.replyTo ? " Questions? Just reply to this email." : ""}`, brand)
     }).catch(() => ({ sent: false }));
     emailed = !!res.sent;
   }
@@ -301,7 +304,7 @@ Deno.serve(withCors(async (req) => {
     const tenantId = String(body.tenant_id || "");
     if (!tenantId) return json({ error: "tenant_id required" }, 400);
     const { data: tenant } = await admin.from("tenants")
-      .select("id, name, slug, currency, stripe_account_id, stripe_onboarding_complete, deposit_enabled, deposit_percent")
+      .select("id, name, slug, currency, stripe_account_id, stripe_onboarding_complete, deposit_enabled, deposit_percent, logo_url, booking_theme, contact_email, booking_email, enquiry_email, contact_phone, phone, address_line1, city, state, postcode, website_url")
       .eq("id", tenantId).maybeSingle();
     if (!tenant?.stripe_account_id) return json({ error: "property has not connected Stripe" }, 400);
 
