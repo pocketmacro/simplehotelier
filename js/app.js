@@ -141,6 +141,7 @@ let tickets = [
 let icalFeeds = [];
 let liveSlug = "", liveIcalToken = "";
 let studioHeroUrl = ""; // booking-page hero image (saved on upload, like the logo)
+let studioHeroFocus = { x: 50, y: 50 }; // hero focal point, percent; saved on Publish
 
 const txns = [
   { when: "Today · 9:41 AM", desc: "R-1043 · Balance · Priya Nair", method: "Visa **** 8810", status: "paid", amount: 202.10 },
@@ -1229,8 +1230,19 @@ function applyStudioPreview() {
   const hero = $("#mockHero");
   if (hero) {
     hero.style.background = studioHeroUrl
-      ? `linear-gradient(180deg, rgb(8 20 20 / 42%), rgb(8 20 20 / 62%)), url("${String(studioHeroUrl).replace(/"/g, "%22")}") center / cover no-repeat`
+      ? `linear-gradient(180deg, rgb(8 20 20 / 42%), rgb(8 20 20 / 62%)), url("${String(studioHeroUrl).replace(/"/g, "%22")}") ${studioHeroFocus.x}% ${studioHeroFocus.y}% / cover no-repeat`
       : `linear-gradient(180deg, ${brand}e8, ${brand}c2), repeating-linear-gradient(115deg, ${brand} 0 26px, rgb(0 0 0 / 22%) 26px 52px)`;
+  }
+  const focusEl = $("#bkHeroFocus"), focusDot = $("#bkHeroFocusDot"), focusVal = $("#bkHeroFocusVal");
+  if (focusEl) {
+    focusEl.hidden = !studioHeroUrl;
+    if (studioHeroUrl) focusEl.style.backgroundImage = `url("${String(studioHeroUrl).replace(/"/g, "%22")}")`;
+    focusEl.style.backgroundPosition = `${studioHeroFocus.x}% ${studioHeroFocus.y}%`;
+  }
+  if (focusDot) { focusDot.style.left = studioHeroFocus.x + "%"; focusDot.style.top = studioHeroFocus.y + "%"; }
+  if (focusVal) {
+    focusVal.hidden = !studioHeroUrl;
+    focusVal.textContent = `Focus: ${Math.round(studioHeroFocus.x)}% across · ${Math.round(studioHeroFocus.y)}% down — the preview follows it; saved with Publish changes`;
   }
   const page = $("#mockPage");
   if (page) { page.style.background = bg; page.style.color = fg; }
@@ -1286,6 +1298,21 @@ function bindStudio() {
     applyStudioPreview();
     toast("Hero image removed", "Your headline sits on the brand color again", "ok");
   });
+  const focusEl = $("#bkHeroFocus");
+  if (focusEl) {
+    let dragging = false;
+    const setFromEvent = (e) => {
+      const r = focusEl.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      studioHeroFocus.x = Math.min(100, Math.max(0, (e.clientX - r.left) / r.width * 100));
+      studioHeroFocus.y = Math.min(100, Math.max(0, (e.clientY - r.top) / r.height * 100));
+      applyStudioPreview();
+    };
+    focusEl.addEventListener("pointerdown", (e) => { dragging = true; try { focusEl.setPointerCapture(e.pointerId); } catch { /* no capture */ } setFromEvent(e); });
+    focusEl.addEventListener("pointermove", (e) => { if (dragging) setFromEvent(e); });
+    focusEl.addEventListener("pointerup", () => { dragging = false; });
+    focusEl.addEventListener("pointercancel", () => { dragging = false; });
+  }
 }
 
 /* ---------------- Reports (computed from your reservations, not samples) ---------------- */
@@ -1895,6 +1922,8 @@ document.addEventListener("click", (e) => {
         booking_bg_color: $("#bkBg") ? $("#bkBg").value : null,
         booking_fg_color: $("#bkFg") ? $("#bkFg").value : null,
         hero_image_url: studioHeroUrl || null,
+        hero_focus_x: Math.round(studioHeroFocus.x),
+        hero_focus_y: Math.round(studioHeroFocus.y),
         ga_measurement_id: $("#bkGa").value.trim() || null,
         booking_redirect_url: $("#bkRedirect").value.trim() || null,
         booking_by_type: !!($("#bkByType") && $("#bkByType").checked),
@@ -2340,6 +2369,8 @@ function loadLiveIntoUI() {
     if (live.tenant.booking_bg_color && $("#bkBg")) $("#bkBg").value = live.tenant.booking_bg_color;
     if (live.tenant.booking_fg_color && $("#bkFg")) $("#bkFg").value = live.tenant.booking_fg_color;
     studioHeroUrl = live.tenant.hero_image_url || "";
+    if (live.tenant.hero_focus_x != null) studioHeroFocus.x = Math.min(100, Math.max(0, Number(live.tenant.hero_focus_x) || 0));
+    if (live.tenant.hero_focus_y != null) studioHeroFocus.y = Math.min(100, Math.max(0, Number(live.tenant.hero_focus_y) || 0));
     applyStudioPreview();
     if ($("#bkDepositOn")) $("#bkDepositOn").checked = !!live.tenant.deposit_enabled;
     if ($("#bkByType")) $("#bkByType").checked = live.tenant.booking_by_type !== false;

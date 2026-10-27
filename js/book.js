@@ -524,7 +524,7 @@
       // secrets (ical_token, Stripe customer ids, private notification
       // emails) that the anon key must not be able to read (see the
       // 20261112000000_demo_lockdown migration).
-      const tenantCols = "id,name,slug,contact_email,phone,logo_url,brand_color,booking_bg_color,booking_fg_color,hero_image_url,booking_headline,booking_subheading,description,address_line1,address_line2,postcode,city,state,country,website_url,facebook_url,instagram_url,twitter_url,youtube_url,star_rated,star_count,gdpr_consent,check_in_time,check_out_time,cancellation_policy,cancellation_policy_text,rental_terms,currency,stripe_account_id,stripe_onboarding_complete,ga_measurement_id,booking_redirect_url,deposit_enabled,deposit_percent,booking_by_type,included_occupants,maximum_total_occupants,min_room_rate_cents";
+      const tenantCols = "id,name,slug,contact_email,phone,logo_url,brand_color,booking_bg_color,booking_fg_color,hero_image_url,hero_focus_x,hero_focus_y,booking_headline,booking_subheading,description,address_line1,address_line2,postcode,city,state,country,website_url,facebook_url,instagram_url,twitter_url,youtube_url,star_rated,star_count,gdpr_consent,check_in_time,check_out_time,cancellation_policy,cancellation_policy_text,rental_terms,currency,stripe_account_id,stripe_onboarding_complete,ga_measurement_id,booking_redirect_url,deposit_enabled,deposit_percent,booking_by_type,included_occupants,maximum_total_occupants,min_room_rate_cents";
       const tenants = await api("tenants?slug=eq." + encodeURIComponent(slug) + "&select=" + tenantCols);
       state.tenant = tenants && tenants[0];
       if (!state.tenant) { showError("We could not find this property. Check the link and try again."); return; }
@@ -575,6 +575,8 @@
         if (heroEl) {
           heroEl.classList.add("has-hero");
           heroEl.style.backgroundImage = `linear-gradient(180deg, rgb(8 20 20 / 38%), rgb(8 20 20 / 60%)), url("${String(t.hero_image_url).replace(/"/g, "%22")}")`;
+          const pct = (v, d) => (v == null || isNaN(Number(v)) ? d : Math.min(100, Math.max(0, Number(v))));
+          heroEl.style.backgroundPosition = `${pct(t.hero_focus_x, 50)}% ${pct(t.hero_focus_y, 50)}%`;
         }
       }
       if (t.logo_url) {

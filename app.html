@@ -309,6 +309,11 @@
                 <button class="btn btn-ghost btn-sm" id="bkHeroRemove" type="button">Remove</button>
               </div>
               <span class="help">Shown at the top of your booking page behind your headline. JPG or PNG, up to 5 MB. Saved as soon as you upload; colors are saved with Publish changes.</span>
+              <div id="bkHeroFocus" hidden style="position:relative;height:160px;border-radius:12px;overflow:hidden;border:1px solid var(--line);cursor:crosshair;background-color:#223;background-position:center;background-size:cover;background-repeat:no-repeat;margin-top:10px" title="Click or drag to set the hero focus point">
+                <div id="bkHeroFocusDot" style="position:absolute;width:20px;height:20px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 2px rgb(0 0 0 / 40%),0 1px 6px rgb(0 0 0 / 40%);transform:translate(-50%,-50%);left:50%;top:50%;pointer-events:none"></div>
+                <span style="position:absolute;left:10px;bottom:8px;background:rgb(0 0 0 / 55%);color:#fff;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;pointer-events:none">Click or drag to set focus</span>
+              </div>
+              <span class="help" id="bkHeroFocusVal" hidden>Focus: center · saved with Publish changes</span>
             </div>
             <div class="field"><label for="bkUrl">Page address</label><input class="input mono" id="bkUrl" value="pinecrest.simplehotelier.com"></div>
             <div class="toggle-row"><div>Show add-ons at checkout<small id="bkAddonCount">6 add-ons enabled</small></div><span class="switch"><input type="checkbox" checked disabled><span class="tr"></span></span></div>
