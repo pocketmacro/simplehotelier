@@ -26,7 +26,7 @@ test("create_booking accepts only those windows and stores them", () => {
   assert.match(sql, /raise exception 'invalid_arrival_time'/);
   assert.match(sql, /card_required, arrival_time\)/);
   assert.match(sql, /grant execute on function public\.create_booking\([^)]*, text, text\) to service_role;/);
-  assert.match(read("supabase/functions/create-booking/index.ts"), /"p_terms_accepted", "p_arrival_time"\]/);
+  assert.match(read("supabase/functions/create-booking/index.ts"), /"p_terms_accepted", "p_arrival_time",/);
 });
 
 test("the dashboard and emails show the arrival window", () => {

@@ -73,7 +73,9 @@ async function bookingConfirmation(reservationId: string, force = false) {
     ["Room", room ? `${room.code} · ${room.name}` : ""],
     ["Check-in", fmtDate(r.check_in)],
     ["Check-out", fmtDate(r.check_out)],
-    ["Guests", String(r.adults || 1)],
+    ["Guests", [`${r.adults || 1} adult${(r.adults || 1) === 1 ? "" : "s"}`,
+      r.children ? `${r.children} ${r.children === 1 ? "child" : "children"}` : "",
+      r.infants ? `${r.infants} infant${r.infants === 1 ? "" : "s"}` : ""].filter(Boolean).join(", ")],
     ...(r.arrival_time ? [["Estimated arrival", String(r.arrival_time)] as [string, string]] : []),
     ["Total", money(r.total_cents, tenant?.currency)],
     ...(balance > 0 ? [["Balance due at property", money(balance, tenant?.currency)] as [string, string]] : [["Payment", "Paid in full"] as [string, string]])

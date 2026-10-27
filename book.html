@@ -35,11 +35,18 @@
   <form class="bk-search" id="searchForm" aria-label="Find your stay">
     <label class="bk-sf"><span>Check-in</span><input id="inDate" type="date" required></label>
     <label class="bk-sf"><span>Check-out</span><input id="outDate" type="date" required></label>
-    <div class="bk-sf"><span id="guestsLabel">Guests</span>
-      <div class="bk-stepper" role="group" aria-labelledby="guestsLabel">
+    <div class="bk-sf bk-guests"><span id="guestsLabel">Guests</span>
+      <div class="bk-stepper" id="guestsSimple" role="group" aria-labelledby="guestsLabel">
         <button type="button" data-step="-1" aria-label="Remove a guest">−</button>
         <output id="guestsOut" aria-live="polite">2 guests</output>
         <button type="button" data-step="1" aria-label="Add a guest">+</button>
+      </div>
+      <button type="button" class="bk-guests-btn" id="guestsBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="guestsPop" hidden><span id="guestsSummary">2 adults</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <div class="bk-guests-pop" id="guestsPop" role="dialog" aria-label="Who's coming" hidden>
+        <div class="bk-gp-row"><div><b id="gpAdults">Adults</b><small>Ages 13 and up</small></div><div class="bk-stepper" data-who="adults" role="group" aria-labelledby="gpAdults"><button type="button" data-step="-1" aria-label="Fewer adults">−</button><output aria-live="polite">0</output><button type="button" data-step="1" aria-label="More adults">+</button></div></div>
+        <div class="bk-gp-row"><div><b id="gpChildren">Children</b><small>Ages 2 to 12</small></div><div class="bk-stepper" data-who="children" role="group" aria-labelledby="gpChildren"><button type="button" data-step="-1" aria-label="Fewer children">−</button><output aria-live="polite">0</output><button type="button" data-step="1" aria-label="More children">+</button></div></div>
+        <div class="bk-gp-row"><div><b id="gpInfants">Infants</b><small>Under 2</small></div><div class="bk-stepper" data-who="infants" role="group" aria-labelledby="gpInfants"><button type="button" data-step="-1" aria-label="Fewer infants">−</button><output aria-live="polite">0</output><button type="button" data-step="1" aria-label="More infants">+</button></div></div>
+        <button type="button" class="bk-gp-done" id="guestsDone">Done</button>
       </div>
       <input id="guests" type="hidden" value="2">
     </div>
@@ -72,6 +79,15 @@
         <label class="bk-field"><span>Phone <small>Optional · for arrival updates</small></span><input class="bk-input" id="gPhone" type="tel" autocomplete="tel" placeholder="(555) 010-2030"></label>
         <label class="bk-field"><span>Arrival time <small id="gArrivalHint">Optional</small></span><span class="bk-select-wrap"><select class="bk-input" id="gArrival"><option value="">Not sure yet</option><option>Before 12 PM</option><option>12 – 2 PM</option><option>2 – 4 PM</option><option>4 – 6 PM</option><option>6 – 8 PM</option><option>After 8 PM</option></select></span></label>
         <label class="bk-field"><span>Promo code <small>Optional</small></span><input class="bk-input bk-upper" id="promoCode" type="text" autocomplete="off" placeholder="STAYLONGER"></label>
+        <fieldset class="bk-wide bk-address" id="gAddress" hidden>
+          <legend>Home address <small id="gAddressHint">Optional</small></legend>
+          <label class="bk-field bk-wide"><span>Street address</span><input class="bk-input" id="gAddr1" autocomplete="address-line1" maxlength="120"></label>
+          <label class="bk-field bk-wide"><span>Apartment, suite <small>Optional</small></span><input class="bk-input" id="gAddr2" autocomplete="address-line2" maxlength="120"></label>
+          <label class="bk-field"><span>City</span><input class="bk-input" id="gCity" autocomplete="address-level2" maxlength="120"></label>
+          <label class="bk-field"><span>State / region</span><input class="bk-input" id="gState" autocomplete="address-level1" maxlength="120"></label>
+          <label class="bk-field"><span>ZIP / postal code</span><input class="bk-input" id="gPostcode" autocomplete="postal-code" maxlength="20"></label>
+          <label class="bk-field"><span>Country</span><input class="bk-input" id="gCountry" autocomplete="country-name" maxlength="80"></label>
+        </fieldset>
         <label class="bk-field bk-wide"><span>Anything we should know? <small>Optional · early arrival, a crib, a quiet room</small></span><textarea class="bk-input" id="gNotes" rows="3"></textarea></label>
         <div class="bk-wide" id="gConsentWrap" hidden><label class="bk-consent"><input type="checkbox" id="gConsent"><span>I'd like to receive offers and news from this property by email. You can unsubscribe at any time.</span></label></div>
       </form>

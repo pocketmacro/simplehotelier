@@ -728,6 +728,78 @@ select pg_temp.expect('R55b only the listed arrival windows are accepted',
           p_arrival_time => '<script>3am')$q$],
   'error:P0001', '^invalid_arrival_time ');
 
+-- R56: party pricing and limits (20261125000000). type_a: extra adult $20,
+-- child $10, infant $5 per night, 2 included places, at most 3 adults,
+-- 2 children, 1 infant. quote_stay is internal, so this runs as postgres.
+do $$
+declare
+  v_a uuid := pg_temp.id('tenant_a');
+  v_room uuid := pg_temp.id('room_a1');
+  d date := current_date + 200;
+  q jsonb;
+  got text := '';
+  want text := 'legacy3=2000 legacy4=too_many_adults a2c1i1=1500 a1c2=1000 a3c1=3000 c3=too_many_children i2=too_many_infants a3x2n=4000 nochildrate_a2c2=4000';
+  f text;
+begin
+  update public.room_types set extra_adult_cents = 2000, extra_child_cents = 1000, extra_infant_cents = 500, included_adults = 2,
+    included_children = 0, included_infants = 0, max_adults = 3, max_children = 2, max_infants = 1, adults_required = 1, max_occupants = 0
+  where id = pg_temp.id('type_a');
+  for f in select unnest(array['legacy3', 'legacy4', 'a2c1i1', 'a1c2', 'a3c1', 'c3', 'i2', 'a3x2n', 'nochildrate_a2c2']) loop
+    if f = 'nochildrate_a2c2' then update public.room_types set extra_child_cents = 0 where id = pg_temp.id('type_a'); end if;
+    q := case f
+      when 'legacy3' then public.quote_stay(v_a, v_room, d, d + 1, 3, '{}', null)
+      when 'legacy4' then public.quote_stay(v_a, v_room, d, d + 1, 4, '{}', null)
+      when 'a2c1i1' then public.quote_stay(v_a, v_room, d, d + 1, 3, '{}', null, p_children => 1, p_infants => 1)
+      when 'a1c2' then public.quote_stay(v_a, v_room, d, d + 1, 3, '{}', null, p_children => 2)
+      when 'a3c1' then public.quote_stay(v_a, v_room, d, d + 1, 4, '{}', null, p_children => 1)
+      when 'c3' then public.quote_stay(v_a, v_room, d, d + 1, 4, '{}', null, p_children => 3)
+      when 'i2' then public.quote_stay(v_a, v_room, d, d + 1, 2, '{}', null, p_children => 0, p_infants => 2)
+      when 'a3x2n' then public.quote_stay(v_a, v_room, d, d + 2, 3, '{}', null, p_children => 0)
+      else public.quote_stay(v_a, v_room, d, d + 1, 4, '{}', null, p_children => 2) end;
+    got := got || case when got = '' then '' else ' ' end || f || '=' || coalesce(q ->> 'error', q ->> 'extra_person_cents');
+  end loop;
+  perform pg_temp.verdict(got = want, got);
+exception when others then
+  perform pg_temp.caught('R56 party pricing: per-person extras, child/infant rates, adult/child/infant limits', sqlstate, sqlerrm);
+end $$;
+
+-- R57: address modes and the party on the reservation (create_booking).
+do $$
+declare
+  v_a uuid := pg_temp.id('tenant_a');
+  v_type uuid := pg_temp.id('type_a');
+  v jsonb;
+  r public.reservations%rowtype;
+  got text := '';
+begin
+  update public.tenants set guest_address_mode = 'required' where id = v_a;
+  perform pg_temp.act_as('service');
+  begin
+    v := public.create_booking(v_a, current_date + 300, current_date + 302, 'Address Guest', 'addr1@rls-check.invalid',
+           p_room_type => v_type, p_client_ip => '203.0.113.70');
+    got := got || 'missing=booked';
+  exception when others then
+    got := got || 'missing=' || sqlerrm;
+  end;
+  v := public.create_booking(v_a, current_date + 304, current_date + 306, 'Address Guest', 'addr2@rls-check.invalid',
+         p_room_type => v_type, p_client_ip => '203.0.113.71', p_guests => 3, p_children => 1, p_infants => 1,
+         p_guest_address => '{"line1":"1 Pine Rd","city":"Valentine","state":"NE","postcode":"69201","country":"United States","evil":"x"}');
+  reset role;
+  select * into r from public.reservations where id = (v ->> 'reservation_id')::uuid;
+  got := got || format(' stored=%s/%s/%s/%s party=%s+%s+%s', r.guest_address_line1, r.guest_city, r.guest_postcode, r.guest_country,
+                       r.adults, r.children, r.infants);
+  update public.tenants set guest_address_mode = 'off' where id = v_a;
+  perform pg_temp.act_as('service');
+  v := public.create_booking(v_a, current_date + 308, current_date + 310, 'Address Guest', 'addr3@rls-check.invalid',
+         p_room_type => v_type, p_client_ip => '203.0.113.72', p_guest_address => '{"line1":"Ignored St","city":"X","postcode":"1","country":"Y"}');
+  reset role;
+  select * into r from public.reservations where id = (v ->> 'reservation_id')::uuid;
+  got := got || ' off=' || coalesce(r.guest_address_line1, 'null');
+  perform pg_temp.verdict(got = 'missing=address_required stored=1 Pine Rd/Valentine/69201/United States party=2+1+1 off=null', got);
+exception when others then
+  perform pg_temp.caught('R57 address modes (off/required) and adults/children/infants stored on the booking', sqlstate, sqlerrm);
+end $$;
+
 select pg_temp.expect('R54 per-IP throttle (cf-connecting-ip request header) refuses the 11th booking',
   array['service'],
   array[$q$select public.create_booking('{tenant_a}'::uuid, current_date + 40, current_date + 42, 'Ip Guest',

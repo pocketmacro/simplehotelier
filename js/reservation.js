@@ -311,6 +311,7 @@ async function rxRequote() {
       ? await SHDB.staffQuote({
           p_room: room.id, p_check_in: f.checkIn, p_check_out: f.checkOut,
           p_adults: Math.max(1, parseInt(f.adults, 10) || 1), p_children: Math.max(0, parseInt(f.children, 10) || 0),
+          p_infants: Math.max(0, parseInt(f.infants, 10) || 0),
           p_addon_ids: [...rx.addonIds], p_plan: f.plan || null, p_discount_cents: rxCents(f.discount),
           p_reservation: rx.row ? rx.row.id : null, p_keep_rates: !!(rx.row && f.keepRates)
         })

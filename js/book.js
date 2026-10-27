@@ -36,6 +36,35 @@
     taxTotal = round2(taxTotal);
     return { subtotal, addonsTotal, taxTotal, total: round2(subtotal + addonsTotal + taxTotal), addonLines, taxLines };
   }
+  /* Extra-guest charge per night — mirrors quote_stay (20261125000000).
+     Included places go to adults first, then children. Each extra adult pays
+     the adult rate; each extra child the child rate (the adult rate when none
+     is set); infants pay only when an infant rate is set. */
+  function occupancyCharge({ adults, children = 0, infants = 0, included = 2, includedChildren = 0, includedInfants = 0,
+    adultRate = 0, childRate = 0, infantRate = 0 }) {
+    const extraAdults = Math.max(0, adults - included);
+    const extraChildren = Math.max(0, children - (Math.max(0, included - adults) + Math.max(0, includedChildren)));
+    const extraInfants = Math.max(0, infants - Math.max(0, includedInfants));
+    const cRate = childRate > 0 ? childRate : adultRate, iRate = infantRate > 0 ? infantRate : 0;
+    return {
+      perNight: round2(extraAdults * adultRate + extraChildren * cRate + extraInfants * iRate),
+      count: extraAdults + extraChildren + (iRate > 0 ? extraInfants : 0)
+    };
+  }
+  /* The first adult/child/infant limit a party breaks (room type and
+     property; 0 = no limit), or "". Mirrors quote_stay. */
+  function partyProblem(party, type, tenant) {
+    const lim = (a, b) => { const v = [a, b].map(Number).filter((x) => x > 0); return v.length ? Math.min(...v) : 0; };
+    const need = Math.max(1, Number(type && type.adults_required) || 1);
+    if (party.adults < need) return `Needs at least ${need} adults`;
+    const a = lim(type && type.max_adults, tenant && tenant.maximum_adults);
+    const c = lim(type && type.max_children, tenant && tenant.maximum_children);
+    const i = lim(type && type.max_infants, tenant && tenant.maximum_infants);
+    if (a && party.adults > a) return `Up to ${a} adult${a === 1 ? "" : "s"}`;
+    if (c && party.children > c) return `Up to ${c} ${c === 1 ? "child" : "children"}`;
+    if (i && party.infants > i) return `Up to ${i} infant${i === 1 ? "" : "s"}`;
+    return "";
+  }
   /* Pure rate-plan math — covered by tests/book-calc.test.mjs */
   function applyPlanToRates(rates, plan) {
     if (!plan) return rates.slice();
@@ -73,7 +102,7 @@
     if (e && e.details && /^[a-z_]+$/.test(e.code || "")) return e.details;
     return "Something went wrong sending your request. Please try again or contact the property.";
   }
-  window.SHBookCalc = { quote, applyPlanToRates, planApplies, chooseUnits, safeUrl, bookingErrorText };
+  window.SHBookCalc = { quote, applyPlanToRates, planApplies, chooseUnits, safeUrl, bookingErrorText, occupancyCharge, partyProblem };
 
   /* ---- DOM app (skipped when loaded headlessly, e.g. by tests) ---- */
   if (!document.querySelector || !document.querySelector("#roomsList")) return;
@@ -188,7 +217,21 @@
 
   const CHECK_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
   const HOUSE_SVG = `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/></svg>`;
-  const guestsCount = () => Math.max(1, parseInt($("#guests").value, 10) || 1);
+  /* Who's coming. Adults + children count toward occupancy; infants don't.
+     The three are asked for separately only when the property's rooms price
+     or limit them (otherwise one guest counter, all adults). */
+  const party = { adults: 2, children: 0, infants: 0 };
+  const guestsCount = () => party.adults + party.children;
+  const PARTY_KEYS = ["extra_child_cents", "extra_infant_cents", "included_children", "included_infants", "max_adults", "max_children", "max_infants"];
+  function splitParty() {
+    const t = state.tenant || {};
+    if ([t.maximum_adults, t.maximum_children, t.maximum_infants].some((v) => Number(v) > 0)) return true;
+    return Object.values(state.types).some((ty) => PARTY_KEYS.some((k) => Number(ty[k]) > 0) || Number(ty.adults_required) > 1
+      || (ty.rate_plans || []).some((p) => Number(p.extraChildRate) > 0 || Number(p.extraInfantRate) > 0));
+  }
+  const partyText = () => [plural(party.adults, "adult", "adults"),
+    party.children ? plural(party.children, "child", "children") : "", party.infants ? plural(party.infants, "infant", "infants") : ""]
+    .filter(Boolean).join(" · ");
   const shortDate = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   function stayMeta() {
@@ -210,10 +253,11 @@
     return t.cancellation_policy === "strict" ? `50% refund until ${when}` : `Free cancellation until ${when}`;
   }
   /* One card for a room type (book by type) or a specific room. */
-  function roomCard({ key, keyAttr, name, facts, desc, photos, feats, rate, stayTotal, tag, tagLow, sel, booked, capacity, plan }) {
+  function roomCard({ key, keyAttr, name, facts, desc, photos, feats, rate, stayTotal, tag, tagLow, sel, booked, capacity, plan, problem }) {
     const n = Math.max(1, nights() || 1);
-    const tooSmall = capacity && guestsCount() > capacity;
-    const note = tooSmall ? `Sleeps up to ${capacity}: lower your guest count to book` : (booked ? "Not available for these dates" : cancelDeadline());
+    const tooSmall = (capacity && guestsCount() > capacity) || !!problem;
+    const note = capacity && guestsCount() > capacity ? `Sleeps up to ${capacity}: lower your guest count to book`
+      : problem ? `${problem}: change who's coming to book` : (booked ? "Not available for these dates" : cancelDeadline());
     const disabled = booked || tooSmall;
     const label = booked ? "Sold out" : sel ? "Selected" : `Select ${name}`;
     return `<article class="bk-room${sel ? " sel" : ""}${booked ? " booked" : ""}">
@@ -246,7 +290,7 @@
   }
   function renderRooms() {
     const n = Math.max(1, nights() || 1);
-    $("#roomsMeta").textContent = [stayMeta(), plural(guestsCount(), "guest", "guests")].filter(Boolean).join(" · ");
+    $("#roomsMeta").textContent = [stayMeta(), splitParty() ? partyText() : plural(guestsCount(), "guest", "guests")].filter(Boolean).join(" · ");
     if (byType()) { renderTypeCards(n); return; }
     $("#roomsList").innerHTML = state.rooms.map((r) => {
       const type = state.types[r.room_type_id] || null;
@@ -258,7 +302,7 @@
         feats: type && Array.isArray(type.features) ? type.features.slice(0, 6) : [],
         rate: baseRate(r), stayTotal: nightlyRatesFor(r).reduce((a, b) => a + b, 0),
         tag: booked ? "Booked" : "", sel: !!(state.selected && state.selected.id === r.id), booked,
-        capacity: (type && type.max_occupants) || r.sleeps || 0, plan: applicablePlan(r, n)
+        capacity: (type && type.max_occupants) || r.sleeps || 0, plan: applicablePlan(r, n), problem: partyProblem(party, type, state.tenant)
       });
     }).join("") || `<p class="bk-loading">No ${unitWords().many} are listed yet.</p>`;
     postHeight();
@@ -290,7 +334,7 @@
         feats: Array.isArray(type.features) ? type.features.slice(0, 6) : [],
         rate: baseRate(rep), stayTotal: nightlyRatesFor(rep).reduce((a, b) => a + b, 0),
         tag, tagLow: availKnown && !booked && free.length <= 2, sel: state.selectedTypeId === type.id, booked,
-        capacity: type.max_occupants || rep.sleeps || 0, plan: applicablePlan(rep, n)
+        capacity: type.max_occupants || rep.sleeps || 0, plan: applicablePlan(rep, n), problem: partyProblem(party, type, state.tenant)
       });
     }).join("") || `<p class="bk-loading">No ${unitWords().many} are listed yet.</p>`;
     postHeight();
@@ -646,7 +690,7 @@
   /* Summary header + "what happens today" note follow the dates, guests and
      the property's card/deposit rules. */
   function renderSummaryMeta() {
-    $("#summaryMeta").textContent = [stayMeta(), plural(guestsCount(), "guest", "guests")].filter(Boolean).join(" · ");
+    $("#summaryMeta").textContent = [stayMeta(), splitParty() ? partyText() : plural(guestsCount(), "guest", "guests")].filter(Boolean).join(" · ");
     const dep = state.tenant && state.tenant.deposit_enabled;
     $("#trustChargeText").textContent = dep
       ? `A ${Math.min(100, Math.max(1, parseInt(state.tenant.deposit_percent, 10) || 25))}% deposit is due when you book; the balance is paid at the property.`
@@ -692,14 +736,26 @@
       btn.disabled = true; btn.textContent = `Maximum ${occupantCap} occupants`;
       return null;
     }
+    const limit = partyProblem(party, type, state.tenant);
+    if (limit) {
+      $("#summaryBody").innerHTML = `<p class="bk-muted">${esc(limit)} for this ${esc(unitWords().one)}. Change who's coming or pick another.</p>`;
+      btn.disabled = true; btn.textContent = limit;
+      return null;
+    }
     const ap = applicablePlan(state.selected, n);
     const included = ap && ap.plan.includedOccupants != null ? ap.plan.includedOccupants
       : type && type.included_adults != null ? type.included_adults
       : state.tenant && state.tenant.included_occupants != null ? state.tenant.included_occupants : 2;
-    const extraGuests = Math.max(0, guests - included);
-    const extraRate = ap && ap.plan.extraAdultRate ? ap.plan.extraAdultRate : (type && type.extra_adult_cents ? type.extra_adult_cents / 100 : 0);
+    const num = (v) => Number(v) || 0;
+    const occ = occupancyCharge({
+      adults: party.adults, children: party.children, infants: party.infants, included: num(included),
+      includedChildren: num(type && type.included_children), includedInfants: num(type && type.included_infants),
+      adultRate: ap && ap.plan.extraAdultRate ? num(ap.plan.extraAdultRate) : num(type && type.extra_adult_cents) / 100,
+      childRate: ap && num(ap.plan.extraChildRate) > 0 ? num(ap.plan.extraChildRate) : num(type && type.extra_child_cents) / 100,
+      infantRate: ap && num(ap.plan.extraInfantRate) > 0 ? num(ap.plan.extraInfantRate) : num(type && type.extra_infant_cents) / 100
+    });
     const addonPayload = chosenAddons().map((a) => ({ name: a.name, price: a.price_cents / 100, per: a.per, qty: 1 }));
-    if (extraGuests > 0 && extraRate > 0) addonPayload.push({ name: `Extra guests × ${extraGuests}`, price: extraRate, per: "night", qty: 1 });
+    if (occ.perNight > 0) addonPayload.push({ name: `Extra guests × ${occ.count}`, price: occ.perNight, per: "night", qty: 1 });
     const q = quote({ rate: baseRate(state.selected), nights: n, guests, nightlyRates: ap ? ap.rates : nightlyRatesFor(state.selected), addons: addonPayload, taxes: state.taxes });
     const code = ($("#promoCode").value || "").trim().toUpperCase();
     const dep = depositInfo(q.total);
@@ -764,7 +820,7 @@
     renderRooms(); renderSummary();
   }
 
-  const TYPE_COLS = "id,name,description,bathrooms,view,smoking_policy,min_stay,max_stay,rack_rate_cents,extra_adult_cents,included_adults,max_occupants,beds,handicap_accessible,accessible_features,features,photos";
+  const TYPE_COLS = "id,name,description,bathrooms,view,smoking_policy,min_stay,max_stay,rack_rate_cents,extra_adult_cents,extra_child_cents,extra_infant_cents,included_adults,included_children,included_infants,max_adults,max_children,max_infants,adults_required,max_occupants,beds,handicap_accessible,accessible_features,features,photos";
   /* Guest-visible rate plans: plans without a code plus any matching the code
      typed here. get_rate_plans never returns other promo codes. */
   async function loadRatePlans() {
@@ -844,7 +900,7 @@
       // secrets (ical_token, Stripe customer ids, private notification
       // emails) that the anon key must not be able to read (see the
       // 20261112000000_demo_lockdown migration).
-      const tenantCols = "id,name,slug,contact_email,phone,logo_url,booking_theme,hero_image_url,hero_focus_x,hero_focus_y,booking_headline,booking_subheading,description,address_line1,address_line2,postcode,city,state,country,website_url,facebook_url,instagram_url,twitter_url,youtube_url,star_rated,star_count,gdpr_consent,check_in_time,check_out_time,cancellation_policy,cancellation_policy_text,rental_terms,currency,stripe_account_id,stripe_onboarding_complete,ga_measurement_id,booking_redirect_url,deposit_enabled,deposit_percent,booking_by_type,included_occupants,maximum_total_occupants,min_room_rate_cents";
+      const tenantCols = "id,name,slug,contact_email,phone,logo_url,booking_theme,hero_image_url,hero_focus_x,hero_focus_y,booking_headline,booking_subheading,description,address_line1,address_line2,postcode,city,state,country,website_url,facebook_url,instagram_url,twitter_url,youtube_url,star_rated,star_count,gdpr_consent,check_in_time,check_out_time,cancellation_policy,cancellation_policy_text,rental_terms,currency,stripe_account_id,stripe_onboarding_complete,ga_measurement_id,booking_redirect_url,deposit_enabled,deposit_percent,booking_by_type,included_occupants,maximum_total_occupants,maximum_adults,maximum_children,maximum_infants,guest_address_mode,min_room_rate_cents";
       const tenants = await api("tenants?slug=eq." + encodeURIComponent(slug) + "&select=" + tenantCols);
       state.tenant = tenants && tenants[0];
       if (!state.tenant) { showError("We could not find this property. Check the link and try again."); return; }
@@ -879,6 +935,7 @@
       await loadRatePlans();
       presentTenant(); // unit words can now come from the room types
       renderTurnstile();
+      presentGuestFields();
       setGuests(guestsCount());
       renderTerms();
       renderRooms(); renderAddons(); renderSummary(); postHeight();
@@ -893,17 +950,63 @@
   /* Guests: a −/+ stepper over the hidden #guests input, capped by the property. */
   function setGuests(v) {
     const cap = Number(state.tenant && state.tenant.maximum_total_occupants) || 16;
-    const g = Math.min(cap, Math.max(1, v));
-    $("#guests").value = g;
-    $("#guestsOut").textContent = plural(g, "guest", "guests");
-    document.querySelectorAll(".bk-stepper [data-step]").forEach((b) => { b.disabled = (+b.dataset.step < 0 && g <= 1) || (+b.dataset.step > 0 && g >= cap); });
+    setParty({ adults: Math.min(cap, Math.max(1, v)), children: 0, infants: 0 });
   }
-  document.querySelector(".bk-stepper").addEventListener("click", (e) => {
+  /* Keep the party within the property's own limits; room types add theirs. */
+  function setParty(next) {
+    const t = state.tenant || {};
+    const cap = Number(t.maximum_total_occupants) || 16;
+    const lim = (v, d) => Number(v) > 0 ? Number(v) : d;
+    party.adults = Math.min(lim(t.maximum_adults, cap), cap, Math.max(1, next.adults | 0));
+    party.children = Math.min(lim(t.maximum_children, cap), cap - party.adults, Math.max(0, next.children | 0));
+    party.infants = Math.min(lim(t.maximum_infants, 10), Math.max(0, next.infants | 0));
+    $("#guests").value = guestsCount();
+    $("#guestsOut").textContent = plural(guestsCount(), "guest", "guests");
+    $("#guestsSimple").querySelectorAll("[data-step]").forEach((b) => {
+      b.disabled = (+b.dataset.step < 0 && party.adults <= 1) || (+b.dataset.step > 0 && guestsCount() >= cap);
+    });
+    $("#guestsSummary").textContent = partyText();
+    const max = { adults: Math.min(lim(t.maximum_adults, cap), cap - party.children), children: Math.min(lim(t.maximum_children, cap), cap - party.adults), infants: lim(t.maximum_infants, 10) };
+    document.querySelectorAll("#guestsPop [data-who]").forEach((row) => {
+      const who = row.dataset.who;
+      row.querySelector("output").textContent = party[who];
+      row.querySelector('[data-step="-1"]').disabled = party[who] <= (who === "adults" ? 1 : 0);
+      row.querySelector('[data-step="1"]').disabled = party[who] >= max[who];
+    });
+  }
+  $("#guestsSimple").addEventListener("click", (e) => {
     const b = e.target.closest("[data-step]");
     if (!b || b.disabled) return;
     setGuests(guestsCount() + Number(b.dataset.step));
     renderRooms(); renderSummary();
   });
+  $("#guestsPop").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-step]");
+    if (!b || b.disabled) return;
+    const who = b.closest("[data-who]").dataset.who;
+    setParty({ ...party, [who]: party[who] + Number(b.dataset.step) });
+    renderRooms(); renderSummary();
+  });
+  function togglePartyPicker(open) {
+    $("#guestsPop").hidden = !open;
+    $("#guestsBtn").setAttribute("aria-expanded", String(open));
+    if (open) $('#guestsPop [data-who="adults"] [data-step="1"]').focus();
+  }
+  $("#guestsBtn").addEventListener("click", () => togglePartyPicker($("#guestsPop").hidden));
+  $("#guestsDone").addEventListener("click", () => { togglePartyPicker(false); $("#guestsBtn").focus(); });
+  document.addEventListener("click", (e) => { if (!$("#guestsPop").hidden && !e.target.closest(".bk-guests")) togglePartyPicker(false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#guestsPop").hidden) { togglePartyPicker(false); $("#guestsBtn").focus(); } });
+  /* Switch to the party picker / show the address form, per property. */
+  function presentGuestFields() {
+    const split = splitParty();
+    $("#guestsSimple").hidden = split;
+    $("#guestsBtn").hidden = !split;
+    $("#guestsLabel").textContent = split ? "Who's coming" : "Guests";
+    const mode = (state.tenant && state.tenant.guest_address_mode) || "off";
+    $("#gAddress").hidden = mode === "off";
+    $("#gAddressHint").textContent = mode === "required" ? "Required by the property" : "Optional";
+    ["gAddr1", "gCity", "gPostcode", "gCountry"].forEach((id) => { $("#" + id).required = mode === "required"; });
+  }
   $("#termsToggle").addEventListener("click", () => {
     const box = $("#termsRules");
     const open = box.classList.toggle("open");
@@ -968,6 +1071,13 @@
     const email = $("#gEmail").value.trim();
     if (!state.selected) { showError("Please select a room first."); return; }
     if (!name || !email) { showError("Please add your name and email so the property can confirm."); $("#gName").focus(); return; }
+    const addressMode = (state.tenant && state.tenant.guest_address_mode) || "off";
+    const address = { line1: $("#gAddr1").value.trim(), line2: $("#gAddr2").value.trim(), city: $("#gCity").value.trim(),
+      state: $("#gState").value.trim(), postcode: $("#gPostcode").value.trim(), country: $("#gCountry").value.trim() };
+    if (addressMode === "required") {
+      const missing = [["gAddr1", "line1"], ["gCity", "city"], ["gPostcode", "postcode"], ["gCountry", "country"]].find(([, k]) => !address[k]);
+      if (missing) { showError("Please add your home address: street, city, ZIP / postal code and country."); $("#" + missing[0]).focus(); return; }
+    }
     if (termsRequired() && !$("#gTermsAck").checked) { showError("Please read and agree to the property's terms and house rules before booking."); $("#gTermsAck").focus(); return; }
     const q = renderSummary();
     if (!q) { showError("Please fix your dates."); return; }
@@ -991,7 +1101,8 @@
           p_room: byType() && state.selectedTypeId ? null : state.selected.id,
           p_room_type: byType() && state.selectedTypeId ? state.selectedTypeId : null,
           p_check_in: $("#inDate").value, p_check_out: $("#outDate").value,
-          p_guests: Math.max(1, parseInt($("#guests").value) || 1),
+          p_guests: guestsCount(), p_children: party.children, p_infants: party.infants,
+          p_guest_address: addressMode === "off" ? null : address,
           p_name: name, p_email: email, p_phone: $("#gPhone").value.trim() || null,
           p_requests: $("#gNotes").value.trim() || null,
           p_addon_ids: selAddons.map((a) => a.id),

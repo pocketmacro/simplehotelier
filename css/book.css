@@ -140,6 +140,23 @@ label.bk-sf { cursor: pointer; }
 .bk-field small { font-weight: 400; color: var(--muted); font-size: 13px; }
 .bk-wide { grid-column: 1 / -1; }
 .bk-select-wrap { position: relative; display: block; }
+/* Who's coming: adults / children / infants, when the rooms price or limit them. */
+.bk-guests { position: relative; }
+.bk-guests-btn { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 34px; padding: 0;
+  border: 0; background: none; font: inherit; font-size: 16px; font-weight: 500; color: var(--ink); cursor: pointer; text-align: left; }
+.bk-guests-btn svg { flex: none; color: var(--muted); transition: transform .2s; }
+.bk-guests-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+.bk-guests-pop { position: absolute; z-index: 20; top: calc(100% + 12px); left: -12px; width: min(340px, calc(100vw - 32px)); padding: 8px 18px 16px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow-float); }
+.bk-gp-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.bk-gp-row b { display: block; font-size: 15px; font-weight: 600; }
+.bk-gp-row small { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.bk-gp-row output { min-width: 22px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bk-gp-done { margin-top: 14px; width: 100%; min-height: 44px; border: 0; border-radius: var(--r-btn); background: var(--brand); color: var(--brand-ink);
+  font: inherit; font-weight: 600; cursor: pointer; }
+.bk-address { margin: 0; padding: 0; border: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px 20px; }
+.bk-address legend { padding: 0; margin-bottom: 12px; font-size: 15px; font-weight: 600; color: var(--ink); }
+.bk-address legend small { font-weight: 400; color: var(--muted); font-size: 13px; }
 .bk-select-wrap select { width: 100%; appearance: none; padding-right: 42px; background: var(--surface); color: var(--ink); cursor: pointer; }
 .bk-select-wrap::after { content: ""; position: absolute; right: 14px; top: 50%; width: 16px; height: 16px; margin-top: -8px; pointer-events: none;
   background: var(--muted); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;

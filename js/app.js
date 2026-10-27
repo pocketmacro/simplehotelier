@@ -2003,6 +2003,7 @@ document.addEventListener("click", (e) => {
         ga_measurement_id: $("#bkGa").value.trim() || null,
         booking_redirect_url: $("#bkRedirect").value.trim() || null,
         booking_by_type: !!($("#bkByType") && $("#bkByType").checked),
+        ...($("#bkAddressMode") ? { guest_address_mode: $("#bkAddressMode").value } : {}),
         deposit_enabled: !!($("#bkDepositOn") && $("#bkDepositOn").checked),
         deposit_percent: Math.min(100, Math.max(1, parseInt($("#bkDepositPct") ? $("#bkDepositPct").value : "25", 10) || 25))
       }).then(() => { if (liveTenant) { liveTenant.booking_headline = $("#bkHead").value.trim() || liveTenant.booking_headline; liveTenant.deposit_enabled = !!($("#bkDepositOn") && $("#bkDepositOn").checked); } renderSetupUI(); updateEmbed({ slug: slugVal }); toast("Booking page published", "Settings saved to Supabase", "ok"); })
@@ -2534,6 +2535,7 @@ function loadLiveIntoUI() {
     applyStudioPreview();
     if ($("#bkDepositOn")) $("#bkDepositOn").checked = !!live.tenant.deposit_enabled;
     if ($("#bkByType")) $("#bkByType").checked = live.tenant.booking_by_type !== false;
+    if ($("#bkAddressMode")) $("#bkAddressMode").value = live.tenant.guest_address_mode || "off";
     if ($("#bkDepositPct") && live.tenant.deposit_percent) $("#bkDepositPct").value = live.tenant.deposit_percent;
     if ($("#bkName")) $("#bkName").value = live.tenant.name || "";
     if (live.tenant.slug && $("#bkUrl")) $("#bkUrl").value = live.tenant.slug + ".simplehotelier.com";
