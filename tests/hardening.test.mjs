@@ -67,7 +67,8 @@ test("CSPs allow exactly what each page talks to", () => {
   assert.ok(book["script-src"].includes("https://js.stripe.com") && book["frame-src"].includes("https://js.stripe.com"), "Stripe.js");
   assert.ok(book["connect-src"].includes("https://api.stripe.com"));
   assert.ok(book["script-src"].includes("https://www.googletagmanager.com"), "Google Analytics");
-  assert.deepEqual(app["script-src"], ["'self'"], "dashboard runs only our own scripts");
+  assert.deepEqual(app["script-src"], ["'self'", "https://static.cloudflareinsights.com"], "dashboard: our scripts + Cloudflare Web Analytics only");
+  for (const p of [book, app, csp("/")]) assert.ok(p["connect-src"].includes("https://cloudflareinsights.com"), "Web Analytics beacon");
   assert.ok(app["frame-src"].includes("'self'"), "studio preview iframe");
   for (const p of [book, app, csp("/")]) assert.ok(p["font-src"].includes("https://fonts.gstatic.com") && p["style-src"].includes("https://fonts.googleapis.com"));
 });
