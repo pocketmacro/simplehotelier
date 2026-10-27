@@ -25,11 +25,11 @@ test("browsers can't read the calendar token or billing ids; managers get them f
 });
 
 test("the dashboard never selects every tenants column", () => {
-  assert.match(db, /rpc\("member_tenant", \{ p_tenant: mem\[0\]\.tenant_id \}\)/);
+  assert.match(db, /rpc\("member_tenant", \{ p_tenant: mem\.tenant_id \}\)/);
   assert.match(db, /tenants\?select=id,name,slug,contact_email,subscription_status,current_period_end,created_at&order=/);
   assert.match(auth, /restInsert\("tenants\?select=id,name,slug,created_by,contact_email"/);
   // The only select=* on tenants is the fallback for a database without member_tenant().
-  assert.match(db, /\.catch\(\(\) => rest\("tenants\?id=eq\." \+ mem\[0\]\.tenant_id \+ "&select=\*"\)/);
+  assert.match(db, /\.catch\(\(\) => rest\("tenants\?id=eq\." \+ mem\.tenant_id \+ "&select=\*"\)/);
   assert.doesNotMatch(db, /"tenants\?select=\*/);
   assert.match(app, /!ROLE_VIEWS\[liveRole\] && !live\.tenant\.stripe_customer_id/, "billing reminder is for owners/admins");
 });

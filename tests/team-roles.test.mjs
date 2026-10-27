@@ -72,7 +72,7 @@ test("the live access-rule suite covers the roles and no longer accepts the gap"
 
 // ---------------------------------------------------------------- dashboard
 test("dashboard loads only what each role may see", () => {
-  assert.match(db, /tenant_members\?user_id=eq\." \+ user\.id \+ "&select=tenant_id,role&limit=1"/);
+  assert.match(db, /tenant_members\?user_id=eq\." \+ user\.id \+ "&select=tenant_id,role,created_at&order=created_at\.asc,tenant_id\.asc&limit=200"/);
   assert.match(db, /const desk = role === "owner" \|\| role === "admin" \|\| role === "staff";/);
   assert.match(db, /desk \? restAll\("reservations\?/);
   assert.match(db, /desk \? await restAll\("transactions\?/);

@@ -177,6 +177,13 @@
     };
   }
 
+  /* One login can belong to several properties. The one in use is remembered
+     per browser; without a remembered (and still valid) one, the oldest
+     membership opens. */
+  const TENANT_KEY = "sh_tenant";
+  const rememberedTenant = () => { try { return localStorage.getItem(TENANT_KEY) || ""; } catch { return ""; } };
+  function rememberTenant(id) { try { localStorage.setItem(TENANT_KEY, String(id || "")); } catch { /* no storage */ } }
+
   /* Signed-in path: resolve the user's tenant via tenant_members (RLS-safe). */
   async function memberTenant() {
     const t = await freshToken();
@@ -187,14 +194,22 @@
       });
       if (!ures.ok) return null;
       const user = await ures.json();
-      const mem = await rest("tenant_members?user_id=eq." + user.id + "&select=tenant_id,role&limit=1");
-      if (!mem || !mem.length) return { user, tenant: null };
+      const mems = await rest("tenant_members?user_id=eq." + user.id + "&select=tenant_id,role,created_at&order=created_at.asc,tenant_id.asc&limit=200");
+      if (!mems || !mems.length) return { user, tenant: null, memberships: [] };
+      const mem = mems.find((m) => m.tenant_id === rememberedTenant()) || mems[0];
       // member_tenant() adds the calendar token and billing ids for owners and
       // admins only (20261123000000_security_cleanup); browsers can't read
       // those columns directly. The plain read covers a not-yet-migrated db.
-      const tenant = await rpc("member_tenant", { p_tenant: mem[0].tenant_id })
-        .catch(() => rest("tenants?id=eq." + mem[0].tenant_id + "&select=*").then((rows) => rows && rows[0]).catch(() => null));
-      return { user, role: mem[0].role, tenant: tenant && tenant.id ? tenant : null };
+      const tenant = await rpc("member_tenant", { p_tenant: mem.tenant_id })
+        .catch(() => rest("tenants?id=eq." + mem.tenant_id + "&select=*").then((rows) => rows && rows[0]).catch(() => null));
+      const names = {};
+      if (mems.length > 1) {
+        const rows = await rest("tenants?id=in.(" + mems.map((m) => m.tenant_id).join(",") + ")&select=id,name").catch(() => []);
+        (rows || []).forEach((r) => { names[r.id] = r.name; });
+      }
+      if (tenant && tenant.id) names[tenant.id] = tenant.name;
+      const memberships = mems.map((m) => ({ id: m.tenant_id, role: m.role, name: names[m.tenant_id] || "Property" }));
+      return { user, role: mem.role, tenant: tenant && tenant.id ? tenant : null, memberships };
     } catch { return null; }
   }
 
@@ -249,7 +264,7 @@
       const memberRows = await rest("tenant_members?" + tid + "&select=user_id").catch(() => []);
       const roomCode = (id) => ctx.roomCodeById[id] || "—";
       return {
-        tenant, user, role, membersCount: (memberRows || []).length,
+        tenant, user, role, memberships: mt.memberships || [], membersCount: (memberRows || []).length,
         // Housekeeping's turnover list: rooms and dates, no guest details.
         turnovers: (turnoverRows || []).map((t) => ({
           roomId: t.room_id, roomCode: roomCode(t.room_id),
@@ -570,7 +585,7 @@
   const tenantId = () => ctx.tenantId;
 
   window.SHDB = {
-    configured, loadLiveData, updateHK, hasLive, updateTenantSettings, tenantId, freshToken,
+    configured, loadLiveData, updateHK, hasLive, updateTenantSettings, tenantId, freshToken, rememberTenant,
     isSystemAdmin, listSupportCases, createSupportCase, listSupportMessages, addSupportMessage, setSupportStatus, adminSubscribers, adminErrors,
     loadOlderReservations,
     createReservation, setReservationStatus, updateReservationPaid, addTransaction,

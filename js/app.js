@@ -269,6 +269,7 @@ let liveTenant = null, liveMembersCount = 1, setupRouted = false;
 /* Team roles (20261122000000_role_scoped_access): which screens each sees.
    The database enforces the same limits; this keeps the UI honest. */
 let liveRole = "owner";
+let liveProperties = []; // every property this login belongs to: { id, name, role }
 const ROLE_VIEWS = {
   staff: ["overview", "reservations", "calendar", "rooms", "housekeeping", "maintenance", "payments", "reports", "support"],
   cleaner: ["housekeeping", "maintenance"],
@@ -666,7 +667,9 @@ $$(".seg").forEach((seg) => {
   });
 });
 const propPickerBtn = $("#propPicker");
-if (propPickerBtn) propPickerBtn.addEventListener("click", () => goto("settings"));
+if (propPickerBtn) propPickerBtn.addEventListener("click", () => {
+  if (window.SHDB && SHDB.hasLive()) openPropertySwitcher(); else goto("settings");
+});
 const logoFileInput = $("#logoFile");
 if (logoFileInput) logoFileInput.addEventListener("change", async (e) => {
   const f = e.target.files && e.target.files[0];
@@ -2060,6 +2063,14 @@ document.addEventListener("click", (e) => {
       } catch (e) { toast("Could not send invite", e.message, "warn"); }
     })();
   }
+  else if (a === "switch-property") {
+    const id = el.dataset.id;
+    if (!id || id === (liveTenant && liveTenant.id)) { closeModal(); return; }
+    SHDB.rememberTenant(id);
+    location.reload(); // a clean load: nothing from the last property lingers
+  }
+  else if (a === "property-settings") { closeModal(); goto("settings"); }
+  else if (a === "add-property") openPropertySetup(true);
   else if (a === "member-remove") {
     const { user, email } = el.dataset;
     confirmAction(`Remove ${email} from the team?`,
@@ -2105,10 +2116,14 @@ document.addEventListener("click", (e) => {
     el.disabled = true; el.textContent = "Creating…";
     SHAuth.createProperty(name)
       .then(async (tenant) => {
+        const switching = !!(liveTenant && liveTenant.id); // adding a second property
+        SHDB.rememberTenant(tenant.id); // open the new one, now and after checkout
         closeModal();
         toast("Property created", name + " · now start your free trial", "ok");
         const started = await startTrialCheckout(tenant.id);
-        if (!started) loadLiveIntoUI();
+        if (started) return;
+        if (switching) { flashNext("Property created", "Finish your trial setup anytime from Settings → Plan and billing"); location.reload(); }
+        else loadLiveIntoUI();
       })
       .catch((err) => {
         el.disabled = false; el.textContent = "Create property & continue";
@@ -2371,9 +2386,11 @@ async function loadOlderReservations() {
   }
 }
 $("#resOlder").addEventListener("click", loadOlderReservations);
-function openPropertySetup() {
+function openPropertySetup(another = false) {
   openModal({
-    title: "Set up your property", sub: "Name it, then add a card to start your 30-day free trial",
+    title: another ? "Add a property" : "Set up your property",
+    sub: another ? "It gets its own rooms, team and booking page. Name it, then add a card to start its 30-day free trial"
+      : "Name it, then add a card to start your 30-day free trial",
     body: `
       <div class="field"><label>Property name</label><input class="input" id="obPropertyName" placeholder="e.g. Pinecrest Cabins"><span class="help">This becomes your booking page title. You can add address, photos, rooms and rates right after.</span></div>
       <div class="kv" style="margin-top:6px">
@@ -2381,7 +2398,7 @@ function openPropertySetup() {
         <dt>Free trial</dt><dd>30 days · card required, nothing charged today</dd>
         <dt>Then</dt><dd>Add rooms, set rates, publish your booking page</dd>
       </div>`,
-    foot: `<button class="btn btn-ghost btn-sm" data-close type="button">I'll do this later</button>
+    foot: `<button class="btn btn-ghost btn-sm" data-close type="button">${another ? "Cancel" : "I'll do this later"}</button>
       <button class="btn btn-primary btn-sm" data-action="setup-property" type="button">Create property &amp; continue</button>`,
     wide: true
   });
@@ -2469,25 +2486,85 @@ document.addEventListener("change", (e) => {
   } else run();
 });
 
-/* Claim a pending team invite for the signed-in user (token from the invite
-   link and/or their account email). Runs once per sign-in. */
+/* Claim pending team invites for the signed-in user: the one in the invite
+   link, or else any sent to their account email. Runs once per page. One
+   login can belong to several properties, so this runs for people who
+   already have one too (claimInviteAsMember). Resolves to the
+   accept-invite response when something was joined, else null. */
 let inviteClaimTried = false;
 async function tryClaimInvite() {
-  if (inviteClaimTried) return false;
+  if (inviteClaimTried) return null;
   inviteClaimTried = true;
+  const forget = () => { try { localStorage.removeItem("sh_invite_token"); } catch { /* no storage */ } };
   try {
     let token = "";
     try { token = localStorage.getItem("sh_invite_token") || ""; } catch { /* no storage */ }
     const d = await fnInvoke("accept-invite", token ? { token } : {});
-    if (d && d.joined) {
-      try { localStorage.removeItem("sh_invite_token"); } catch { /* no storage */ }
-      toast("Welcome to the team", `You joined ${d.tenant ? d.tenant.name : "the property"} as ${d.role}`, "ok");
-      return true;
-    }
+    forget(); // joined, or the link's invite is used up or expired
+    if (d && d.joined && d.tenant && d.tenant.id) return d;
   } catch (e) {
-    if (e && /different email|invited email/i.test(e.message || "")) toast("Use the invited email", e.message, "warn");
+    // Kept on a mismatch: they may sign out and back in with the invited email.
+    if (e && /was sent to/i.test(e.message || "")) toast("Use the invited email", e.message, "warn");
   }
-  return false;
+  return null;
+}
+const joinedNames = (d) => (d.tenants && d.tenants.length ? d.tenants : [d.tenant]).map((t) => t.name).filter(Boolean).join(", ") || "the property";
+/* Open the property they just joined, with a note that survives the reload. */
+function openJoined(d) {
+  flashNext("Welcome to the team", `You joined ${joinedNames(d)} as ${ROLE_LABELS[d.role] || d.role}`);
+  SHDB.rememberTenant(d.tenant.id);
+  location.reload();
+}
+/* Already on a property: claim an invite link they followed (and open that
+   property), or once a browser session pick up invites sent to their email
+   (joined quietly; they switch from the property menu). */
+function claimInviteAsMember() {
+  let token = "", checked = false;
+  try {
+    token = localStorage.getItem("sh_invite_token") || "";
+    checked = sessionStorage.getItem("sh_invites_checked") === "1";
+    sessionStorage.setItem("sh_invites_checked", "1");
+  } catch { /* no storage */ }
+  if (!token && checked) return;
+  tryClaimInvite().then((d) => {
+    if (!d) return;
+    const fresh = (d.tenants || [d.tenant]).filter((t) => !liveProperties.some((p) => p.id === t.id));
+    if (!fresh.length) return; // already a member there
+    if (token) { openJoined(d); return; }
+    fresh.forEach((t) => liveProperties.push({ id: t.id, name: t.name, role: t.role || d.role }));
+    toast(`You joined ${fresh.map((t) => t.name).join(", ")}`, "Switch to it from the property menu at the top of the sidebar", "ok");
+  });
+}
+/* A note that survives one reload (switching property, joining a team). */
+function flashNext(title, body) {
+  try { sessionStorage.setItem("sh_flash", JSON.stringify({ title, body })); } catch { /* no storage */ }
+}
+function showFlash() {
+  let f = null;
+  try { f = JSON.parse(sessionStorage.getItem("sh_flash") || "null"); sessionStorage.removeItem("sh_flash"); } catch { /* no storage */ }
+  if (f && f.title) setTimeout(() => toast(f.title, f.body || "", "ok"), 700);
+}
+
+/* Sidebar property menu: every property this login belongs to, and a way to
+   add another. Switching reloads so nothing from the last one lingers. */
+function openPropertySwitcher() {
+  const current = liveTenant && liveTenant.id;
+  const list = liveProperties.length ? liveProperties : (current ? [{ id: current, name: tenantDisplayName, role: liveRole }] : []);
+  openModal({
+    title: "Your properties",
+    sub: list.length > 1 ? "Pick the property to work on. Each has its own rooms, team and bookings." : "Properties you own or work at show up here.",
+    body: `<div class="prop-list">${list.map((p) => {
+      const on = p.id === current;
+      return `<button class="prop-row${on ? " current" : ""}" type="button" data-action="switch-property" data-id="${esc(p.id)}"${on ? ` aria-current="true"` : ""}>
+        <span class="prop-dot" aria-hidden="true"></span>
+        <span class="prop-row-name">${esc(p.name)}</span>
+        <span class="pill">${esc(ROLE_LABELS[p.role] || p.role)}</span>
+        ${on ? `<span class="prop-row-open">Open</span>` : ""}
+      </button>`;
+    }).join("")}</div>`,
+    foot: `${canSee("settings") ? `<button class="btn btn-ghost btn-sm" type="button" data-action="property-settings">Property settings</button>` : ""}
+      <button class="btn btn-primary btn-sm" type="button" data-action="add-property">Add a property</button>`
+  });
 }
 
 /* Demo mode is explicit and local-only: it is entered only via the
@@ -2539,7 +2616,7 @@ function loadLiveIntoUI() {
       // Signed in but no property yet. An invited teammate joins their
       // property here instead of creating one (no card, no trial).
       if (statusEl) statusEl.textContent = "Signed in as " + live.user.email + " — set up your property to get started.";
-      tryClaimInvite().then((joined) => { if (joined) loadLiveIntoUI(); else openPropertySetup(); });
+      tryClaimInvite().then((d) => { if (d) openJoined(d); else openPropertySetup(); });
       return;
     }
     // Real account: replace wholesale, even when empty — demo data must never leak in.
@@ -2556,6 +2633,7 @@ function loadLiveIntoUI() {
     liveIcalToken = live.tenant.ical_token || "";
     tenantDisplayName = live.tenant.name || "";
     liveTenant = live.tenant;
+    liveProperties = live.memberships || [];
     window.SH_TENANT_ID = live.tenant.id; // error reports name the property
     liveRole = ROLE_LABELS[live.role] ? live.role : "staff";
     turnovers = live.turnovers || [];
@@ -2634,6 +2712,8 @@ function loadLiveIntoUI() {
     if ($("#billPeriod")) $("#billPeriod").textContent = live.tenant.current_period_end ? new Date(live.tenant.current_period_end).toLocaleDateString() : "-";
     if (statusEl) statusEl.textContent = "Data source: Supabase · " + live.tenant.name + " (live" + (live.user ? " · " + live.user.email : "") + ")";
     toast("Connected to Supabase", live.tenant.name + " loaded live", "ok");
+    showFlash();
+    claimInviteAsMember();
     if (!setupRouted) {
       setupRouted = true;
       if (!ROLE_VIEWS[liveRole] && computeSetup().pct < 100) goto("setup");

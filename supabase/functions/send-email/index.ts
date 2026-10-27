@@ -188,8 +188,8 @@ async function teamInvite(req: Request, body: any) {
     subject: `You're invited to join ${tenant.name} on SimpleHotelier`,
     html: emailShell(`Join ${tenant.name}`,
       p(`Hi,`) +
-      p(`You've been invited to join <strong>${esc(tenant.name)}</strong> on SimpleHotelier as ${roleLabel}. Create your free account with this email address and you'll be taken straight into the property — no card or trial needed.`) +
-      p(`<a href="${esc(link)}" style="display:inline-block;background:#0c3b3c;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;padding:12px 22px;border-radius:10px">Accept invite &amp; create account</a>`) +
+      p(`You've been invited to join <strong>${esc(tenant.name)}</strong> on SimpleHotelier as ${roleLabel}. New to SimpleHotelier? Set a password and you're straight in, with no card or trial needed. Already have an account with this email? Log in and ${esc(tenant.name)} is added to it.`) +
+      p(`<a href="${esc(link)}" style="display:inline-block;background:#0c3b3c;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;padding:12px 22px;border-radius:10px">Accept invite</a>`) +
       p(`Or paste this link into your browser:<br><span style="word-break:break-all">${esc(link)}</span>`),
       `This invite was sent to ${esc(email)}. If it wasn't meant for you, you can ignore this email.`)
   });
