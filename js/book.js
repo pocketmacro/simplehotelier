@@ -51,7 +51,14 @@
     if (plan.promoCode && String(plan.promoCode).toUpperCase() !== String(promoCode || "").trim().toUpperCase()) return false;
     return true;
   }
-  window.SHBookCalc = { quote, applyPlanToRates, planApplies };
+  /* Book-by-type: units of a type that can still take the stay, in assign order.
+     availableIds null = availability unknown, so every unit is a candidate. */
+  function chooseUnits(units, availableIds) {
+    if (!availableIds) return units.slice();
+    const set = new Set(availableIds);
+    return units.filter((u) => set.has(u.id));
+  }
+  window.SHBookCalc = { quote, applyPlanToRates, planApplies, chooseUnits };
 
   /* ---- DOM app (skipped when loaded headlessly, e.g. by tests) ---- */
   if (!document.querySelector || !document.querySelector("#roomsList")) return;
@@ -75,7 +82,9 @@
   const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  const state = { tenant: null, rooms: [], types: {}, addons: [], taxes: [], selected: null, available: null, gaId: "", overrides: {}, dep: null, paying: null, stripe: null, cardEl: null };
+  const state = { tenant: null, rooms: [], types: {}, addons: [], taxes: [], selected: null, selectedTypeId: null, available: null, gaId: "", overrides: {}, dep: null, paying: null, stripe: null, cardEl: null };
+  /* Properties choose: guests book a room type (we auto-assign a unit) or the exact room. */
+  const byType = () => !!(state.tenant && state.tenant.booking_by_type !== false);
 
   /* Promo code can arrive in the link, e.g. book.html?property=you&PROMO=EXTENDED_STAY */
   const urlPromo = (params.get("PROMO") || params.get("promo") || "").trim().toUpperCase();
@@ -149,6 +158,7 @@
 
   function renderRooms() {
     const n = Math.max(1, nights() || 1);
+    if (byType()) { renderTypeCards(n); return; }
     $("#roomsList").innerHTML = state.rooms.map((r) => {
       const booked = state.available && !state.available.includes(r.id);
       const sel = state.selected && state.selected.id === r.id;
@@ -178,6 +188,52 @@
     }).join("") || `<p class="bk-loading">No rooms are listed yet.</p>`;
     postHeight();
   }
+  /* Book-by-type: one card per room type with live availability counts.
+     Selecting a type prices from any of its units (identical by construction);
+     the exact unit is auto-assigned at submit. */
+  function typeGroups() {
+    const groups = [], seen = new Map();
+    state.rooms.forEach((r) => {
+      const t = typeFor(r);
+      if (!t) return;
+      if (!seen.has(t.id)) { const g = { type: t, units: [] }; seen.set(t.id, g); groups.push(g); }
+      seen.get(t.id).units.push(r);
+    });
+    return groups;
+  }
+  function renderTypeCards(n) {
+    const groups = typeGroups();
+    $("#roomsList").innerHTML = groups.map(({ type, units }) => {
+      const free = chooseUnits(units, state.available);
+      const availKnown = !!state.available;
+      const booked = availKnown && free.length === 0;
+      const rep = free[0] || units[0];
+      const sel = state.selectedTypeId === type.id;
+      const photos = (type.photos && type.photos.length ? type.photos : (rep.photos && rep.photos.length ? rep.photos : []));
+      const meta = [`Sleeps ${esc(type.max_occupants || rep.sleeps || 2)}`, `${units.length} room${units.length === 1 ? "" : "s"}`];
+      if (type.bathrooms) meta.push(esc(type.bathrooms) + " bath");
+      if (type.view) meta.push(esc(type.view));
+      if (type.smoking_policy === "non-smoking") meta.push("Non-smoking");
+      if (type.handicap_accessible) meta.push("Accessible");
+      if (Array.isArray(type.beds) && type.beds.length) meta.push(type.beds.map((b) => (Number(b.qty) || 1) + "× " + b.type).join(", "));
+      const availNote = !availKnown ? "" : booked ? "Sold out for these dates" : free.length <= 2 ? `Only ${free.length} left` : `${free.length} available`;
+      const feats = Array.isArray(type.features) ? type.features.slice(0, 8) : [];
+      const ap = applicablePlan(rep, Math.max(1, nights() || 1));
+      return `<article class="bk-room${sel ? " sel" : ""}${booked ? " booked" : ""}">
+        ${photos.length ? `<img class="bk-room-img" src="${esc(photos[0])}" alt="${esc(type.name)}">` : `<div class="bk-room-ph">${esc((type.name || "R").slice(0, 1))}</div>`}
+        <h3>${esc(type.name)}</h3>
+        <div class="meta">${meta.join(" · ")}</div>
+        ${type.description ? `<div class="meta">${esc(type.description)}</div>` : ""}
+        ${availNote ? `<div class="bk-feats"><span class="bk-feat">${esc(availNote)}</span></div>` : ""}
+        ${ap ? `<div class="bk-feats"><span class="bk-feat bk-plan">${esc(ap.plan.name)} · save ${money(ap.saved)}</span></div>` : ""}
+        ${feats.length ? `<div class="bk-feats">${feats.map((f) => `<span class="bk-feat">${esc(f)}</span>`).join("")}</div>` : ""}
+        <div class="price"><div><b>${money(baseRate(rep))}</b> <span>/ night · ${money(nightlyRatesFor(rep).reduce((a, b) => a + b, 0) || baseRate(rep) * n)} for ${n} night${n > 1 ? "s" : ""}</span></div>
+        <button class="bk-select" type="button" data-type="${type.id}" ${booked ? "disabled" : ""}>${booked ? "Sold out" : sel ? "Selected ✓" : "Select"}</button></div>
+      </article>`;
+    }).join("") || `<p class="bk-loading">No rooms are listed yet.</p>`;
+    postHeight();
+  }
+
   function renderAddons() {
     const wrap = $("#addonsSection");
     wrap.hidden = !state.addons.length;
@@ -412,7 +468,7 @@
       $("#depAckText").textContent = `I understand a deposit of ${money(dep.due)} (${dep.pct}% of the total) is required to confirm this booking. The property will arrange collection.`;
     } else ackWrap.hidden = true;
     $("#summaryBody").innerHTML =
-      `<div class="bk-line"><span>${esc(state.selected.name)} × ${n} night${n > 1 ? "s" : ""}</span><b>${money(q.subtotal)}</b></div>` +
+      `<div class="bk-line"><span>${esc(byType() && type ? type.name : state.selected.name)} × ${n} night${n > 1 ? "s" : ""}${byType() ? " · room assigned on confirmation" : ""}</span><b>${money(q.subtotal)}</b></div>` +
       (ap ? `<div class="bk-line"><span>${esc(ap.plan.name)} applied</span><b>−${money(ap.saved)}</b></div>` : "") +
       (!ap && code ? `<div class="bk-line"><span>Code ${esc(code)} didn't apply to this room or stay length</span><b></b></div>` : "") +
       q.addonLines.map((l) => `<div class="bk-line"><span>${esc(l.name)}</span><b>${money(l.amount)}</b></div>`).join("") +
@@ -439,13 +495,22 @@
       state.available = (rows || []).map((r) => (typeof r === "string" ? r : r.get_available_room_ids))
         .filter((id) => { const room = state.rooms.find((x) => x.id === id); return room && !ruleBlock(room); });
       $("#availNote").hidden = false;
-      $("#availNote").textContent = state.available.length + " of " + state.rooms.length + " rooms available for these dates.";
+      $("#availNote").textContent = byType()
+        ? typeGroups().filter((g) => chooseUnits(g.units, state.available).length).length + " room types available for these dates — we assign your exact room when you book."
+        : state.available.length + " of " + state.rooms.length + " rooms available for these dates.";
     } catch {
       state.available = null; // availability function not installed yet: constraint still protects at submit
       $("#availNote").hidden = false;
       $("#availNote").textContent = "Showing all rooms — the property confirms availability with your request.";
     }
-    if (state.selected && state.available && !state.available.includes(state.selected.id)) state.selected = null;
+    if (state.available) {
+      if (byType() && state.selectedTypeId) {
+        const units = state.rooms.filter((r) => r.room_type_id === state.selectedTypeId);
+        const free = chooseUnits(units, state.available);
+        if (free.length) state.selected = free[0];
+        else { state.selected = null; state.selectedTypeId = null; }
+      } else if (state.selected && !state.available.includes(state.selected.id)) state.selected = null;
+    }
     renderRooms(); renderSummary();
   }
 
@@ -530,8 +595,17 @@
   $("#outDate").value = d(9);
 
   $("#roomsList").addEventListener("click", (e) => {
+    const tb = e.target.closest("[data-type]");
+    if (tb && !tb.disabled) {
+      state.selectedTypeId = tb.dataset.type;
+      const units = state.rooms.filter((r) => r.room_type_id === state.selectedTypeId);
+      state.selected = chooseUnits(units, state.available)[0] || units[0] || null;
+      renderRooms(); renderSummary();
+      return;
+    }
     const b = e.target.closest("[data-room]");
     if (!b || b.disabled) return;
+    state.selectedTypeId = null;
     state.selected = state.rooms.find((r) => r.id === b.dataset.room) || null;
     renderRooms(); renderSummary();
   });
@@ -566,7 +640,7 @@
     const btn = $("#bookBtn");
     btn.disabled = true; btn.textContent = "Sending…";
     const code = "SH-" + Math.random().toString(36).slice(2, 8).toUpperCase();
-    const resId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + "-" + Math.random().toString(36).slice(2));
+    const newResId = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + "-" + Math.random().toString(36).slice(2));
     const selAddons = chosenAddons();
     const apNow = applicablePlan(state.selected, nights());
     const consentEl = $("#gConsent");
@@ -577,18 +651,45 @@
       termsRequired() ? "Guest agreed to property terms & house rules" : "",
     state.dep ? `Deposit ${state.dep.collectible ? "to pay by card" : "acknowledged, to be collected by property"}: ${money(state.dep.due)} (${state.dep.pct}%)` : ""].filter(Boolean).join(" · ");
     try {
-      await api("reservations", {
-        method: "POST", headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({
-          id: resId, tenant_id: state.tenant.id, room_id: state.selected.id,
-          guest_name: name, guest_email: email, guest_phone: $("#gPhone").value.trim() || null,
-          confirmation_code: code, check_in: $("#inDate").value, check_out: $("#outDate").value,
-          status: "pending", source: "direct", adults: Math.max(1, parseInt($("#guests").value) || 1),
-          notes: notes || null,
-          subtotal_cents: Math.round(q.subtotal * 100), tax_cents: Math.round(q.taxTotal * 100),
-          total_cents: Math.round(q.total * 100), paid_cents: 0
-        })
-      });
+      /* By type: refresh availability, then auto-assign the first free unit.
+         If two guests race for the last unit, the no-overlap constraint loses
+         one insert — fall through to the next unit instead of erroring out. */
+      let candidates = [state.selected];
+      if (byType() && state.selectedTypeId) {
+        await checkAvailability().catch(() => {});
+        const units = state.rooms.filter((r) => r.room_type_id === state.selectedTypeId);
+        candidates = chooseUnits(units, state.available);
+        if (!candidates.length) {
+          btn.disabled = false; btn.textContent = "Request booking";
+          showError("That room type just sold out for these dates. Try different dates or another type.");
+          return;
+        }
+      }
+      let resId = null, placedUnit = null, lastErr = null;
+      for (const unit of candidates) {
+        const tryId = newResId();
+        try {
+          await api("reservations", {
+            method: "POST", headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({
+              id: tryId, tenant_id: state.tenant.id, room_id: unit.id,
+              guest_name: name, guest_email: email, guest_phone: $("#gPhone").value.trim() || null,
+              confirmation_code: code, check_in: $("#inDate").value, check_out: $("#outDate").value,
+              status: "pending", source: "direct", adults: Math.max(1, parseInt($("#guests").value) || 1),
+              notes: notes || null,
+              subtotal_cents: Math.round(q.subtotal * 100), tax_cents: Math.round(q.taxTotal * 100),
+              total_cents: Math.round(q.total * 100), paid_cents: 0
+            })
+          });
+          resId = tryId; placedUnit = unit;
+          break;
+        } catch (e) {
+          lastErr = e;
+          if (!/exclusion|conflict|duplicate|409/i.test(e.message)) throw e;
+        }
+      }
+      if (!placedUnit) throw lastErr || new Error("unavailable");
+      state.selected = placedUnit;
       // Attach add-on snapshots (best effort; the request itself already succeeded).
       for (const a of selAddons) {
         await api("reservation_addons", {

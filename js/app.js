@@ -1796,6 +1796,7 @@ document.addEventListener("click", (e) => {
         brand_color: document.body.dataset.brand || "#0c3b3c",
         ga_measurement_id: $("#bkGa").value.trim() || null,
         booking_redirect_url: $("#bkRedirect").value.trim() || null,
+        booking_by_type: !!($("#bkByType") && $("#bkByType").checked),
         deposit_enabled: !!($("#bkDepositOn") && $("#bkDepositOn").checked),
         deposit_percent: Math.min(100, Math.max(1, parseInt($("#bkDepositPct") ? $("#bkDepositPct").value : "25", 10) || 25))
       }).then(() => { if (liveTenant) { liveTenant.booking_headline = $("#bkHead").value.trim() || liveTenant.booking_headline; liveTenant.deposit_enabled = !!($("#bkDepositOn") && $("#bkDepositOn").checked); } renderSetupUI(); updateEmbed({ slug: slugVal }); toast("Booking page published", "Settings saved to Supabase", "ok"); })
@@ -2135,6 +2136,7 @@ function loadLiveIntoUI() {
     if ($("#bkGa")) $("#bkGa").value = live.tenant.ga_measurement_id || "";
     if ($("#bkRedirect")) $("#bkRedirect").value = live.tenant.booking_redirect_url || "";
     if ($("#bkDepositOn")) $("#bkDepositOn").checked = !!live.tenant.deposit_enabled;
+    if ($("#bkByType")) $("#bkByType").checked = live.tenant.booking_by_type !== false;
     if ($("#bkDepositPct") && live.tenant.deposit_percent) $("#bkDepositPct").value = live.tenant.deposit_percent;
     if (live.tenant.booking_headline && $("#bkHead")) { $("#bkHead").value = live.tenant.booking_headline; $("#mockHead").textContent = live.tenant.booking_headline; }
     if (live.tenant.booking_subheading && $("#bkSub")) { $("#bkSub").value = live.tenant.booking_subheading; $("#mockSub").textContent = live.tenant.booking_subheading; }
