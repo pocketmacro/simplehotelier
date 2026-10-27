@@ -60,7 +60,14 @@
   const base = (cfg.SUPABASE_URL || "").replace(/\/$/, "");
   const anon = cfg.SUPABASE_ANON_KEY || "";
   const params = new URLSearchParams(location.search);
-  const slug = params.get("property") || params.get("slug") || cfg.TENANT_SLUG || "pinecrest";
+  /* Property subdomains ({slug}.simplehotelier.com/book.html) name the tenant too. */
+  const hostLabel = (() => {
+    const h = location.hostname.toLowerCase(), suffix = ".simplehotelier.com";
+    if (!h.endsWith(suffix)) return "";
+    const label = h.slice(0, -suffix.length);
+    return label && label.indexOf(".") === -1 && label !== "www" && /^[a-z0-9-]+$/.test(label) ? label : "";
+  })();
+  const slug = params.get("property") || params.get("slug") || hostLabel || cfg.TENANT_SLUG || "pinecrest";
   const isEmbed = params.get("embed") === "1";
   if (isEmbed) document.body.classList.add("embed");
 
