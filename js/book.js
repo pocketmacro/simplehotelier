@@ -91,6 +91,8 @@
   })();
   const slug = params.get("property") || params.get("slug") || hostLabel || cfg.TENANT_SLUG || "pinecrest";
   const isEmbed = params.get("embed") === "1";
+  /* Guests land here from a payment-request link once Stripe has the payment. */
+  const paidRef = (params.get("paid") || "").trim().slice(0, 40);
   if (isEmbed) document.body.classList.add("embed");
 
   const $ = (s) => document.querySelector(s);
@@ -376,6 +378,15 @@
     trackConversion(code, total);
     postHeight();
   }
+  function showPaidThanks() {
+    document.querySelector(".bk-layout").style.display = "none";
+    $("#searchForm").style.display = "none";
+    $("#successPanel h2").textContent = "Payment received";
+    $("#successText").textContent = "Thank you — " + state.tenant.name + " has received your payment. Stripe emails your receipt, and the property has your updated balance.";
+    $("#successCode").textContent = "Booking " + paidRef;
+    $("#successPanel").hidden = false;
+    postHeight();
+  }
   async function payDeposit() {
     const btn = $("#bookBtn");
     const pErr = $("#payError");
@@ -650,6 +661,7 @@
       await loadRatePlans();
       renderTerms();
       renderRooms(); renderAddons(); renderSummary(); postHeight();
+      if (paidRef) showPaidThanks();
     } catch (e) {
       showError("Booking is temporarily unavailable. Please contact the property directly.");
     }

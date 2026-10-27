@@ -1,13 +1,41 @@
-// SimpleHotelier — Stripe webhook: keep tenant subscription state in sync.
-// Events: checkout.session.completed, customer.subscription.updated/deleted,
-// invoice.payment_failed. Secrets: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET.
+// SimpleHotelier — Stripe webhook: subscription state + guest card payments.
+// Events: checkout.session.completed (subscriptions and guest payment links),
+// customer.subscription.updated/deleted, invoice.payment_failed,
+// payment_intent.succeeded (deposits, front-desk charges, payment links) and
+// charge.refunded (refunds issued in the Stripe Dashboard).
+// Secrets: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET.
 // Deploy: supabase functions deploy stripe-webhook --no-verify-jwt
 // deno-lint-ignore-file no-explicit-any
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { saveCardFromIntent } from "../_shared/cards.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2024-06-20" });
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+/* A guest card payment succeeded (deposit, front-desk charge or payment link):
+   record it once, keep the card if it was saved, and email a receipt for
+   payment links (the dashboard sends its own receipts for card charges). */
+async function guestPaymentSucceeded(intent: any) {
+  const reservationId = intent.metadata?.reservation_id;
+  if (!reservationId) return;
+  const { data: recorded, error } = await admin.rpc("record_stripe_payment", {
+    p_intent: intent.id,
+    p_reservation: reservationId,
+    p_amount_cents: intent.amount_received || intent.amount,
+    p_description: intent.description || null,
+    p_kind: intent.metadata?.kind || null,
+  });
+  if (error) throw new Error(error.message);
+  if (intent.setup_future_usage && intent.customer) await saveCardFromIntent(stripe, admin, reservationId, intent);
+  if (recorded && intent.metadata?.kind === "payment_request") {
+    await fetch(Deno.env.get("SUPABASE_URL") + "/functions/v1/send-email", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"), "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "charge_receipt", reservation_id: reservationId, payment_intent_id: intent.id }),
+    }).catch(() => {});
+  }
+}
 
 Deno.serve(async (req) => {
   const sig = req.headers.get("stripe-signature");
@@ -24,7 +52,9 @@ Deno.serve(async (req) => {
     if (event.type === "checkout.session.completed") {
       const s: any = event.data.object;
       const tenantId = s.metadata?.tenant_id;
-      if (tenantId && s.subscription) {
+      if (s.mode === "payment" && s.metadata?.kind === "payment_request" && s.payment_intent) {
+        await guestPaymentSucceeded(await stripe.paymentIntents.retrieve(String(s.payment_intent)));
+      } else if (tenantId && s.subscription) {
         const sub: any = await stripe.subscriptions.retrieve(String(s.subscription));
         await admin.from("tenants").update({
           stripe_customer_id: String(s.customer),
@@ -44,18 +74,26 @@ Deno.serve(async (req) => {
       if (tenantId) await admin.from("tenants").update(patch).eq("id", tenantId);
       else await admin.from("tenants").update(patch).eq("stripe_customer_id", String(sub.customer));
     } else if (event.type === "payment_intent.succeeded") {
-      // Guest deposit/charge on a connected account (fires for Connect events
-      // when this endpoint is registered as a Connect webhook). Idempotent and
-      // atomic: only a still-pending transaction moves paid_cents, once.
-      const intent: any = event.data.object;
-      const { error } = await admin.rpc("record_stripe_payment", { p_intent: intent.id });
-      if (error) throw new Error(error.message);
+      // Destination charges live on the platform, so these arrive as normal
+      // platform events. Idempotent: each intent moves paid_cents once.
+      await guestPaymentSucceeded(event.data.object);
+    } else if (event.type === "charge.refunded") {
+      const charge: any = event.data.object;
+      if (charge.payment_intent) {
+        const refunds = await stripe.refunds.list({ charge: charge.id, limit: 100 });
+        for (const r of refunds.data) {
+          if (r.status === "failed" || r.status === "canceled") continue;
+          const { error } = await admin.rpc("record_stripe_refund", { p_refund_id: r.id, p_intent: String(charge.payment_intent), p_amount_cents: r.amount });
+          if (error) throw new Error(error.message);
+        }
+      }
     } else if (event.type === "invoice.payment_failed") {
       const inv: any = event.data.object;
       await admin.from("tenants").update({ subscription_status: "past_due" }).eq("stripe_customer_id", String(inv.customer));
     }
   } catch (e: any) {
-    return new Response("handler error: " + (e.message ?? "unknown"), { status: 500 });
+    console.error("stripe-webhook", event.type, e);
+    return new Response("handler error", { status: 500 });
   }
   return new Response(JSON.stringify({ received: true }), { headers: { "Content-Type": "application/json" } });
 });

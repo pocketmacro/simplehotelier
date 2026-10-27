@@ -4,6 +4,8 @@
 //      the property. Callable with the anon key right after a public booking:
 //      it only ever writes to addresses stored on the reservation/tenant, and
 //      only once per reservation (confirmation_email_sent_at is claimed first).
+//      With force: true and a front-desk user's JWT, it is sent again (the
+//      dashboard's "Email confirmation" button).
 // POST { action: "charge_receipt", reservation_id, payment_intent_id? }
 //   -> emails the guest a receipt for their latest paid transaction.
 // Deploy: supabase functions deploy send-email
@@ -38,18 +40,23 @@ async function loadReservation(id: string) {
   return { r, tenant, room };
 }
 
-async function bookingConfirmation(reservationId: string) {
+async function bookingConfirmation(reservationId: string, force = false) {
   const loaded = await loadReservation(reservationId);
   if (!loaded) return json({ error: "reservation not found" }, 404);
   const { r, tenant, room } = loaded;
   if (!r.guest_email) return json({ sent: false, reason: "guest has no email" });
   if (!emailConfigured()) return json({ sent: false, reason: "email not configured" }, 503);
   // One confirmation per reservation: claim the flag atomically so repeated
-  // or concurrent calls (anyone holding the id) cannot resend.
-  const { data: claimed } = await admin.from("reservations")
-    .update({ confirmation_email_sent_at: new Date().toISOString() })
-    .eq("id", r.id).is("confirmation_email_sent_at", null).select("id");
-  if (!claimed || !claimed.length) return json({ sent: false, reason: "already sent" });
+  // or concurrent calls (anyone holding the id) cannot resend. Staff resends
+  // (force, checked by the caller) skip the claim.
+  if (force) {
+    await admin.from("reservations").update({ confirmation_email_sent_at: new Date().toISOString() }).eq("id", r.id);
+  } else {
+    const { data: claimed } = await admin.from("reservations")
+      .update({ confirmation_email_sent_at: new Date().toISOString() })
+      .eq("id", r.id).is("confirmation_email_sent_at", null).select("id");
+    if (!claimed || !claimed.length) return json({ sent: false, reason: "already sent" });
+  }
 
   const pending = r.status === "pending";
   const property = tenant?.name || "Your property";
@@ -177,7 +184,14 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
     const body = await req.json();
-    if (body.action === "booking_confirmation" && body.reservation_id) return await bookingConfirmation(String(body.reservation_id));
+    if (body.action === "booking_confirmation" && body.reservation_id) {
+      if (!body.force) return await bookingConfirmation(String(body.reservation_id));
+      const user = await callerUser(admin, req);
+      const { data: resv } = await admin.from("reservations").select("tenant_id").eq("id", String(body.reservation_id)).maybeSingle();
+      const role = user && resv ? await memberRole(admin, resv.tenant_id, user.id) : null;
+      if (!role || !["owner", "admin", "staff"].includes(role)) return json({ error: "Only the front desk team can resend confirmations" }, 403);
+      return await bookingConfirmation(String(body.reservation_id), true);
+    }
     if (body.action === "charge_receipt" && body.reservation_id) return await chargeReceipt(body);
     if (body.action === "team_invite") return await teamInvite(req, body);
     return json({ error: "action booking_confirmation, charge_receipt or team_invite required" }, 400);

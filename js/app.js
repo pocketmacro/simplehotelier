@@ -7,7 +7,7 @@ const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDi
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 /* ---------------- Demo data ---------------- */
-const TODAY = new Date(2026, 9, 26); // Mon Oct 26 2026, matches topbar
+const TODAY = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })(); // local today; demo data offsets count from here
 const dayMs = 864e5;
 const dstr = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 const addDays = (n) => new Date(TODAY.getTime() + n * dayMs);
@@ -163,8 +163,9 @@ function toast(title, sub = "", kind = "") {
 
 /* ---------------- Custom modal module (never native alert/confirm) ---------------- */
 const overlay = $("#overlay"), modal = $("#modal");
-function openModal({ title, sub = "", body = "", foot = "", wide = false }) {
-  modal.classList.toggle("wide", !!wide);
+function openModal({ title, sub = "", body = "", foot = "", wide = false, xl = false }) {
+  modal.classList.toggle("wide", !!wide && !xl);
+  modal.classList.toggle("xl", !!xl);
   modal.innerHTML = `
     <div class="modal-head"><div><h2>${esc(title)}</h2>${sub ? `<p>${esc(sub)}</p>` : ""}</div>
     <button class="modal-x" data-close type="button" aria-label="Close">✕</button></div>
@@ -236,7 +237,15 @@ const roomByCode = (c) => rooms.find((r) => r.code === c);
 const balance = (r) => Math.max(0, r.total - r.paid);
 
 /* ---------------- Overview ---------------- */
+function renderDateCtx() {
+  const el = $(".date-ctx");
+  if (!el) return;
+  const arr = reservations.filter((r) => r.inN === 0 && r.status !== "cancelled").length;
+  const dep = reservations.filter((r) => r.outN === 0 && r.status !== "cancelled").length;
+  el.innerHTML = `${esc(TODAY.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" }))}<small>${arr} arrival${arr === 1 ? "" : "s"} · ${dep} departure${dep === 1 ? "" : "s"} today</small>`;
+}
 function renderToday() {
+  renderDateCtx();
   const arr = reservations.filter((r) => r.inN === 0 && r.status !== "cancelled");
   const dep = reservations.filter((r) => r.outN === 0 && r.status !== "cancelled");
   const item = (r, tag) => `
@@ -1393,29 +1402,8 @@ function renderReports() {
 }
 
 /* ---------------- Modals: reservation detail / new / charge ---------------- */
-function openResDetail(ref) {
-  const r = reservations.find((x) => x.ref === ref || x.guest === ref);
-  if (!r) return;
-  const room = roomByCode(r.room);
-  openModal({
-    title: `${r.ref} · ${r.guest}`, sub: `${resDates(r)} · ${room ? room.name : r.room}`,
-    body: `
-      <div style="display:flex;gap:8px;margin-bottom:14px">${pill(ST[r.status])}${balance(r) > 0 ? pill(["partial", money(balance(r)) + " due"]) : pill(["paid", "Paid in full"])}</div>
-      <div class="kv">
-        <dt>Contact</dt><dd>${esc(r.contact)}</dd>
-        <dt>Room</dt><dd>${esc(r.room)} · ${room ? esc(room.type) : ""} · ${room ? money(room.rate) : ""}/night</dd>
-        <dt>Status</dt><dd>${ST[r.status][1]}</dd>
-        <dt>Total</dt><dd class="mono">${money(r.total)}</dd>
-        <dt>Paid</dt><dd class="mono">${money(r.paid)}</dd>
-        <dt>Balance</dt><dd class="mono">${money(balance(r))}</dd>
-        ${r.notes ? `<dt>Booking notes</dt><dd>${esc(r.notes)}</dd>` : ""}
-      </div>`,
-    foot: `
-      ${r.status === "pending" ? `<button class="btn btn-primary btn-sm" data-action="confirm-res" data-ref="${esc(r.ref)}" type="button">Confirm reservation</button>` : ""}
-      ${balance(r) > 0 ? `<button class="btn btn-brass btn-sm" data-action="charge" data-ref="${esc(r.ref)}" type="button">Charge ${money(balance(r))}</button>` : ""}
-      <button class="btn btn-ghost btn-sm" data-close type="button">Close</button>`,
-  });
-}
+/* Reservation detail, new reservations and charges all use the editor in js/reservation.js. */
+function openResDetail(ref) { openReservationEditor(ref); }
 
 function openNewTicket() {
   openModal({
@@ -1433,46 +1421,6 @@ function openNewTicket() {
     wide: true
   });
   const inp = $("#tkTitle"); if (inp) inp.focus();
-}
-
-function openNewReservation() {
-  const roomOpts = rooms.map((r) => `<option value="${esc(r.code)}">${esc(r.code)} · ${esc(r.name)} — ${money(roomRate(r))}/nt</option>`).join("");
-  openModal({
-    title: "New reservation", sub: "Walk-in, phone or manual entry",
-    body: `
-      <div class="form-2">
-        <div class="field"><label>Guest name</label><input class="input" id="nrName" placeholder="Jane Appleseed"></div>
-        <div class="field"><label>Contact</label><input class="input" id="nrContact" placeholder="email or phone"></div>
-      </div>
-      <div class="form-3">
-        <div class="field"><label>Room</label><select class="select" id="nrRoom">${roomOpts}</select></div>
-        <div class="field"><label>Check-in</label><input class="input" type="date" id="nrIn" value="2026-10-30"></div>
-        <div class="field"><label>Check-out</label><input class="input" type="date" id="nrOut" value="2026-11-01"></div>
-      </div>
-      <div class="field"><label>Add-ons</label><div id="nrAddons" style="display:flex;gap:7px;flex-wrap:wrap">${addons.filter((a) => a.on).map((a) => `<label class="tag" style="cursor:pointer"><input type="checkbox" value="${esc(a.name)}" style="accent-color:var(--brand)"> ${esc(a.name)} · ${money(a.price)}</label>`).join("")}</div></div>
-      <div class="field"><label>Notes</label><textarea class="textarea" id="nrNotes" placeholder="Early arrival, crib, allergies…"></textarea></div>`,
-    foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Cancel</button>
-      <button class="btn btn-primary btn-sm" data-action="save-reservation" type="button">Create reservation</button>`,
-    wide: true,
-  });
-}
-
-function openCharge(ref) {
-  const r = ref ? reservations.find((x) => x.ref === ref) : reservations.find((x) => balance(x) > 0);
-  if (!r) { toast("Nothing to charge", "All folios are settled", "ok"); return; }
-  const due = balance(r);
-  openModal({
-    title: `Charge ${r.guest}`, sub: `${r.ref} · ${r.room} · ${roomByCode(r.room)?.name || ""}`,
-    body: `
-      <div class="charge-total"><span>Balance due</span><strong>${money(due)}</strong></div>
-      <div class="form-2">
-        <div class="field"><label>Amount</label><input class="input mono" id="chAmt" type="number" min="1" step="0.01" value="${due.toFixed(2)}"></div>
-        <div class="field"><label>Method</label><select class="select" id="chMethod"><option>Visa **** 3098 (on file)</option><option>New card…</option><option>Cash</option><option>Bank transfer</option></select></div>
-      </div>
-      <div class="field"><label>Receipt email</label><input class="input" value="${esc(r.contact.includes("@") ? r.contact : "")}" placeholder="guest@email.com"></div>`,
-    foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Cancel</button>
-      <button class="btn btn-brass btn-sm" data-action="run-charge" data-ref="${esc(r.ref)}" type="button">Charge ${money(due)}</button>`,
-  });
 }
 
 /* ---------------- Global action dispatch ---------------- */
@@ -1498,7 +1446,7 @@ document.addEventListener("click", (e) => {
   const a = el.dataset.action, ref = el.dataset.ref;
 
   if (a === "confirm-yes") { const cb = confirmCb; confirmCb = null; closeModal(); if (cb) cb(); return; }
-  if (a === "new-reservation") openNewReservation();
+  if (a === "new-reservation") openReservationEditor(null);
   else if (a === "new-ticket") openNewTicket();
   else if (a === "save-ticket") {
     const title = $("#tkTitle").value.trim();
@@ -1589,78 +1537,13 @@ document.addEventListener("click", (e) => {
     });
   }
   else if (a === "res-detail") openResDetail(ref);
-  else if (a === "charge") { closeModal(); setTimeout(() => openCharge(ref), 30); }
+  else if (a === "charge") { if (ref) openReservationEditor(ref, { panel: "charge" }); else openReservationPicker("charge"); }
   else if (a === "confirm-res") {
     const r = reservations.find((x) => x.ref === ref); r.status = "confirmed";
     if (window.SHDB && r.id) SHDB.setReservationStatus(r.id, "confirmed").catch(() => toast("Status saved locally only", "Supabase write failed", "warn"));
     closeModal(); renderReservations(); renderToday(); toast(`${ref} confirmed`, r.guest, "ok");
   }
-  else if (a === "save-reservation") {
-    const name = $("#nrName").value.trim() || "Walk-in Guest";
-    const contact = $("#nrContact").value.trim() || "—";
-    const room = $("#nrRoom").value;
-    const nin = $("#nrIn").value, nout = $("#nrOut").value;
-    if (!roomByCode(room)) { toast("Pick a room", "Add a room first, then create the reservation", "warn"); return; }
-    if (!nin || !nout || new Date(nout) <= new Date(nin)) { toast("Check your dates", "Check-out must be after check-in", "warn"); return; }
-    const nights = Math.max(1, Math.round((new Date(nout) - new Date(nin)) / dayMs));
-    const subtotal = nightlySum(roomByCode(room), nin, nout);
-    const taxEst = taxes.filter((t) => t.on).reduce((s, t) => s + (t.kind === "percent" ? subtotal * t.value / 100 : t.value * nights), 0);
-    const total = Math.round((subtotal + taxEst) * 100) / 100;
-    const id = newRef("R-");
-    const local = { ref: id, guest: name, contact, room, inN: Math.round((new Date(nin) - TODAY) / dayMs), outN: Math.round((new Date(nout) - TODAY) / dayMs), status: "confirmed", total, paid: 0 };
-    reservations.unshift(local);
-    if (window.SHDB && SHDB.hasLive()) {
-      SHDB.createReservation({
-        ref: id, guestName: name, contact, roomCode: room, checkIn: nin, checkOut: nout,
-        status: "confirmed", source: "direct", notes: $("#nrNotes").value,
-        subtotalCents: Math.round(subtotal * 100), taxCents: Math.round(taxEst * 100),
-        totalCents: Math.round(total * 100), paidCents: 0
-      }).then((row) => { if (row) local.id = row.id; })
-        .catch((err) => toast("Saved in this browser only", "Supabase rejected it (dates may overlap): " + err.message, "warn"));
-    }
-    closeModal(); renderReservations(); renderToday(); renderFolios();
-    toast(`Reservation ${id} created`, `${name} · ${room} · ${nights} night${nights > 1 ? "s" : ""}`, "ok");
-  }
-  else if (a === "run-charge") {
-    const r = reservations.find((x) => x.ref === ref);
-    const amt = Math.min(parseFloat($("#chAmt").value) || 0, balance(r));
-    if (amt <= 0) { toast("Enter an amount", "More than $0 and no more than the balance due", "warn"); return; }
-    const methodLabel = $("#chMethod").value;
-    r.paid = Math.round((r.paid + amt) * 100) / 100;
-    txns.unshift({ when: "Just now", desc: `${r.ref} · Charge · ${r.guest}`, method: methodLabel, status: "paid", amount: amt });
-    if (window.SHDB && r.id) {
-      SHDB.updateReservationPaid(r.id, Math.round(r.paid * 100))
-        .then(() => SHDB.addTransaction({ reservationId: r.id, description: `${r.ref} · Charge · ${r.guest}`, method: methodLabel, status: "paid", amountCents: Math.round(amt * 100) }))
-        .then(() => fnInvoke("send-email", { action: "charge_receipt", reservation_id: r.id }).catch(() => {}))
-        .catch(() => toast("Payment shown locally only", "Supabase write failed", "warn"));
-    }
-    closeModal(); renderReservations(); renderFolios(); renderTxns();
-    toast(`Charged ${money(amt)}`, `${r.ref} · ${balance(r) > 0 ? money(balance(r)) + " still due" : "paid in full"}`, "ok");
-  }
-  else if (a === "record-cash") {
-    const open = reservations.filter((r) => balance(r) > 0 && r.status !== "cancelled");
-    if (!open.length) { toast("No open balances", "Every folio is settled", "ok"); return; }
-    openModal({
-      title: "Record cash payment", sub: "For walk-ins and front-desk payments",
-      body: `<div class="form-2"><div class="field"><label>Reservation</label><select class="select" id="cashRes">${open.map((r) => `<option value="${esc(r.ref)}">${esc(r.ref)} · ${esc(r.guest)} · ${money(balance(r))} due</option>`).join("")}</select></div>
-        <div class="field"><label>Amount received</label><input class="input mono" id="cashAmt" type="number" min="0" step="0.01" value="${balance(open[0]).toFixed(2)}"></div></div>`,
-      foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Cancel</button><button class="btn btn-primary btn-sm" data-action="cash-done" type="button">Record payment</button>`
-    });
-  }
-  else if (a === "cash-done") {
-    const r = reservations.find((x) => x.ref === $("#cashRes").value);
-    const amt = Math.min(parseFloat($("#cashAmt").value) || 0, balance(r));
-    if (!r || amt <= 0) { toast("Enter an amount", "Up to the open balance", "warn"); return; }
-    r.paid = Math.round((r.paid + amt) * 100) / 100;
-    txns.unshift({ when: "Just now", desc: `${r.ref} · Cash · ${r.guest}`, method: "Cash", status: "paid", amount: amt });
-    if (window.SHDB && r.id) {
-      SHDB.updateReservationPaid(r.id, Math.round(r.paid * 100))
-        .then(() => SHDB.addTransaction({ reservationId: r.id, description: `${r.ref} · Cash · ${r.guest}`, method: "Cash", status: "paid", amountCents: Math.round(amt * 100) }))
-        .catch(() => toast("Cash shown locally only", "Supabase write failed", "warn"));
-    }
-    closeModal(); renderReservations(); renderFolios(); renderTxns();
-    toast("Cash payment recorded", `${money(amt)} on ${r.ref}`, "ok");
-  }
+  else if (a === "record-cash") openReservationPicker("record");
   else if (a === "export") {
     const activeView = document.querySelector(".view.active")?.id || "";
     const csvCell = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;

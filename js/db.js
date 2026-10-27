@@ -9,7 +9,7 @@
 
 (function () {
   const cfg = window.SH_CONFIG || {};
-  const ANCHOR = new Date(2026, 9, 26); // prototype "today" (matches demo data)
+  const ANCHOR = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })(); // local "today"; offsets (inN/outN) count from here
   const DAY = 864e5;
   const configured = () => !!(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY);
 
@@ -71,6 +71,23 @@
     return res.status === 204 ? null : res.json();
   }
 
+  /* Database functions raise with message = an error code and details = a
+     sentence for people; keep both so the UI can show the sentence. */
+  async function rpc(name, body) {
+    const res = await fetch(cfg.SUPABASE_URL.replace(/\/$/, "") + "/rest/v1/rpc/" + name, {
+      method: "POST",
+      headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: "Bearer " + (await freshToken()), "Content-Type": "application/json" },
+      body: JSON.stringify(body || {})
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const err = new Error((data && (data.details || data.message)) || ("Request failed (" + res.status + ")"));
+      err.code = (data && data.message) || "";
+      throw err;
+    }
+    return data;
+  }
+
   /* Room types: DB columns (cents, snake_case) <-> app shape (dollars, camelCase). */
   const arr = (v) => (Array.isArray(v) ? v : []);
   function mapRoomType(t) {
@@ -115,7 +132,22 @@
   const dayOff = (iso) => Math.round((new Date(iso + "T12:00:00") - ANCHOR) / DAY);
   const mapStatus = (s) => ({ checked_in: "checked-in", checked_out: "checked-out" }[s] || s);
   const statusIn = (s) => ({ "checked-in": "checked_in", "checked-out": "checked_out" }[s] || s);
-  const ctx = { tenantId: null, roomIdByCode: {} }; // set by loadLiveData; writes no-op without it
+  const ctx = { tenantId: null, roomIdByCode: {}, roomCodeById: {} }; // set by loadLiveData; writes no-op without it
+
+  /* Reservation row -> app shape. inN/outN are day offsets from today (lists,
+     calendar); checkIn/checkOut keep the real dates for the editor. */
+  function mapReservation(r) {
+    return {
+      id: r.id, ref: r.confirmation_code, guest: r.guest_name,
+      contact: r.guest_email || r.guest_phone || "—", email: r.guest_email || "", phone: r.guest_phone || "",
+      room: ctx.roomCodeById[r.room_id] || "—", roomId: r.room_id,
+      checkIn: String(r.check_in).slice(0, 10), checkOut: String(r.check_out).slice(0, 10),
+      inN: dayOff(r.check_in), outN: dayOff(r.check_out),
+      status: mapStatus(r.status), source: r.source || "direct", icalFeedId: r.ical_feed_id || null,
+      total: (r.total_cents || 0) / 100, paid: (r.paid_cents || 0) / 100, notes: r.notes || "",
+      card: r.card_last4 ? { brand: r.card_brand || "card", last4: r.card_last4 } : null
+    };
+  }
 
   /* Signed-in path: resolve the user's tenant via tenant_members (RLS-safe). */
   async function memberTenant() {
@@ -163,12 +195,13 @@
       const typePhotosById = {};
       (roomTypesRaw || []).forEach((t) => { typeNameById[t.id] = t.name; typePhotosById[t.id] = arr(t.photos); });
       ctx.roomIdByCode = {};
-      rooms.forEach((r) => { ctx.roomIdByCode[r.code] = r.id; });
+      ctx.roomCodeById = {};
+      rooms.forEach((r) => { ctx.roomIdByCode[r.code] = r.id; ctx.roomCodeById[r.id] = r.code; });
       const ticketRows = await rest("maintenance_tickets?" + tid + "&select=*&order=created_at.desc").catch(() => []);
       const feedRows = await rest("ical_feeds?" + tid + "&select=*&order=created_at.asc").catch(() => []);
       const txnRows = await rest("transactions?" + tid + "&select=*&order=created_at.desc&limit=20").catch(() => []);
       const memberRows = await rest("tenant_members?" + tid + "&select=user_id").catch(() => []);
-      const roomCode = (id) => (rooms.find((r) => r.id === id) || {}).code || "—";
+      const roomCode = (id) => ctx.roomCodeById[id] || "—";
       return {
         tenant, user, membersCount: (memberRows || []).length,
         rooms: rooms.map((r) => ({
@@ -186,12 +219,7 @@
           minStay: o.min_stay != null ? o.min_stay : null, maxStay: o.max_stay != null ? o.max_stay : null,
           closed: !!o.closed, cta: !!o.cta, ctd: !!o.ctd
         })),
-        reservations: reservations.map((r) => ({
-          id: r.id, ref: r.confirmation_code, guest: r.guest_name,
-          contact: r.guest_email || r.guest_phone || "—",
-          room: roomCode(r.room_id), inN: dayOff(r.check_in), outN: dayOff(r.check_out),
-          status: mapStatus(r.status), total: (r.total_cents || 0) / 100, paid: (r.paid_cents || 0) / 100, notes: r.notes || ""
-        })),
+        reservations: reservations.map(mapReservation),
         tickets: (ticketRows || []).map((t) => ({
           id: t.id, roomId: t.room_id, roomCode: t.room_id ? roomCode(t.room_id) : "",
           title: t.title, desc: t.description || "", photo: t.photo_url || "",
@@ -346,6 +374,26 @@
     if (!res.ok) throw new Error("Upload failed (" + res.status + ")");
     return baseUrl + "/storage/v1/object/public/" + bucket + "/" + encoded;
   }
+  /* ---------------- Reservation editor ---------------- */
+  /* Everything the editor shows for one booking: the full row, its add-ons
+     and its money movements (oldest first). */
+  async function reservationBundle(id) {
+    const [rows, addonRows, txnRows] = await Promise.all([
+      rest("reservations?id=eq." + id + "&select=*"),
+      rest("reservation_addons?reservation_id=eq." + id + "&select=addon_id,name_snapshot,price_cents"),
+      rest("transactions?reservation_id=eq." + id + "&select=*&order=created_at.asc")
+    ]);
+    const row = rows && rows[0];
+    return row ? { row, mapped: mapReservation(row), addons: addonRows || [], txns: txnRows || [] } : null;
+  }
+  const staffQuote = (q) => rpc("staff_quote", { p_tenant: ctx.tenantId, ...q });
+  async function saveReservation(params) {
+    const row = await rpc("save_reservation", { p_tenant: ctx.tenantId, ...params });
+    return { row, mapped: mapReservation(row) };
+  }
+  const recordManualPayment = (reservationId, amountCents, method, note) =>
+    rpc("record_manual_payment", { p_reservation: reservationId, p_amount_cents: amountCents, p_method: method, p_note: note || null });
+
   /* ---------------- Team invites ---------------- */
   async function listInvites() {
     if (!ctx.tenantId) return [];
@@ -440,6 +488,7 @@
     createAddon, setAddonActive, deleteAddon, createTax, deleteTax, createRoom, updateRoom,
     createRoomType, updateRoomType, deleteRoomType, upsertRateOverrides, deleteRateOverride, uploadPublic,
     createTicket, setTicketStatus, deleteTicket, createIcalFeed, deleteIcalFeed,
-    listInvites, deleteInvite
+    listInvites, deleteInvite,
+    reservationBundle, staffQuote, saveReservation, recordManualPayment
   };
 })();

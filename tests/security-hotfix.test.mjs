@@ -41,7 +41,8 @@ test("every dashboard upload lands in the tenant's own storage folder", () => {
 
 test("front-desk reservation codes are random, not a per-device counter", () => {
   assert.doesNotMatch(app, /"R-" \+ \(1053/);
-  assert.match(app, /newRef\("R-"\)/);
+  assert.match(read("js/reservation.js"), /newRef\("R-"\)/, "demo bookings");
+  assert.match(read("supabase/migrations/20261116000000_reservation_editor.sql"), /v_code := 'R-' \|\|/, "live bookings: server-generated");
 });
 
 // ---------------------------------------------------------------- booking page
@@ -163,7 +164,10 @@ test("stripe-connect requires a signed-in member, and owner/admin for onboarding
 
 test("charge-guest computes the deposit server-side and records payments atomically", () => {
   const src = fn("charge-guest");
-  assert.doesNotMatch(src, /body\.amount_cents|amount_cents \}\s*=\s*body|const \{[^}]*amount_cents[^}]*\} = body/);
+  const deposit = src.slice(src.indexOf("async function deposit("), src.indexOf("async function confirm("));
+  assert.ok(deposit.length > 200);
+  assert.doesNotMatch(deposit, /body\.amount/, "the deposit amount never comes from the browser");
+  assert.ok(deposit.includes("const amount = Math.round(((resv.total_cents || 0) * pct) / 100);"));
   assert.match(src, /deposit_percent/);
   assert.match(src, /resv\.status !== "pending"/);
   assert.match(src, /rpc\("record_stripe_payment"/);
@@ -174,9 +178,9 @@ test("charge-guest computes the deposit server-side and records payments atomica
 test("deposits are destination charges (Stripe refuses direct charges on Express accounts)", () => {
   const src = fn("charge-guest");
   assert.doesNotMatch(src, /stripeAccount/, "no Stripe-Account header: the intent lives on the platform");
-  assert.match(src, /transfer_data: \{ destination \}/);
-  assert.match(src, /on_behalf_of: destination/);
-  assert.match(src, /intent\.transfer_data\?\.destination !== destination/);
+  assert.equal((src.match(/transfer_data: \{ destination: tenant\.stripe_account_id \}/g) || []).length, 3, "deposit, card charge and payment link");
+  assert.equal((src.match(/on_behalf_of: tenant\.stripe_account_id/g) || []).length, 3);
+  assert.match(src, /intent\.transfer_data\?\.destination !== tenant\.stripe_account_id/);
   assert.match(book, /window\.Stripe\(cfg\.STRIPE_PUBLISHABLE_KEY\);/, "Stripe.js must not target the connected account");
 });
 
@@ -206,7 +210,8 @@ test("accept-invite needs a confirmed email and never changes an existing role",
 test("Edge Functions do not return raw exception messages", () => {
   for (const name of readdirSync(new URL("../supabase/functions/", import.meta.url)).filter((n) => !n.startsWith("_") && !n.endsWith(".md"))) {
     if (name === "stripe-webhook") continue; // Stripe-only caller; signature verified first
-    assert.doesNotMatch(fn(name), /error: e\.message/, name);
+    const src = fn(name).split("\n").filter((l) => !l.includes("instanceof Refusal")).join("\n"); // Refusal = our own sentences
+    assert.doesNotMatch(src, /error: e\.message/, name);
   }
 });
 
