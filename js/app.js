@@ -1239,7 +1239,7 @@ function applyStudioPreview() {
   if (empty) empty.style.display = studioHeroUrl ? "none" : "grid";
 }
 function bindStudio() {
-  $("#bkName").addEventListener("input", (e) => { $("#mockName").textContent = (e.target.value || "Your property").toUpperCase() + " · ESTES PARK"; });
+  $("#bkName").addEventListener("input", (e) => { $("#mockName").textContent = (e.target.value || "Your property").toUpperCase(); });
   $("#bkHead").addEventListener("input", (e) => { $("#mockHead").textContent = e.target.value; });
   $("#bkSub").addEventListener("input", (e) => { $("#mockSub").textContent = e.target.value; });
   $("#bkUrl").addEventListener("input", (e) => { $("#bkUrlPrev").textContent = e.target.value || "you.simplehotelier.com"; });
@@ -2344,6 +2344,10 @@ function loadLiveIntoUI() {
     if ($("#bkDepositOn")) $("#bkDepositOn").checked = !!live.tenant.deposit_enabled;
     if ($("#bkByType")) $("#bkByType").checked = live.tenant.booking_by_type !== false;
     if ($("#bkDepositPct") && live.tenant.deposit_percent) $("#bkDepositPct").value = live.tenant.deposit_percent;
+    if ($("#bkName")) $("#bkName").value = live.tenant.name || "";
+    if ($("#mockName")) $("#mockName").textContent = (live.tenant.name || "Your property").toUpperCase() + (live.tenant.city ? " · " + String(live.tenant.city).toUpperCase() : "");
+    if (live.tenant.slug && $("#bkUrl")) $("#bkUrl").value = live.tenant.slug + ".simplehotelier.com";
+    if (live.tenant.slug && $("#bkUrlPrev")) $("#bkUrlPrev").textContent = live.tenant.slug + ".simplehotelier.com";
     if (live.tenant.booking_headline && $("#bkHead")) { $("#bkHead").value = live.tenant.booking_headline; $("#mockHead").textContent = live.tenant.booking_headline; }
     if (live.tenant.booking_subheading && $("#bkSub")) { $("#bkSub").value = live.tenant.booking_subheading; $("#mockSub").textContent = live.tenant.booking_subheading; }
     updateEmbed(live.tenant);
