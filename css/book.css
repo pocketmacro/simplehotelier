@@ -1,4 +1,5 @@
 /* SimpleHotelier — public booking page + embed widget (standalone, mobile-first) */
+[hidden] { display: none !important; }
 :root {
   --brand: #0c3b3c; --brand-2: #115152; --brass: #b97a2a;
   --ink: #101f1e; --ink-2: #33413f; --muted: #5d6f6b; --faint: #5f7a73;

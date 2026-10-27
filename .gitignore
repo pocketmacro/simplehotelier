@@ -2,3 +2,5 @@
 supabase/.branches
 supabase/.temp
 generated_images/
+
+scripts/tmp-*/

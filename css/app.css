@@ -1,4 +1,7 @@
 /* SimpleHotelier — design system v1 (LF endings) */
+/* The hidden attribute must always win over component display rules
+   (e.g. .nav-btn is display:flex, which otherwise un-hides #navAdmin). */
+[hidden] { display: none !important; }
 :root {
   --bg: #edf0ee;
   --surface: #fff;

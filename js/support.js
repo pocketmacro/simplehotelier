@@ -171,9 +171,16 @@
     });
   }
 
-  /* Admin */
+  /* Admin — super admins only. The nav button is hidden for everyone else;
+     this guard also keeps subscriber/case data from loading at all. */
+  let adminVerified = false;
   async function loadAdmin() {
     if (!window.SHDB) return;
+    if (!adminVerified) {
+      const ok = await SHDB.isSystemAdmin().catch(() => false);
+      if (!ok) { const nav = $("#navAdmin"); if (nav) nav.hidden = true; return; }
+      adminVerified = true;
+    }
     try {
       const [subs, cases] = await Promise.all([SHDB.adminSubscribers(), SHDB.listSupportCases()]);
       tenantNames = {};
@@ -199,10 +206,11 @@
     if (!window.SHDB) return;
     try {
       const is = await SHDB.isSystemAdmin();
+      adminVerified = !!is;
       const nav = $("#navAdmin");
       if (nav) nav.hidden = !is;
       if (is) loadAdmin();
-    } catch { /* not admin */ }
+    } catch { adminVerified = false; const nav = $("#navAdmin"); if (nav) nav.hidden = true; }
   }
 
   /* Billing (Stripe Checkout via Edge Function) */
