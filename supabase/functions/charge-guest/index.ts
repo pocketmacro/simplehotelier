@@ -160,6 +160,7 @@ async function setup(tenant: any, body: any) {
   const si = await stripe.setupIntents.create({
     customer,
     usage: "off_session",
+    payment_method_types: ["card"], // the booking page shows a card field only
     on_behalf_of: tenant.stripe_account_id,
     description: `Card guarantee · ${resv.confirmation_code}`,
     metadata: { tenant_id: tenant.id, reservation_id: resv.id, kind: "guarantee" },
