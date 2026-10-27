@@ -2,13 +2,15 @@
 // POST { action: "booking_confirmation", reservation_id }
 //   -> emails the guest their confirmation (or request received) and notifies
 //      the property. Callable with the anon key right after a public booking:
-//      it only ever writes to addresses stored on the reservation/tenant.
+//      it only ever writes to addresses stored on the reservation/tenant, and
+//      only once per reservation (confirmation_email_sent_at is claimed first).
 // POST { action: "charge_receipt", reservation_id, payment_intent_id? }
 //   -> emails the guest a receipt for their latest paid transaction.
 // Deploy: supabase functions deploy send-email
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendMail, emailShell, kv, p, money, fmtDate, emailConfigured } from "../_shared/email.ts";
+import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured } from "../_shared/email.ts";
+import { appOrigin, callerUser, memberRole } from "../_shared/guard.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const CORS = {
@@ -23,6 +25,8 @@ const POLICY_TEXT: Record<string, string> = {
   moderate: "Free cancellation up to 14 days before check-in. After that, 50% of the stay is non-refundable.",
   strict: "You can cancel your reservation up to 30 days before your stay, but you won't receive a refund if you cancel after that."
 };
+
+const firstName = (name: unknown) => String(name || "").trim().split(/\s+/)[0] || "there";
 
 async function loadReservation(id: string) {
   const { data: r } = await admin.from("reservations").select("*").eq("id", id).maybeSingle();
@@ -40,6 +44,12 @@ async function bookingConfirmation(reservationId: string) {
   const { r, tenant, room } = loaded;
   if (!r.guest_email) return json({ sent: false, reason: "guest has no email" });
   if (!emailConfigured()) return json({ sent: false, reason: "email not configured" }, 503);
+  // One confirmation per reservation: claim the flag atomically so repeated
+  // or concurrent calls (anyone holding the id) cannot resend.
+  const { data: claimed } = await admin.from("reservations")
+    .update({ confirmation_email_sent_at: new Date().toISOString() })
+    .eq("id", r.id).is("confirmation_email_sent_at", null).select("id");
+  if (!claimed || !claimed.length) return json({ sent: false, reason: "already sent" });
 
   const pending = r.status === "pending";
   const property = tenant?.name || "Your property";
@@ -59,15 +69,15 @@ async function bookingConfirmation(reservationId: string) {
   ];
   const guestHtml = emailShell(
     pending ? "Booking request received" : "Booking confirmed",
-    p(`Hi ${r.guest_name.split(" ")[0] || "there"},`) +
+    p(`Hi ${esc(firstName(r.guest_name))},`) +
     p(pending
-      ? `Thanks for your request to stay at <strong>${property}</strong>. The property will confirm shortly — here are your details in the meantime.`
-      : `Your stay at <strong>${property}</strong> is confirmed. We look forward to hosting you.`) +
+      ? `Thanks for your request to stay at <strong>${esc(property)}</strong>. The property will confirm shortly — here are your details in the meantime.`
+      : `Your stay at <strong>${esc(property)}</strong> is confirmed. We look forward to hosting you.`) +
     kv(rows) +
-    (policy ? p(`<strong>Cancellation policy:</strong> ${policy}`) : "") +
-    (tenant?.rental_terms ? p(`<strong>Good to know:</strong> ${String(tenant.rental_terms).slice(0, 600)}`) : ""),
+    (policy ? p(`<strong>Cancellation policy:</strong> ${esc(policy)}`) : "") +
+    (tenant?.rental_terms ? p(`<strong>Good to know:</strong> ${esc(String(tenant.rental_terms).slice(0, 600))}`) : ""),
     tenant?.contact_phone || tenant?.contact_email
-      ? `Questions about your stay? Contact ${property}${tenant?.contact_phone ? ` at ${tenant.contact_phone}` : ""}${tenant?.contact_email ? ` or ${tenant.contact_email}` : ""}.`
+      ? `Questions about your stay? Contact ${esc(property)}${tenant?.contact_phone ? ` at ${esc(tenant.contact_phone)}` : ""}${tenant?.contact_email ? ` or ${esc(tenant.contact_email)}` : ""}.`
       : ""
   );
   const guest = await sendMail({
@@ -75,7 +85,6 @@ async function bookingConfirmation(reservationId: string) {
     subject: `${pending ? "Request received" : "Booking confirmed"} · ${r.confirmation_code} · ${property}`,
     html: guestHtml
   });
-  await admin.from("reservations").update({ confirmation_email_sent_at: new Date().toISOString() }).eq("id", r.id);
 
   // Notify the property (best effort).
   const ownerTo = tenant?.booking_email || tenant?.contact_email;
@@ -85,7 +94,7 @@ async function bookingConfirmation(reservationId: string) {
       to: ownerTo,
       subject: `New booking ${r.confirmation_code} · ${r.guest_name} · ${fmtDate(r.check_in)}`,
       html: emailShell("New booking received",
-        p(`<strong>${r.guest_name}</strong> just booked through your SimpleHotelier page.`) +
+        p(`<strong>${esc(r.guest_name)}</strong> just booked through your SimpleHotelier page.`) +
         kv([...rows, ["Guest email", r.guest_email], ...(r.guest_phone ? [["Guest phone", r.guest_phone] as [string, string]] : [])]))
     }).catch(() => ({ sent: false }));
     ownerSent = !!res.sent;
@@ -112,7 +121,7 @@ async function chargeReceipt(body: any) {
     to: r.guest_email,
     subject: `Payment receipt · ${r.confirmation_code} · ${property}`,
     html: emailShell("Payment received",
-      p(`Hi ${r.guest_name.split(" ")[0] || "there"}, thanks — we received your payment for your stay at <strong>${property}</strong>.`) +
+      p(`Hi ${esc(firstName(r.guest_name))}, thanks — we received your payment for your stay at <strong>${esc(property)}</strong>.`) +
       kv([
         ["Confirmation code", r.confirmation_code],
         ["Description", txn.description || "Card charge"],
@@ -124,25 +133,20 @@ async function chargeReceipt(body: any) {
   return json({ sent: res.sent });
 }
 
-/* Team invite: a signed-in property member stores an invite and we email it.
+/* Team invite: a property owner/admin stores an invite and we email it.
    The invitee creates a free account (no property, no card) and is joined to
-   the property by accept-invite, matched on token + account email. */
-async function callerUser(req: Request) {
-  const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-  if (!token) return null;
-  const { data } = await admin.auth.getUser(token);
-  return data?.user || null;
-}
-
+   the property by accept-invite, matched on token + account email.
+   Owners may invite admins; admins may invite staff and cleaners. */
 async function teamInvite(req: Request, body: any) {
-  const user = await callerUser(req);
+  const user = await callerUser(admin, req);
   if (!user) return json({ error: "Sign in first" }, 401);
   const tenantId = String(body.tenant_id || "");
   const email = String(body.email || "").trim().toLowerCase();
   const role = ["admin", "staff", "cleaner"].includes(body.role) ? body.role : "cleaner";
-  if (!tenantId || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "tenant_id and a valid email are required" }, 400);
-  const { data: mem } = await admin.from("tenant_members").select("user_id").eq("tenant_id", tenantId).eq("user_id", user.id).maybeSingle();
-  if (!mem) return json({ error: "Only property team members can send invites" }, 403);
+  if (!tenantId || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "tenant_id and a valid email are required" }, 400);
+  const myRole = await memberRole(admin, tenantId, user.id);
+  if (myRole !== "owner" && myRole !== "admin") return json({ error: "Only the property owner or an admin can send invites" }, 403);
+  if (role === "admin" && myRole !== "owner") return json({ error: "Only the property owner can invite admins" }, 403);
   const { data: tenant } = await admin.from("tenants").select("name").eq("id", tenantId).maybeSingle();
   if (!tenant) return json({ error: "property not found" }, 404);
   if (!emailConfigured()) return json({ sent: false, reason: "email not configured" }, 503);
@@ -154,18 +158,17 @@ async function teamInvite(req: Request, body: any) {
     .select("token").single();
   if (error || !invite) return json({ error: "could not store the invite" }, 500);
 
-  const origin = req.headers.get("origin") || "https://simplehotelier.com";
-  const link = `${origin.replace(/\/$/, "")}/app.html?invite=${invite.token}`;
+  const link = `${appOrigin(req.headers.get("origin"))}/app.html?invite=${encodeURIComponent(invite.token)}`;
   const roleLabel = role === "cleaner" ? "housekeeping" : role;
   const res = await sendMail({
     to: email,
     subject: `You're invited to join ${tenant.name} on SimpleHotelier`,
     html: emailShell(`Join ${tenant.name}`,
       p(`Hi,`) +
-      p(`You've been invited to join <strong>${tenant.name}</strong> on SimpleHotelier as ${roleLabel}. Create your free account with this email address and you'll be taken straight into the property — no card or trial needed.`) +
-      p(`<a href="${link}" style="display:inline-block;background:#0c3b3c;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;padding:12px 22px;border-radius:10px">Accept invite &amp; create account</a>`) +
-      p(`Or paste this link into your browser:<br><span style="word-break:break-all">${link}</span>`),
-      `This invite was sent to ${email}. If it wasn't meant for you, you can ignore this email.`)
+      p(`You've been invited to join <strong>${esc(tenant.name)}</strong> on SimpleHotelier as ${roleLabel}. Create your free account with this email address and you'll be taken straight into the property — no card or trial needed.`) +
+      p(`<a href="${esc(link)}" style="display:inline-block;background:#0c3b3c;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;padding:12px 22px;border-radius:10px">Accept invite &amp; create account</a>`) +
+      p(`Or paste this link into your browser:<br><span style="word-break:break-all">${esc(link)}</span>`),
+      `This invite was sent to ${esc(email)}. If it wasn't meant for you, you can ignore this email.`)
   });
   return json({ sent: res.sent, email, role });
 }
@@ -179,6 +182,7 @@ Deno.serve(async (req) => {
     if (body.action === "team_invite") return await teamInvite(req, body);
     return json({ error: "action booking_confirmation, charge_receipt or team_invite required" }, 400);
   } catch (e: any) {
-    return json({ error: e.message ?? "send-email failed" }, 500);
+    console.error("send-email", e);
+    return json({ error: "send-email failed" }, 500);
   }
 });

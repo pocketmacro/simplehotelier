@@ -5,6 +5,7 @@
 // deno-lint-ignore-file no-explicit-any
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { appOrigin } from "../_shared/guard.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2024-06-20" });
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -32,8 +33,9 @@ Deno.serve(async (req) => {
 
     // RLS on the user client proves membership; service client writes billing ids.
     const { data: member } = await userClient
-      .from("tenant_members").select("tenant_id").eq("tenant_id", tenant_id).eq("user_id", user.id).single();
+      .from("tenant_members").select("role").eq("tenant_id", tenant_id).eq("user_id", user.id).single();
     if (!member) return json({ error: "not a member of this property" }, 403);
+    if (member.role !== "owner" && member.role !== "admin") return json({ error: "Only the property owner or an admin can manage billing" }, 403);
 
     const { data: tenant } = await admin
       .from("tenants").select("id, name, contact_email, stripe_customer_id").eq("id", tenant_id).single();
@@ -50,7 +52,7 @@ Deno.serve(async (req) => {
       await admin.from("tenants").update({ stripe_customer_id: customerId }).eq("id", tenant.id);
     }
 
-    const base = origin || "http://localhost:8000";
+    const base = appOrigin(origin || req.headers.get("origin"));
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
@@ -64,7 +66,8 @@ Deno.serve(async (req) => {
     });
     return json({ url: session.url });
   } catch (e: any) {
-    return json({ error: e.message ?? "create-checkout failed" }, 500);
+    console.error("create-checkout", e);
+    return json({ error: "create-checkout failed" }, 500);
   }
 });
 

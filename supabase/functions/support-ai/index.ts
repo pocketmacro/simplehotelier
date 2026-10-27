@@ -59,7 +59,8 @@ Deno.serve(async (req) => {
     }
     return json({ error: "empty_answer", status: lastStatus }, 502);
   } catch (e: any) {
-    return json({ error: e.message ?? "support-ai failed" }, 500);
+    console.error("support-ai", e);
+    return json({ error: "support-ai failed" }, 500);
   }
 });
 

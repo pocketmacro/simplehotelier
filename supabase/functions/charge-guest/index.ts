@@ -1,8 +1,13 @@
-// SimpleHotelier — charge a guest on the property's connected Stripe account.
-// POST { tenant_id, reservation_id, amount_cents, description? }
-//   -> { client_secret, payment_intent_id }
-// The browser confirms the PaymentIntent with Stripe.js (publishable key).
-// A webhook (next step) marks folio/transactions paid — never trust the browser alone.
+// SimpleHotelier — booking deposits on the property's connected Stripe account.
+// POST { tenant_id, reservation_id }
+//   -> { client_secret, payment_intent_id, amount_cents }
+// The amount never comes from the browser: it is the property's deposit
+// percent of the total that create_booking() priced server-side, and only
+// for a fresh, unpaid, online booking request.
+// POST { action: "confirm", tenant_id, payment_intent_id } -> { paid, status }
+// The browser confirms the PaymentIntent with Stripe.js (publishable key);
+// confirm re-reads it from Stripe and records it once (record_stripe_payment).
+// stripe-webhook records the same payment if the browser never comes back.
 // Deploy: supabase functions deploy charge-guest
 // deno-lint-ignore-file no-explicit-any
 import Stripe from "https://esm.sh/stripe@14?target=deno";
@@ -11,6 +16,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2024-06-20" });
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const APP_FEE_PERCENT = 1.0; // SimpleHotelier platform fee — tune per plan.
+const REQUEST_TTL_MS = 24 * 3600e3; // deposit must be paid within a day of the request
+const OPEN_STATUSES = ["requires_payment_method", "requires_confirmation", "requires_action"];
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -18,67 +25,84 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-/* Verify a deposit PaymentIntent server-side and mark it paid (idempotent).
-   The browser's word is never trusted: status comes from Stripe itself. */
-async function markDepositPaid(tenant: any, intent: any) {
+/* Status comes from Stripe itself, never the browser; recording is idempotent. */
+async function recordIfSucceeded(intent: any) {
   if (!intent || intent.status !== "succeeded") return false;
-  const reservationId = intent.metadata?.reservation_id;
-  const { data: txn } = await admin.from("transactions")
-    .select("id, status, amount_cents").eq("stripe_payment_intent_id", intent.id).maybeSingle();
-  if (!txn || txn.status === "paid") return true; // already recorded: do not double-count
-  await admin.from("transactions").update({ status: "paid" }).eq("id", txn.id);
-  if (reservationId) {
-    const { data: resv } = await admin.from("reservations").select("paid_cents").eq("id", reservationId).single();
-    if (resv) await admin.from("reservations").update({ paid_cents: (resv.paid_cents || 0) + (txn.amount_cents || intent.amount) }).eq("id", reservationId);
-  }
-  return true;
+  const { error } = await admin.rpc("record_stripe_payment", { p_intent: intent.id });
+  if (error) throw new Error(error.message);
+  return true; // recorded now, or already recorded earlier
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
-    const body = await req.json();
-    const { tenant_id, reservation_id, amount_cents, description } = body;
+    const body = await req.json().catch(() => ({}));
+    const tenantId = String(body.tenant_id || "");
+    if (!tenantId) return json({ error: "tenant_id required" }, 400);
+    const { data: tenant } = await admin.from("tenants")
+      .select("id, currency, stripe_account_id, stripe_onboarding_complete, deposit_enabled, deposit_percent")
+      .eq("id", tenantId).maybeSingle();
+    if (!tenant?.stripe_account_id) return json({ error: "property has not connected Stripe" }, 400);
+    const stripeAccount = tenant.stripe_account_id as string;
+
     if (body.action === "confirm") {
-      if (!tenant_id || !body.payment_intent_id) return json({ error: "tenant_id and payment_intent_id required" }, 400);
-      const { data: tenant } = await admin.from("tenants").select("stripe_account_id").eq("id", tenant_id).single();
-      if (!tenant?.stripe_account_id) return json({ error: "property has not connected Stripe" }, 400);
-      const intent = await stripe.paymentIntents.retrieve(String(body.payment_intent_id), {}, { stripeAccount: tenant.stripe_account_id });
-      const paid = await markDepositPaid(tenant, intent);
+      if (!body.payment_intent_id) return json({ error: "payment_intent_id required" }, 400);
+      const intent = await stripe.paymentIntents.retrieve(String(body.payment_intent_id), {}, { stripeAccount });
+      if (intent.metadata?.tenant_id !== tenant.id) return json({ error: "payment does not belong to this property" }, 403);
+      const paid = await recordIfSucceeded(intent);
       return json({ paid, status: intent.status });
     }
-    if (!tenant_id || !reservation_id || !amount_cents) {
-      return json({ error: "tenant_id, reservation_id, amount_cents required" }, 400);
+
+    if (!tenant.stripe_onboarding_complete) return json({ error: "property Stripe onboarding incomplete" }, 400);
+    if (!tenant.deposit_enabled) return json({ error: "this property does not take deposits online" }, 400);
+    const { data: resv } = await admin.from("reservations")
+      .select("id, confirmation_code, status, source, total_cents, paid_cents, created_at, rooms(name)")
+      .eq("id", String(body.reservation_id || "")).eq("tenant_id", tenant.id).maybeSingle();
+    if (!resv) return json({ error: "booking not found" }, 404);
+    if (resv.status !== "pending" || resv.source !== "direct" || (resv.paid_cents || 0) > 0) {
+      return json({ error: "this booking does not need a deposit payment" }, 409);
+    }
+    if (Date.now() - new Date(resv.created_at).getTime() > REQUEST_TTL_MS) {
+      return json({ error: "this booking request has expired; please book again" }, 410);
+    }
+    const pct = Math.min(100, Math.max(1, Number(tenant.deposit_percent) || 25));
+    const amount = Math.round(((resv.total_cents || 0) * pct) / 100);
+    if (amount < 50) return json({ error: "deposit amount is too small to charge by card" }, 400);
+
+    // Reuse this booking's open deposit intent (double clicks, page reloads).
+    const { data: open } = await admin.from("transactions").select("stripe_payment_intent_id")
+      .eq("reservation_id", resv.id).eq("status", "pending").not("stripe_payment_intent_id", "is", null)
+      .order("created_at", { ascending: false }).limit(1);
+    if (open && open[0]) {
+      const existing = await stripe.paymentIntents.retrieve(String(open[0].stripe_payment_intent_id), {}, { stripeAccount });
+      if (existing.amount === amount && OPEN_STATUSES.includes(existing.status)) {
+        return json({ client_secret: existing.client_secret, payment_intent_id: existing.id, amount_cents: amount });
+      }
     }
 
-    const { data: tenant, error } = await admin
-      .from("tenants").select("stripe_account_id, stripe_onboarding_complete, currency")
-      .eq("id", tenant_id).single();
-    if (error || !tenant?.stripe_account_id) return json({ error: "property has not connected Stripe" }, 400);
-    if (!tenant.stripe_onboarding_complete) return json({ error: "property Stripe onboarding incomplete" }, 400);
-
-    const fee = Math.round((amount_cents * APP_FEE_PERCENT) / 100);
+    const room: any = (resv as any).rooms || {};
+    const description = `Booking deposit · ${resv.confirmation_code}${room.name ? " · " + room.name : ""}`;
     const intent = await stripe.paymentIntents.create(
       {
-        amount: amount_cents,
+        amount,
         currency: (tenant.currency ?? "usd").toLowerCase(),
-        description: description ?? "SimpleHotelier charge",
-        application_fee_amount: fee,
-        metadata: { tenant_id, reservation_id },
+        description,
+        application_fee_amount: Math.round((amount * APP_FEE_PERCENT) / 100),
+        metadata: { tenant_id: tenant.id, reservation_id: resv.id, kind: "deposit" },
       },
-      { stripeAccount: tenant.stripe_account_id }
+      { stripeAccount }
     );
 
     await admin.from("transactions").insert({
-      tenant_id, reservation_id,
-      description: description ?? "Card charge",
-      method: "card", status: "pending",
-      amount_cents, stripe_payment_intent_id: intent.id,
+      tenant_id: tenant.id, reservation_id: resv.id,
+      description, method: "card", status: "pending",
+      amount_cents: amount, stripe_payment_intent_id: intent.id,
     });
 
-    return json({ client_secret: intent.client_secret, payment_intent_id: intent.id });
+    return json({ client_secret: intent.client_secret, payment_intent_id: intent.id, amount_cents: amount });
   } catch (e: any) {
-    return json({ error: e.message ?? "charge-guest failed" }, 500);
+    console.error("charge-guest", e);
+    return json({ error: "payment service error" }, 500);
   }
 });
 

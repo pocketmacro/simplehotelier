@@ -1,8 +1,36 @@
 /* SimpleHotelier — sync one external iCal feed into blocked reservations.
    Plain ESM (Deno + Node). `admin` is a Supabase service-role client. */
 import { parseICS, importCode } from "./ical.js";
+import { feedUrlProblem } from "./origin.js";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+const MAX_FEED_BYTES = 2_000_000;
+const MAX_REDIRECTS = 3;
+
+/* Fetch an owner-supplied feed URL without letting it point the server at
+   internal hosts: every hop (including redirects) must pass feedUrlProblem,
+   and the body is capped. Throws with a sentence for the owner on refusal. */
+async function fetchFeed(url, fetchFn) {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const problem = feedUrlProblem(current);
+    if (problem) throw new Error(problem);
+    const res = await fetchFn(current, {
+      headers: { "User-Agent": "SimpleHotelier/1.0 (+https://simplehotelier.com)" },
+      redirect: "manual",
+      signal: AbortSignal.timeout(20000)
+    });
+    const location = res.status >= 300 && res.status < 400 && res.headers && res.headers.get("location");
+    if (location) { current = new URL(location, current).toString(); continue; }
+    if (!res.ok) throw new Error(`Feed returned HTTP ${res.status}`);
+    const declared = Number(res.headers && res.headers.get("content-length"));
+    if (declared > MAX_FEED_BYTES) throw new Error("Feed is too large");
+    const text = await res.text();
+    if (text.length > MAX_FEED_BYTES) throw new Error("Feed is too large");
+    return text;
+  }
+  throw new Error("Feed redirected too many times");
+}
 
 /**
  * Replace a feed's upcoming imported blocks with the feed's current events.
@@ -18,9 +46,7 @@ export async function syncFeed(admin, feed, fetchFn = fetch) {
     return result;
   };
   try {
-    const res = await fetchFn(feed.url, { headers: { "User-Agent": "SimpleHotelier/1.0 (+https://simplehotelier.com)" }, signal: AbortSignal.timeout(20000) });
-    if (!res.ok) return done({ imported: 0, skipped: 0, error: `Feed returned HTTP ${res.status}` });
-    const events = parseICS(await res.text());
+    const events = parseICS(await fetchFeed(feed.url, fetchFn));
     const today = todayISO();
 
     // Clear this feed's upcoming blocks, then re-import fresh.

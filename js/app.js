@@ -368,7 +368,7 @@ function renderOverview() {
 function renderMiniRooms() {
   $("#miniRooms").innerHTML = rooms.map((r) => `
     <div style="border:1px solid var(--line);border-radius:10px;padding:10px 11px;background:var(--surface-2)">
-      <div style="display:flex;align-items:center;gap:7px"><strong style="color:var(--ink);font-size:13px">${r.code}</strong>${pill(RSTAT[r.status])}</div>
+      <div style="display:flex;align-items:center;gap:7px"><strong style="color:var(--ink);font-size:13px">${esc(r.code)}</strong>${pill(RSTAT[r.status])}</div>
       <div style="margin-top:6px">${pill(HK[r.hk])}</div>
     </div>`).join("");
 }
@@ -385,17 +385,17 @@ function resMatches(r) {
 }
 function renderReservations() {
   const rows = reservations.filter(resMatches).map((r) => `
-    <tr data-ref="${r.ref}">
+    <tr data-ref="${esc(r.ref)}">
       <td class="guest"><strong>${esc(r.guest)}</strong><span>${esc(r.contact)}</span></td>
-      <td class="mono">${r.ref}</td>
+      <td class="mono">${esc(r.ref)}</td>
       <td><span class="room-code">${esc(r.room)}</span></td>
       <td style="white-space:nowrap">${esc(resDates(r))}</td>
       <td>${pill(ST[r.status])}</td>
       <td class="num">${money(r.total)}</td>
       <td class="num" style="${balance(r) > 0 ? "color:var(--danger)" : "color:var(--success)"}">${money(balance(r))}</td>
       <td style="white-space:nowrap;text-align:right">
-        ${balance(r) > 0 ? `<button class="btn btn-ghost btn-xs" data-action="charge" data-ref="${r.ref}" type="button">Charge</button>` : ""}
-        <button class="btn btn-ghost btn-xs" data-action="res-detail" data-ref="${r.ref}" type="button">Open</button>
+        ${balance(r) > 0 ? `<button class="btn btn-ghost btn-xs" data-action="charge" data-ref="${esc(r.ref)}" type="button">Charge</button>` : ""}
+        <button class="btn btn-ghost btn-xs" data-action="res-detail" data-ref="${esc(r.ref)}" type="button">Open</button>
       </td>
     </tr>`).join("");
   $("#resTable tbody").innerHTML = rows || `<tr><td colspan="8"><div class="empty">No reservations match this filter.</div></td></tr>`;
@@ -428,7 +428,7 @@ function renderCalendar() {
     (demo[r.room] = demo[r.room] || []).push([r.inN, r.outN, r.guest, stayCls(r.status), r.ref]);
   });
   rooms.forEach((r) => {
-    html += `<div class="cal-row"><div class="cal-room"><strong>${r.code} · ${esc(r.name)}</strong><span>${esc(r.type)}</span></div>`;
+    html += `<div class="cal-row"><div class="cal-room"><strong>${esc(r.code)} · ${esc(r.name)}</strong><span>${esc(r.type)}</span></div>`;
     days.forEach((d, i) => {
       const n = calOffset + i;
       const isToday = n === 0;
@@ -479,19 +479,19 @@ function renderRooms() {
   $("#roomGrid").innerHTML = visible.map((r) => `
     <div class="card room-card">
       ${r.photos && r.photos.length ? `<img class="room-cover" src="${esc(r.photos[0])}" alt="${esc(r.name)}">` : ""}
-      <div class="room-top"><div><h3>${r.code} · ${esc(r.name)}</h3><div class="meta">${esc(r.type)}</div></div>
+      <div class="room-top"><div><h3>${esc(r.code)} · ${esc(r.name)}</h3><div class="meta">${esc(r.type)}</div></div>
         <div class="room-rate"><strong>${money(roomRate(r))}</strong><span>/ night</span></div></div>
       <div class="room-flags">${pill(RSTAT[r.status])}${pill(HK[r.hk])}${r.guest ? `<span class="tag">${esc(r.guest)}</span>` : ""}</div>
       <div style="font-size:12.5px;color:var(--muted)">${esc(r.note)}</div>
       <div class="room-actions">
-        <button class="hk-btn${r.hk === "dirty" ? " on-dirty" : ""}" data-hk="${r.code}|dirty" type="button">Dirty</button>
-        <button class="hk-btn${r.hk === "progress" ? " on-progress" : ""}" data-hk="${r.code}|progress" type="button">In progress</button>
-        <button class="hk-btn${r.hk === "clean" ? " on-clean" : ""}" data-hk="${r.code}|clean" type="button">Clean</button>
+        <button class="hk-btn${r.hk === "dirty" ? " on-dirty" : ""}" data-hk="${esc(r.code)}|dirty" type="button">Dirty</button>
+        <button class="hk-btn${r.hk === "progress" ? " on-progress" : ""}" data-hk="${esc(r.code)}|progress" type="button">In progress</button>
+        <button class="hk-btn${r.hk === "clean" ? " on-clean" : ""}" data-hk="${esc(r.code)}|clean" type="button">Clean</button>
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost btn-xs" data-action="edit-room" data-code="${r.code}" type="button" style="flex:1">Edit</button>
-        <button class="btn btn-ghost btn-xs" data-action="room-photos" data-code="${r.code}" type="button" style="flex:1">Photos${r.photos && r.photos.length ? " (" + r.photos.length + ")" : ""}</button>
-        <button class="btn btn-ghost btn-xs" data-action="room-rates" data-code="${r.code}" type="button" style="flex:1">Rates</button>
+        <button class="btn btn-ghost btn-xs" data-action="edit-room" data-code="${esc(r.code)}" type="button" style="flex:1">Edit</button>
+        <button class="btn btn-ghost btn-xs" data-action="room-photos" data-code="${esc(r.code)}" type="button" style="flex:1">Photos${r.photos && r.photos.length ? " (" + r.photos.length + ")" : ""}</button>
+        <button class="btn btn-ghost btn-xs" data-action="room-rates" data-code="${esc(r.code)}" type="button" style="flex:1">Rates</button>
       </div>
     </div>`).join("");
 }
@@ -501,12 +501,12 @@ function renderHK() {
     const list = rooms.filter((r) => r.hk === key);
     return `<div class="hk-col"><header>${label}<span class="n">${list.length}</span></header>` +
       (list.map((r) => `
-        <div class="hk-card"><strong>${r.code} · ${esc(r.name)}</strong><p>${esc(r.note)}</p>
+        <div class="hk-card"><strong>${esc(r.code)} · ${esc(r.name)}</strong><p>${esc(r.note)}</p>
           <div class="hk-move">
-            ${key !== "dirty" ? `<button class="btn btn-ghost btn-xs" data-hk="${r.code}|dirty" type="button">← Dirty</button>` : ""}
-            ${key === "dirty" ? `<button class="btn btn-primary btn-xs" data-hk="${r.code}|progress" type="button">Start →</button>` : ""}
-            ${key === "progress" ? `<button class="btn btn-primary btn-xs" data-hk="${r.code}|clean" type="button">Mark clean ✓</button>` : ""}
-            ${key === "clean" ? `<button class="btn btn-ghost btn-xs" data-hk="${r.code}|dirty" type="button">Flag dirty</button>` : ""}
+            ${key !== "dirty" ? `<button class="btn btn-ghost btn-xs" data-hk="${esc(r.code)}|dirty" type="button">← Dirty</button>` : ""}
+            ${key === "dirty" ? `<button class="btn btn-primary btn-xs" data-hk="${esc(r.code)}|progress" type="button">Start →</button>` : ""}
+            ${key === "progress" ? `<button class="btn btn-primary btn-xs" data-hk="${esc(r.code)}|clean" type="button">Mark clean ✓</button>` : ""}
+            ${key === "clean" ? `<button class="btn btn-ghost btn-xs" data-hk="${esc(r.code)}|dirty" type="button">Flag dirty</button>` : ""}
           </div></div>`).join("") || `<div class="empty" style="padding:18px">Nothing here.</div>`) + `</div>`;
   }).join("");
 }
@@ -546,7 +546,7 @@ function renderIcal() {
   if (urlInput) urlInput.value = liveSlug && liveIcalToken ? `${icalExportBase()}?property=${encodeURIComponent(liveSlug)}&token=${encodeURIComponent(liveIcalToken)}` : "Sign in with your property account to get your calendar link";
   const roomSel = $("#icalRoom");
   if (roomSel) {
-    const html = rooms.map((r) => `<option value="${r.id || ""}" data-code="${r.code}">${r.code} · ${esc(r.name)}</option>`).join("");
+    const html = rooms.map((r) => `<option value="${r.id || ""}" data-code="${esc(r.code)}">${esc(r.code)} · ${esc(r.name)}</option>`).join("");
     if (roomSel.innerHTML !== html) { const keep = roomSel.value; roomSel.innerHTML = html; if (keep) roomSel.value = keep; }
   }
   const list = $("#icalFeedList");
@@ -560,6 +560,13 @@ function renderIcal() {
   }
   const note = $("#icalLiveNote");
   if (note) note.textContent = window.SHDB && SHDB.hasLive() ? "" : "Demo mode: sign in with your property account to add live calendars.";
+}
+
+/* Front-desk confirmation codes: random, from the same unambiguous alphabet
+   the booking page's server codes use (a counter collided across devices). */
+function newRef(prefix) {
+  const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return prefix + Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => abc[b % abc.length]).join("");
 }
 
 /* Invoke an Edge Function with the signed-in user's token (falls back to anon key). */
@@ -982,7 +989,7 @@ function openEditRoom(code) {
       </div>
       <div class="field"><label>Notes</label><input class="input" id="erNotes" value="${esc(r.note || "")}" placeholder="Internal note shown on the room card"></div>`,
     foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Cancel</button>
-      <button class="btn btn-primary btn-sm" data-action="save-edit-room" data-code="${r.code}" type="button">Save room</button>`
+      <button class="btn btn-primary btn-sm" data-action="save-edit-room" data-code="${esc(r.code)}" type="button">Save room</button>`
   });
 }
 function ratesType() {
@@ -1105,7 +1112,7 @@ function openRoomPhotos(code) {
   openModal({
     title: `Photos · ${r.code} ${r.name}`, sub: "First photo is the cover on your booking page",
     body: `
-      <div class="photo-grid">${r.photos.map((p, i) => `<figure><img src="${esc(p)}" alt=""><button type="button" data-action="photo-del" data-code="${r.code}" data-i="${i}" aria-label="Remove photo">✕</button></figure>`).join("") || `<p class="hint">No photos yet. Upload the first below.</p>`}</div>
+      <div class="photo-grid">${r.photos.map((p, i) => `<figure><img src="${esc(p)}" alt=""><button type="button" data-action="photo-del" data-code="${esc(r.code)}" data-i="${i}" aria-label="Remove photo">✕</button></figure>`).join("") || `<p class="hint">No photos yet. Upload the first below.</p>`}</div>
       <div style="margin-top:14px;display:flex;gap:8px;align-items:center">
         <label class="btn btn-primary btn-sm" for="roomPhotoFile" style="cursor:pointer">Upload photos</label>
         <input type="file" id="roomPhotoFile" accept="image/*" multiple hidden>
@@ -1122,7 +1129,7 @@ function openRoomPhotos(code) {
       try {
         let url;
         if (window.SHDB && SHDB.hasLive() && r.id) {
-          url = await SHDB.uploadPublic("room-photos", `${SHDB.tenantId()}/${r.code}/${Date.now()}-${f.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`, f);
+          url = await SHDB.uploadPublic("room-photos", `${SHDB.tenantId()}/${String(r.code).replace(/[^a-zA-Z0-9_-]/g, "-")}/${Date.now()}-${f.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`, f);
         } else {
           url = URL.createObjectURL(f);
           toast("Photo preview only", "Sign in live to save photos to your property", "warn");
@@ -1157,10 +1164,10 @@ function renderFolios() {
   const open = reservations.filter((r) => balance(r) > 0 && r.status !== "cancelled");
   $("#folioTable tbody").innerHTML = open.map((r) => `
     <tr><td class="guest"><strong>${esc(r.guest)}</strong><span>${esc(r.contact)}</span></td>
-      <td class="mono">${r.ref}</td><td><span class="room-code">${esc(r.room)}</span></td>
+      <td class="mono">${esc(r.ref)}</td><td><span class="room-code">${esc(r.room)}</span></td>
       <td><span class="tag">Room</span><span class="tag">Taxes</span>${r.ref === "R-1044" ? `<span class="tag">Firewood</span>` : ""}</td>
       <td class="num">${money(r.paid)}</td><td class="num" style="color:var(--danger)">${money(balance(r))}</td>
-      <td style="text-align:right"><button class="btn btn-brass btn-xs" data-action="charge" data-ref="${r.ref}" type="button">Charge ${money(balance(r))}</button></td></tr>`).join("") ||
+      <td style="text-align:right"><button class="btn btn-brass btn-xs" data-action="charge" data-ref="${esc(r.ref)}" type="button">Charge ${money(balance(r))}</button></td></tr>`).join("") ||
     `<tr><td colspan="7"><div class="empty">All folios settled.</div></td></tr>`;
 }
 function renderTxns() {
@@ -1396,7 +1403,7 @@ function openResDetail(ref) {
       <div style="display:flex;gap:8px;margin-bottom:14px">${pill(ST[r.status])}${balance(r) > 0 ? pill(["partial", money(balance(r)) + " due"]) : pill(["paid", "Paid in full"])}</div>
       <div class="kv">
         <dt>Contact</dt><dd>${esc(r.contact)}</dd>
-        <dt>Room</dt><dd>${r.room} · ${room ? esc(room.type) : ""} · ${room ? money(room.rate) : ""}/night</dd>
+        <dt>Room</dt><dd>${esc(r.room)} · ${room ? esc(room.type) : ""} · ${room ? money(room.rate) : ""}/night</dd>
         <dt>Status</dt><dd>${ST[r.status][1]}</dd>
         <dt>Total</dt><dd class="mono">${money(r.total)}</dd>
         <dt>Paid</dt><dd class="mono">${money(r.paid)}</dd>
@@ -1404,8 +1411,8 @@ function openResDetail(ref) {
         ${r.notes ? `<dt>Booking notes</dt><dd>${esc(r.notes)}</dd>` : ""}
       </div>`,
     foot: `
-      ${r.status === "pending" ? `<button class="btn btn-primary btn-sm" data-action="confirm-res" data-ref="${r.ref}" type="button">Confirm reservation</button>` : ""}
-      ${balance(r) > 0 ? `<button class="btn btn-brass btn-sm" data-action="charge" data-ref="${r.ref}" type="button">Charge ${money(balance(r))}</button>` : ""}
+      ${r.status === "pending" ? `<button class="btn btn-primary btn-sm" data-action="confirm-res" data-ref="${esc(r.ref)}" type="button">Confirm reservation</button>` : ""}
+      ${balance(r) > 0 ? `<button class="btn btn-brass btn-sm" data-action="charge" data-ref="${esc(r.ref)}" type="button">Charge ${money(balance(r))}</button>` : ""}
       <button class="btn btn-ghost btn-sm" data-close type="button">Close</button>`,
   });
 }
@@ -1416,7 +1423,7 @@ function openNewTicket() {
     body: `
       <div class="field"><label>Issue</label><input class="input" id="tkTitle" placeholder="e.g. Leaky kitchen faucet"></div>
       <div class="form-2">
-        <div class="field"><label>Room (optional)</label><select class="select" id="tkRoom"><option value="">Property-wide</option>${rooms.map((r) => `<option value="${r.id || ""}" data-code="${r.code}">${r.code} · ${esc(r.name)}</option>`).join("")}</select></div>
+        <div class="field"><label>Room (optional)</label><select class="select" id="tkRoom"><option value="">Property-wide</option>${rooms.map((r) => `<option value="${r.id || ""}" data-code="${esc(r.code)}">${esc(r.code)} · ${esc(r.name)}</option>`).join("")}</select></div>
         <div class="field"><label>Priority</label><select class="select" id="tkPrio"><option value="low">Low</option><option value="normal" selected>Normal</option><option value="high">High — guest-impacting</option></select></div>
       </div>
       <div class="field"><label>Details</label><textarea class="textarea" id="tkDesc" placeholder="What's wrong, where, and anything the fixer should bring…"></textarea></div>
@@ -1429,7 +1436,7 @@ function openNewTicket() {
 }
 
 function openNewReservation() {
-  const roomOpts = rooms.map((r) => `<option value="${r.code}">${r.code} · ${esc(r.name)} — ${money(roomRate(r))}/nt</option>`).join("");
+  const roomOpts = rooms.map((r) => `<option value="${esc(r.code)}">${esc(r.code)} · ${esc(r.name)} — ${money(roomRate(r))}/nt</option>`).join("");
   openModal({
     title: "New reservation", sub: "Walk-in, phone or manual entry",
     body: `
@@ -1464,7 +1471,7 @@ function openCharge(ref) {
       </div>
       <div class="field"><label>Receipt email</label><input class="input" value="${esc(r.contact.includes("@") ? r.contact : "")}" placeholder="guest@email.com"></div>`,
     foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Cancel</button>
-      <button class="btn btn-brass btn-sm" data-action="run-charge" data-ref="${r.ref}" type="button">Charge ${money(due)}</button>`,
+      <button class="btn btn-brass btn-sm" data-action="run-charge" data-ref="${esc(r.ref)}" type="button">Charge ${money(due)}</button>`,
   });
 }
 
@@ -1507,7 +1514,7 @@ document.addEventListener("click", (e) => {
     if (window.SHDB && SHDB.hasLive()) {
       (async () => {
         try {
-          if (file) ticket.photo = await SHDB.uploadPublic("room-photos", "maintenance/" + Date.now() + "-" + file.name.replace(/[^\w.\-]+/g, "_"), file);
+          if (file) ticket.photo = await SHDB.uploadPublic("room-photos", `${SHDB.tenantId()}/maintenance/${Date.now()}-${file.name.replace(/[^\w.\-]+/g, "_")}`, file);
           const row = await SHDB.createTicket(ticket);
           finish(row ? { id: row.id, roomCode: ticket.roomCode, title: row.title, desc: row.description || "", photo: row.photo_url || "", priority: row.priority, status: row.status, when: "Just now" } : null);
         } catch { toast("Ticket saved locally only", "Supabase write failed", "warn"); finish(null); }
@@ -1599,7 +1606,7 @@ document.addEventListener("click", (e) => {
     const subtotal = nightlySum(roomByCode(room), nin, nout);
     const taxEst = taxes.filter((t) => t.on).reduce((s, t) => s + (t.kind === "percent" ? subtotal * t.value / 100 : t.value * nights), 0);
     const total = Math.round((subtotal + taxEst) * 100) / 100;
-    const id = "R-" + (1053 + reservations.length - 12);
+    const id = newRef("R-");
     const local = { ref: id, guest: name, contact, room, inN: Math.round((new Date(nin) - TODAY) / dayMs), outN: Math.round((new Date(nout) - TODAY) / dayMs), status: "confirmed", total, paid: 0 };
     reservations.unshift(local);
     if (window.SHDB && SHDB.hasLive()) {
@@ -1635,7 +1642,7 @@ document.addEventListener("click", (e) => {
     if (!open.length) { toast("No open balances", "Every folio is settled", "ok"); return; }
     openModal({
       title: "Record cash payment", sub: "For walk-ins and front-desk payments",
-      body: `<div class="form-2"><div class="field"><label>Reservation</label><select class="select" id="cashRes">${open.map((r) => `<option value="${r.ref}">${r.ref} · ${esc(r.guest)} · ${money(balance(r))} due</option>`).join("")}</select></div>
+      body: `<div class="form-2"><div class="field"><label>Reservation</label><select class="select" id="cashRes">${open.map((r) => `<option value="${esc(r.ref)}">${esc(r.ref)} · ${esc(r.guest)} · ${money(balance(r))} due</option>`).join("")}</select></div>
         <div class="field"><label>Amount received</label><input class="input mono" id="cashAmt" type="number" min="0" step="0.01" value="${balance(open[0]).toFixed(2)}"></div></div>`,
       foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Cancel</button><button class="btn btn-primary btn-sm" data-action="cash-done" type="button">Record payment</button>`
     });
@@ -1945,17 +1952,10 @@ document.addEventListener("click", (e) => {
     (async () => {
       if (!window.SHDB || !SHDB.hasLive()) { toast("Sign in live first", "Stripe Connect onboarding needs your property account", "warn"); return; }
       try {
-        const c = window.SH_CONFIG || {};
-        const token = localStorage.getItem("sh_access_token") || c.SUPABASE_ANON_KEY;
-        const res = await fetch((c.SUPABASE_URL || "").replace(/\/$/, "") + "/functions/v1/stripe-connect", {
-          method: "POST",
-          headers: { apikey: c.SUPABASE_ANON_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },
-          body: JSON.stringify({ tenant_id: SHDB.tenantId() })
-        });
-        const d = await res.json().catch(() => ({}));
-        if (res.ok && d.onboarding_url) { location.href = d.onboarding_url; return; }
-        toast("Stripe Connect not ready", d.error || "Check function secrets, then retry", "warn");
-      } catch { toast("Stripe Connect not ready", "Deploy stripe-connect with Stripe secrets", "warn"); }
+        const d = await fnInvoke("stripe-connect", { tenant_id: SHDB.tenantId() });
+        if (d.onboarding_url) { location.href = d.onboarding_url; return; }
+        toast("Stripe Connect not ready", "Check function secrets, then retry", "warn");
+      } catch (err) { toast("Stripe Connect not ready", err.message || "Deploy stripe-connect with Stripe secrets", "warn"); }
     })();
   }
   else if (a === "invite") {

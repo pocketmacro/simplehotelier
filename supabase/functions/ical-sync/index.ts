@@ -49,6 +49,7 @@ Deno.serve(async (req) => {
     const result = await syncFeed(admin, feed);
     return json(result, result.error ? 502 : 200);
   } catch (e: any) {
-    return json({ error: e.message ?? "ical-sync failed" }, 500);
+    console.error("ical-sync", e);
+    return json({ error: "ical-sync failed" }, 500);
   }
 });

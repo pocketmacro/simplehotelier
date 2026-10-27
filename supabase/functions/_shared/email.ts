@@ -20,7 +20,9 @@ export function emailConfigured() {
   return !!(Deno.env.get("SES_SMTP_HOST") && Deno.env.get("SES_SMTP_USER") && Deno.env.get("SES_SMTP_PASS"));
 }
 
-const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/* Escape every guest/owner-entered value before it goes into p() or a
+   footnote: names, property names and policy text are not trusted HTML. */
+export const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" } as Record<string, string>)[c]);
 
 /* Branded shell matching simplehotelier.com: deep pine header, brass accents. */
 export function emailShell(heading: string, bodyHtml: string, footnote = "") {

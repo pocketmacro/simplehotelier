@@ -17,10 +17,11 @@ test("invites are stored per property with role and token", () => {
   assert.match(migration, /idx_invites_pending_email/);
 });
 
-test("invite send requires property membership and emails a token link", () => {
+test("invite send requires an owner/admin and emails a token link on our own origin", () => {
   assert.match(sendEmail, /action === "team_invite"/);
-  assert.match(sendEmail, /Only property team members can send invites/);
-  assert.match(sendEmail, /app\.html\?invite=\$\{invite\.token\}/);
+  assert.match(sendEmail, /Only the property owner or an admin can send invites/);
+  assert.match(sendEmail, /Only the property owner can invite admins/);
+  assert.match(sendEmail, /\$\{appOrigin\(req\.headers\.get\("origin"\)\)\}\/app\.html\?invite=\$\{encodeURIComponent\(invite\.token\)\}/);
 });
 
 test("accept-invite joins by token or account email and marks acceptance", () => {

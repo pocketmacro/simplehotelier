@@ -7,7 +7,7 @@
 // Deploy: supabase functions deploy daily-jobs  (verify_jwt off: secret-gated)
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendMail, emailShell, kv, p, money, fmtDate, emailConfigured } from "../_shared/email.ts";
+import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured } from "../_shared/email.ts";
 import { syncFeed } from "../_shared/sync.js";
 import { computeWeeklyStats } from "../_shared/report.js";
 import { addDaysISO } from "../_shared/ical.js";
@@ -43,13 +43,13 @@ async function reminders(kind: "checkin" | "checkout", out: Record<string, numbe
     const first = String(r.guest_name || "").split(" ")[0] || "there";
     const html = kind === "checkin"
       ? emailShell("See you tomorrow",
-          p(`Hi ${first},`) +
-          p(`We're looking forward to welcoming you to <strong>${property}</strong> tomorrow.`) +
+          p(`Hi ${esc(first)},`) +
+          p(`We're looking forward to welcoming you to <strong>${esc(property)}</strong> tomorrow.`) +
           kv([["Confirmation code", r.confirmation_code], ["Room", `${room.code || ""} ${room.name || ""}`.trim()], ["Check-in", fmtDate(r.check_in)], ["Check-out", fmtDate(r.check_out)]]),
-          tenant.contact_phone ? `Running late or have a question? Call ${property} at ${tenant.contact_phone}.` : "")
+          tenant.contact_phone ? `Running late or have a question? Call ${esc(property)} at ${esc(tenant.contact_phone)}.` : "")
       : emailShell("Checkout tomorrow",
-          p(`Hi ${first},`) +
-          p(`A quick reminder that checkout at <strong>${property}</strong> is tomorrow, ${fmtDate(r.check_out)}. We hope you enjoyed your stay.`) +
+          p(`Hi ${esc(first)},`) +
+          p(`A quick reminder that checkout at <strong>${esc(property)}</strong> is tomorrow, ${fmtDate(r.check_out)}. We hope you enjoyed your stay.`) +
           kv([["Confirmation code", r.confirmation_code], ["Room", `${room.code || ""} ${room.name || ""}`.trim()], ["Check-out", fmtDate(r.check_out)]]));
     const res = await sendMail({
       to: r.guest_email,
@@ -88,13 +88,13 @@ async function weeklyReports(out: Record<string, number>) {
     });
     const arrivalRows = stats.arrivals.slice(0, 12).map((a) => {
       const r = (reservations || []).find((x) => x.confirmation_code === a.code);
-      return `<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#33413f;padding:3px 14px 3px 0">${fmtDate(a.checkIn)}</td><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#101f1e;padding:3px 14px 3px 0">${a.guest}</td><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#5f7a73;padding:3px 0">${r ? (roomName.get(r.room_id) || "") : ""}</td></tr>`;
+      return `<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#33413f;padding:3px 14px 3px 0">${fmtDate(a.checkIn)}</td><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#101f1e;padding:3px 14px 3px 0">${esc(a.guest)}</td><td style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#5f7a73;padding:3px 0">${esc(r ? (roomName.get(r.room_id) || "") : "")}</td></tr>`;
     }).join("");
     const res = await sendMail({
       to,
       subject: `Your week at ${t.name} · ${stats.occupancyPct}% occupancy`,
       html: emailShell(`Your week at ${t.name}`,
-        p(`Here's how <strong>${t.name}</strong> did last week (${fmtDate(stats.weekStart)} – ${fmtDate(addDaysISO(stats.weekEnd, -1))}), and who's arriving next.`) +
+        p(`Here's how <strong>${esc(t.name)}</strong> did last week (${fmtDate(stats.weekStart)} – ${fmtDate(addDaysISO(stats.weekEnd, -1))}), and who's arriving next.`) +
         kv([
           ["Occupancy", `${stats.occupancyPct}% (${stats.nightsBooked} of ${stats.possibleNights} room-nights)`],
           ["Revenue collected", money(stats.revenueCents, t.currency)],
@@ -102,7 +102,7 @@ async function weeklyReports(out: Record<string, number>) {
           ["Arrivals next 7 days", String(stats.arrivals.length)]
         ]) +
         (arrivalRows ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:6px">${arrivalRows}</table>` : p("No arrivals in the next 7 days.")),
-        `You're receiving this because ${t.name} uses SimpleHotelier. Manage notification emails in Settings.`)
+        `You're receiving this because ${esc(t.name)} uses SimpleHotelier. Manage notification emails in Settings.`)
     }).catch(() => ({ sent: false }));
     if (res.sent) {
       sent++;
@@ -135,6 +135,7 @@ Deno.serve(async (req) => {
     await weeklyReports(out);
     return json({ ok: true, ...out });
   } catch (e: any) {
-    return json({ error: e.message ?? "daily-jobs failed" }, 500);
+    console.error("daily-jobs", e);
+    return json({ error: "daily-jobs failed" }, 500);
   }
 });

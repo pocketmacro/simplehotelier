@@ -1,10 +1,14 @@
 // SimpleHotelier — create/reuse a Stripe Connect account for a property.
-// POST { tenant_id }  ->  { account_id, onboarding_url }
+// POST { tenant_id } with the user's JWT -> { account_id, onboarding_url }
+//   owners/admins only: the onboarding link edits the property's payout account.
+// POST { tenant_id, action: "status" } with the user's JWT -> { connected, ... }
+//   any member: syncs stripe_onboarding_complete from Stripe.
 // Deploy: supabase functions deploy stripe-connect
-// Secrets: STRIPE_SECRET_KEY (test key until launch)
+// Secrets: STRIPE_SECRET_KEY (test key until launch), SITE_URL (optional)
 // deno-lint-ignore-file no-explicit-any
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { appOrigin, callerUser, memberRole } from "../_shared/guard.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2024-06-20" });
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -18,8 +22,12 @@ const CORS = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
-    const { tenant_id, action } = await req.json();
+    const user = await callerUser(admin, req);
+    if (!user) return json({ error: "Sign in first" }, 401);
+    const { tenant_id, action } = await req.json().catch(() => ({}));
     if (!tenant_id) return json({ error: "tenant_id required" }, 400);
+    const role = await memberRole(admin, String(tenant_id), user.id);
+    if (!role) return json({ error: "not a member of this property" }, 403);
 
     const { data: tenant, error } = await admin
       .from("tenants").select("id, name, contact_email, stripe_account_id").eq("id", tenant_id).single();
@@ -43,6 +51,8 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (role !== "owner" && role !== "admin") return json({ error: "Only the property owner or an admin can manage payouts" }, 403);
+
     let accountId = tenant.stripe_account_id as string | null;
     if (!accountId) {
       const account = await stripe.accounts.create({
@@ -56,7 +66,7 @@ Deno.serve(async (req) => {
       await admin.from("tenants").update({ stripe_account_id: accountId }).eq("id", tenant.id);
     }
 
-    const origin = req.headers.get("origin") ?? "http://localhost:8000";
+    const origin = appOrigin(req.headers.get("origin"));
     const link = await stripe.accountLinks.create({
       account: accountId,
       type: "account_onboarding",
@@ -65,7 +75,8 @@ Deno.serve(async (req) => {
     });
     return json({ account_id: accountId, onboarding_url: link.url });
   } catch (e: any) {
-    return json({ error: e.message ?? "stripe-connect failed" }, 500);
+    console.error("stripe-connect", e);
+    return json({ error: "stripe-connect failed" }, 500);
   }
 });
 

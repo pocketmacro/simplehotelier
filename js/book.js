@@ -58,7 +58,22 @@
     const set = new Set(availableIds);
     return units.filter((u) => set.has(u.id));
   }
-  window.SHBookCalc = { quote, applyPlanToRates, planApplies, chooseUnits };
+  /* Owner-entered links (website, socials, redirect, hero image) must be
+     plain web URLs: never javascript:/data: on a guest's page. */
+  function safeUrl(raw, { httpsOnly = false } = {}) {
+    try {
+      const u = new URL(String(raw || "").trim());
+      if (u.protocol === "https:" || (!httpsOnly && u.protocol === "http:")) return u.toString();
+    } catch { /* not a URL */ }
+    return "";
+  }
+  /* create_booking raises with message = an error code and details = a
+     sentence written for guests; anything else gets a generic line. */
+  function bookingErrorText(e) {
+    if (e && e.details && /^[a-z_]+$/.test(e.code || "")) return e.details;
+    return "Something went wrong sending your request. Please try again or contact the property.";
+  }
+  window.SHBookCalc = { quote, applyPlanToRates, planApplies, chooseUnits, safeUrl, bookingErrorText };
 
   /* ---- DOM app (skipped when loaded headlessly, e.g. by tests) ---- */
   if (!document.querySelector || !document.querySelector("#roomsList")) return;
@@ -111,7 +126,10 @@
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      throw new Error(data.message || data.details || ("Request failed (" + res.status + ")"));
+      const err = new Error(data.message || data.details || ("Request failed (" + res.status + ")"));
+      err.code = data.message || "";
+      err.details = data.details || "";
+      throw err;
     }
     return res.status === 204 ? null : res.json().catch(() => null);
   }
@@ -136,7 +154,7 @@
       window.gtag("event", "purchase", payload);        // GA4 recommended commerce event
       window.gtag("event", "booking_complete", payload); // explicit custom conversion
     }
-    const redirect = state.tenant && state.tenant.booking_redirect_url;
+    const redirect = safeUrl(state.tenant && state.tenant.booking_redirect_url);
     if (redirect) {
       try {
         const u = new URL(redirect);
@@ -517,6 +535,23 @@
     renderRooms(); renderSummary();
   }
 
+  const TYPE_COLS = "id,name,description,bathrooms,view,smoking_policy,min_stay,max_stay,rack_rate_cents,extra_adult_cents,included_adults,max_occupants,beds,handicap_accessible,accessible_features,features,photos";
+  /* Guest-visible rate plans: plans without a code plus any matching the code
+     typed here. get_rate_plans never returns other promo codes. */
+  async function loadRatePlans() {
+    if (!state.tenant) return;
+    const promo = ($("#promoCode").value || "").trim().toUpperCase();
+    const rows = await api("rpc/get_rate_plans", {
+      method: "POST",
+      body: JSON.stringify({ p_tenant: state.tenant.id, p_promo: promo || null })
+    }).catch(() => null);
+    if (!rows) return;
+    Object.values(state.types).forEach((t) => { t.rate_plans = []; });
+    rows.forEach((row) => {
+      if (state.types[row.room_type_id]) state.types[row.room_type_id].rate_plans = Array.isArray(row.rate_plans) ? row.rate_plans : [];
+    });
+  }
+
   async function load() {
     if (!base || !anon) { showError("Booking is not configured yet. Please contact the property directly."); return; }
     try {
@@ -541,8 +576,9 @@
         if (addr) contact.push(`<span>${esc(addr)}</span>`);
         if (t.phone) contact.push(`<span>${esc(t.phone)}</span>`);
         if (t.contact_email) contact.push(`<span>${esc(t.contact_email)}</span>`);
-        if (t.website_url) contact.push(`<a href="${esc(t.website_url)}" target="_blank" rel="noopener">Property website</a>`);
+        if (safeUrl(t.website_url)) contact.push(`<a href="${esc(safeUrl(t.website_url))}" target="_blank" rel="noopener">Property website</a>`);
         const socials = [["Facebook", t.facebook_url], ["Instagram", t.instagram_url], ["Twitter / X", t.twitter_url], ["YouTube", t.youtube_url]]
+          .map(([label, u]) => [label, safeUrl(u)])
           .filter(([, u]) => u).map(([label, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${label}</a>`).join("");
         const hasAbout = !!(t.description || contact.length || socials);
         $("#propAbout").hidden = !hasAbout;
@@ -570,11 +606,12 @@
         document.documentElement.style.setProperty("--ink", t.booking_fg_color);
         document.documentElement.style.setProperty("--ink-2", t.booking_fg_color);
       }
-      if (t.hero_image_url) {
+      const heroUrl = safeUrl(t.hero_image_url, { httpsOnly: true });
+      if (heroUrl) {
         const heroEl = $("#bkHero");
         if (heroEl) {
           heroEl.classList.add("has-hero");
-          heroEl.style.backgroundImage = `linear-gradient(180deg, rgb(8 20 20 / 38%), rgb(8 20 20 / 60%)), url("${String(t.hero_image_url).replace(/"/g, "%22")}")`;
+          heroEl.style.backgroundImage = `linear-gradient(180deg, rgb(8 20 20 / 38%), rgb(8 20 20 / 60%)), url("${heroUrl.replace(/["\\]/g, encodeURIComponent)}")`;
           const pct = (v, d) => (v == null || isNaN(Number(v)) ? d : Math.min(100, Math.max(0, Number(v))));
           heroEl.style.backgroundPosition = `${pct(t.hero_focus_x, 50)}% ${pct(t.hero_focus_y, 50)}%`;
         }
@@ -599,13 +636,16 @@
         api("rooms?" + tid + "&select=id,tenant_id,room_type_id,code,name,sleeps,rate_cents,weekend_rate_cents,photos,sort_order&order=sort_order.asc"),
         api("addons?" + tid + "&active=eq.true&select=*&order=name.asc"),
         api("tax_rules?" + tid + "&active=eq.true&select=*&order=sort_order.asc"),
-        api("room_types?" + tid + "&select=*&order=name.asc").catch(() => [])
+        // Never select=* or rate_plans: anon cannot read promo codes (see
+        // 20261115000100_public_booking_lockdown); plans come from loadRatePlans().
+        api("room_types?" + tid + "&select=" + TYPE_COLS + "&order=name.asc").catch(() => [])
       ]);
       state.types = {};
       (typeRows || []).forEach((t) => { state.types[t.id] = t; });
       state.rooms = rooms || [];
       state.addons = addons || [];
       state.taxes = (taxes || []).map((x) => ({ name: x.name, kind: x.kind, value: Number(x.rate), applies: x.applies_to }));
+      await loadRatePlans();
       renderTerms();
       renderRooms(); renderAddons(); renderSummary(); postHeight();
     } catch (e) {
@@ -646,7 +686,8 @@
     syncDateMins();
     if (state.tenant) checkAvailability(); else { renderRooms(); renderSummary(); }
   }));
-  ["guests", "promoCode"].forEach((id) => $("#" + id).addEventListener("change", () => { renderRooms(); renderSummary(); }));
+  $("#guests").addEventListener("change", () => { renderRooms(); renderSummary(); });
+  $("#promoCode").addEventListener("change", async () => { await loadRatePlans(); renderRooms(); renderSummary(); });
   $("#searchForm").addEventListener("submit", (e) => { e.preventDefault(); showError(""); checkAvailability(); });
 
   $("#depAck").addEventListener("change", () => renderSummary());
@@ -663,90 +704,54 @@
     if (!q) { showError("Please fix your dates."); return; }
     const btn = $("#bookBtn");
     btn.disabled = true; btn.textContent = "Sending…";
-    const code = "SH-" + Math.random().toString(36).slice(2, 8).toUpperCase();
-    const newResId = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + "-" + Math.random().toString(36).slice(2));
     const selAddons = chosenAddons();
-    const apNow = applicablePlan(state.selected, nights());
     const consentEl = $("#gConsent");
-    const notes = [$("#gNotes").value.trim(), selAddons.length ? "Add-ons: " + selAddons.map((a) => a.name).join(", ") : "",
-      apNow ? "Rate plan: " + apNow.plan.name : "",
-      ($("#promoCode").value || "").trim() ? "Promo code: " + $("#promoCode").value.trim().toUpperCase() : "",
-      consentEl && !$("#gConsentWrap").hidden && consentEl.checked ? "Marketing consent: yes" : "",
-      termsRequired() ? "Guest agreed to property terms & house rules" : "",
-    state.dep ? `Deposit ${state.dep.collectible ? "to pay by card" : "acknowledged, to be collected by property"}: ${money(state.dep.due)} (${state.dep.pct}%)` : ""].filter(Boolean).join(" · ");
     try {
-      /* By type: refresh availability, then auto-assign the first free unit.
-         If two guests race for the last unit, the no-overlap constraint loses
-         one insert — fall through to the next unit instead of erroring out. */
-      let candidates = [state.selected];
-      if (byType() && state.selectedTypeId) {
-        await checkAvailability().catch(() => {});
-        const units = state.rooms.filter((r) => r.room_type_id === state.selectedTypeId);
-        candidates = chooseUnits(units, state.available);
-        if (!candidates.length) {
-          btn.disabled = false; btn.textContent = "Request booking";
-          showError("That room type just sold out for these dates. Try different dates or another type.");
-          return;
-        }
-      }
-      let resId = null, placedUnit = null, lastErr = null;
-      for (const unit of candidates) {
-        const tryId = newResId();
-        try {
-          await api("reservations", {
-            method: "POST", headers: { Prefer: "return=minimal" },
-            body: JSON.stringify({
-              id: tryId, tenant_id: state.tenant.id, room_id: unit.id,
-              guest_name: name, guest_email: email, guest_phone: $("#gPhone").value.trim() || null,
-              confirmation_code: code, check_in: $("#inDate").value, check_out: $("#outDate").value,
-              status: "pending", source: "direct", adults: Math.max(1, parseInt($("#guests").value) || 1),
-              notes: notes || null,
-              subtotal_cents: Math.round(q.subtotal * 100), tax_cents: Math.round(q.taxTotal * 100),
-              total_cents: Math.round(q.total * 100), paid_cents: 0
-            })
-          });
-          resId = tryId; placedUnit = unit;
-          break;
-        } catch (e) {
-          lastErr = e;
-          if (!/exclusion|conflict|duplicate|409/i.test(e.message)) throw e;
-        }
-      }
-      if (!placedUnit) throw lastErr || new Error("unavailable");
-      state.selected = placedUnit;
-      // Attach add-on snapshots (best effort; the request itself already succeeded).
-      for (const a of selAddons) {
-        await api("reservation_addons", {
-          method: "POST", headers: { Prefer: "return=minimal" },
-          body: JSON.stringify({ tenant_id: state.tenant.id, reservation_id: resId, addon_id: a.id, name_snapshot: a.name, price_cents: a.price_cents, qty: 1 })
-        }).catch(() => {});
-      }
+      /* The server prices the stay from the property's own rates, assigns a
+         free unit (by type: first free one; two guests racing for the last
+         unit can't both win), generates the confirmation code and stores
+         the request. The quote shown above is only a preview. */
+      const booked = await api("rpc/create_booking", {
+        method: "POST",
+        body: JSON.stringify({
+          p_tenant: state.tenant.id,
+          p_room: byType() && state.selectedTypeId ? null : state.selected.id,
+          p_room_type: byType() && state.selectedTypeId ? state.selectedTypeId : null,
+          p_check_in: $("#inDate").value, p_check_out: $("#outDate").value,
+          p_guests: Math.max(1, parseInt($("#guests").value) || 1),
+          p_name: name, p_email: email, p_phone: $("#gPhone").value.trim() || null,
+          p_requests: $("#gNotes").value.trim() || null,
+          p_addon_ids: selAddons.map((a) => a.id),
+          p_promo: ($("#promoCode").value || "").trim().toUpperCase() || null,
+          p_marketing_consent: !!(consentEl && !$("#gConsentWrap").hidden && consentEl.checked),
+          p_terms_accepted: termsRequired() && $("#gTermsAck").checked
+        })
+      });
+      const resId = booked.reservation_id, code = booked.confirmation_code;
+      const total = (booked.total_cents || 0) / 100;
+      state.selected = state.rooms.find((r) => r.id === booked.room_id) || state.selected;
       // Guest confirmation email (+ property notification). Best effort: the booking already succeeded.
       fnPost("send-email", { action: "booking_confirmation", reservation_id: resId }).catch(() => {});
-      if (state.dep && state.dep.collectible) {
-        // Deposit required: create the card charge and switch the button to Pay.
+      if (state.dep && state.dep.collectible && booked.deposit_cents > 0) {
+        // Deposit required: the server works out the amount; switch the button to Pay.
         btn.textContent = "Preparing secure payment…";
-        const pi = await fnPost("charge-guest", {
-          tenant_id: state.tenant.id, reservation_id: resId,
-          amount_cents: Math.round(state.dep.due * 100),
-          description: "Booking deposit · " + code + " · " + state.selected.name
-        });
-        state.paying = { resId, code, total: q.total, due: state.dep.due, clientSecret: pi.client_secret };
-        $("#payText").textContent = `A deposit of ${money(state.dep.due)} (${state.dep.pct}% of ${money(q.total)}) is due today to confirm ${state.selected.name}. The balance is due at the property.`;
+        const pi = await fnPost("charge-guest", { tenant_id: state.tenant.id, reservation_id: resId });
+        const due = (pi.amount_cents || booked.deposit_cents) / 100;
+        state.paying = { resId, code, total, due, clientSecret: pi.client_secret };
+        $("#payText").textContent = `A deposit of ${money(due)} (${booked.deposit_percent}% of ${money(total)}) is due today to confirm ${state.selected.name}. The balance is due at the property.`;
         $("#payPanel").hidden = false;
         await mountCard();
         btn.disabled = false;
-        btn.textContent = "Pay " + money(state.dep.due) + " deposit";
+        btn.textContent = "Pay " + money(due) + " deposit";
         $("#payPanel").scrollIntoView({ behavior: "smooth", block: "center" });
         postHeight();
         return;
       }
-      showSuccess(code, q.total, state.dep ? ` A deposit of ${money(state.dep.due)} (${state.dep.pct}%) is required to confirm — the property will arrange collection.` : "");
+      showSuccess(code, total, booked.deposit_cents > 0 ? ` A deposit of ${money(booked.deposit_cents / 100)} (${booked.deposit_percent}%) is required to confirm — the property will arrange collection.` : "");
     } catch (e) {
       btn.disabled = false; btn.textContent = "Request booking";
-      showError(/exclusion|conflict|duplicate|409/i.test(e.message)
-        ? "Those dates just became unavailable for this room. Try different dates or another room."
-        : "Something went wrong sending your request. Please try again or contact the property.");
+      showError(bookingErrorText(e));
+      if (e && e.code === "unavailable" && state.tenant) checkAvailability().catch(() => {});
     }
   });
 

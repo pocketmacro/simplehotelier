@@ -45,19 +45,11 @@ Deno.serve(async (req) => {
       else await admin.from("tenants").update(patch).eq("stripe_customer_id", String(sub.customer));
     } else if (event.type === "payment_intent.succeeded") {
       // Guest deposit/charge on a connected account (fires for Connect events
-      // when this endpoint is registered as a Connect webhook). Idempotent:
-      // only a still-pending transaction moves paid_cents.
+      // when this endpoint is registered as a Connect webhook). Idempotent and
+      // atomic: only a still-pending transaction moves paid_cents, once.
       const intent: any = event.data.object;
-      const reservationId = intent.metadata?.reservation_id;
-      const { data: txn } = await admin.from("transactions")
-        .select("id, status, amount_cents").eq("stripe_payment_intent_id", intent.id).maybeSingle();
-      if (txn && txn.status !== "paid") {
-        await admin.from("transactions").update({ status: "paid" }).eq("id", txn.id);
-        if (reservationId) {
-          const { data: resv } = await admin.from("reservations").select("paid_cents").eq("id", reservationId).single();
-          if (resv) await admin.from("reservations").update({ paid_cents: (resv.paid_cents || 0) + (txn.amount_cents || intent.amount) }).eq("id", reservationId);
-        }
-      }
+      const { error } = await admin.rpc("record_stripe_payment", { p_intent: intent.id });
+      if (error) throw new Error(error.message);
     } else if (event.type === "invoice.payment_failed") {
       const inv: any = event.data.object;
       await admin.from("tenants").update({ subscription_status: "past_due" }).eq("stripe_customer_id", String(inv.customer));
