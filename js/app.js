@@ -109,7 +109,7 @@ const reservations = [
   { ref: "R-1043", guest: "Priya Nair", contact: "(970) 555-0182", room: "A3", inN: -1, outN: 1, status: "checked-in", total: 402.10, paid: 402.10 },
   { ref: "R-1044", guest: "Sam Whitaker", contact: "sam.w@mail.com", room: "B1", inN: -3, outN: 3, status: "checked-in", total: 1244.55, paid: 900.00 },
   { ref: "R-1045", guest: "Lucia Fernandez", contact: "(970) 555-0119", room: "B3", inN: -1, outN: 3, status: "checked-in", total: 1102.30, paid: 1102.30 },
-  { ref: "R-1046", guest: "Tom Becker", contact: "tom.b@mail.com", room: "A1", inN: 0, outN: 3, status: "confirmed", total: 640.75, paid: 200.00 },
+  { ref: "R-1046", guest: "Tom Becker", contact: "tom.b@mail.com", room: "A1", inN: 0, outN: 3, status: "confirmed", total: 640.75, paid: 200.00, arrival: "4 – 6 PM" },
   { ref: "R-1047", guest: "Aisha Khan", contact: "(970) 555-0144", room: "C1", inN: 0, outN: 2, status: "confirmed", total: 715.90, paid: 0 },
   { ref: "R-1048", guest: "Greg Poulsen", contact: "greg.p@mail.com", room: "B2", inN: 4, outN: 7, status: "pending", total: 655.20, paid: 0 },
   { ref: "R-1049", guest: "Nina Rossi", contact: "nina.r@mail.com", room: "C2", inN: 4, outN: 6, status: "pending", total: 348.60, paid: 0 },
@@ -257,7 +257,7 @@ function renderToday() {
   const dep = reservations.filter((r) => r.outN === 0 && r.status !== "cancelled");
   const item = (r, tag) => `
     <div class="row-item"><span class="room-code">${esc(r.room)}</span>
-      <div class="ri-main"><strong>${esc(r.guest)} · ${tag}</strong><span>${esc(resDates(r))} · ${money(r.total)}</span></div>
+      <div class="ri-main"><strong>${esc(r.guest)} · ${tag}${tag === "Arriving" && r.arrival ? " " + esc(r.arrival) : ""}</strong><span>${esc(resDates(r))} · ${money(r.total)}</span></div>
       <div class="ri-right">${pill(ST[r.status] || ST.confirmed)}</div></div>`;
   $("#todayList").innerHTML =
     arr.map((r) => item(r, "Arriving")).join("") + dep.map((r) => item(r, "Departing")).join("") ||
@@ -416,7 +416,7 @@ function renderReservations() {
       <td class="guest"><strong>${esc(r.guest)}</strong><span>${esc(r.contact)}</span></td>
       <td class="mono">${esc(r.ref)}</td>
       <td><span class="room-code">${esc(r.room)}</span></td>
-      <td style="white-space:nowrap">${esc(resDates(r))}</td>
+      <td style="white-space:nowrap">${esc(resDates(r))}${r.arrival && (r.status === "pending" || r.status === "confirmed") ? `<small class="res-arrival">Arrives ${esc(r.arrival)}</small>` : ""}</td>
       <td>${pill(ST[r.status])}</td>
       <td class="num">${money(r.total)}</td>
       <td class="num" style="${balance(r) > 0 ? "color:var(--danger)" : "color:var(--success)"}">${money(balance(r))}</td>

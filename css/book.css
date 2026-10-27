@@ -139,6 +139,11 @@ label.bk-sf { cursor: pointer; }
 .bk-field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: var(--ink); }
 .bk-field small { font-weight: 400; color: var(--muted); font-size: 13px; }
 .bk-wide { grid-column: 1 / -1; }
+.bk-select-wrap { position: relative; display: block; }
+.bk-select-wrap select { width: 100%; appearance: none; padding-right: 42px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.bk-select-wrap::after { content: ""; position: absolute; right: 14px; top: 50%; width: 16px; height: 16px; margin-top: -8px; pointer-events: none;
+  background: var(--muted); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat; }
 .bk-input { height: 48px; padding: 0 14px; border: 1px solid var(--field-line); border-radius: var(--r-input); font-size: 16px; font-weight: 400; color: var(--ink); background: var(--surface); width: 100%; }
 textarea.bk-input { height: auto; padding: 12px 14px; resize: vertical; }
 .bk-input:focus { outline: 2px solid var(--brand); outline-offset: 0; border-color: var(--brand); }

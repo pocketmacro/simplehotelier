@@ -798,6 +798,7 @@
     $("#propEyebrow").hidden = !eyebrow;
     $("#navUnits").textContent = words.many.replace(/^./, (c) => c.toUpperCase());
     $("#unitsTitle").textContent = "Choose your " + words.one;
+    $("#gArrivalHint").textContent = t.check_in_time ? "Optional · check-in from " + t.check_in_time : "Optional";
 
     const heroEl = $("#bkHero");
     const heroUrl = safeUrl(pick("heroUrl", t.hero_image_url), { httpsOnly: true });
@@ -996,7 +997,8 @@
           p_addon_ids: selAddons.map((a) => a.id),
           p_promo: ($("#promoCode").value || "").trim().toUpperCase() || null,
           p_marketing_consent: !!(consentEl && !$("#gConsentWrap").hidden && consentEl.checked),
-          p_terms_accepted: termsRequired() && $("#gTermsAck").checked
+          p_terms_accepted: termsRequired() && $("#gTermsAck").checked,
+          p_arrival_time: $("#gArrival").value || null
         }
       });
       const resId = booked.reservation_id, code = booked.confirmation_code;

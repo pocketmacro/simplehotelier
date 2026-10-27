@@ -14,7 +14,7 @@ import { withCors } from "../_shared/cors.ts";
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const ACTION = "booking";
 const PARAMS = ["p_tenant", "p_check_in", "p_check_out", "p_name", "p_email", "p_room", "p_room_type", "p_guests",
-  "p_phone", "p_requests", "p_addon_ids", "p_promo", "p_marketing_consent", "p_terms_accepted"];
+  "p_phone", "p_requests", "p_addon_ids", "p_promo", "p_marketing_consent", "p_terms_accepted", "p_arrival_time"];
 const EXTRA_HOSTS = new Set((Deno.env.get("TURNSTILE_HOSTNAMES") || "").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean));
 
 /* Our booking page only: simplehotelier.com, property subdomains, the

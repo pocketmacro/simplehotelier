@@ -67,9 +67,10 @@
     <section class="bk-section" aria-labelledby="hDetails">
       <h2 id="hDetails"><span class="bk-num" data-step-num></span>Your details</h2>
       <form class="bk-card bk-guest" id="guestForm">
-        <label class="bk-field"><span>Full name</span><input class="bk-input" id="gName" autocomplete="name" required placeholder="Jane Appleseed"></label>
+        <label class="bk-field bk-wide"><span>Full name</span><input class="bk-input" id="gName" autocomplete="name" required placeholder="Jane Appleseed"></label>
         <label class="bk-field"><span>Email</span><input class="bk-input" id="gEmail" type="email" autocomplete="email" required placeholder="jane@email.com"></label>
         <label class="bk-field"><span>Phone <small>Optional · for arrival updates</small></span><input class="bk-input" id="gPhone" type="tel" autocomplete="tel" placeholder="(555) 010-2030"></label>
+        <label class="bk-field"><span>Arrival time <small id="gArrivalHint">Optional</small></span><span class="bk-select-wrap"><select class="bk-input" id="gArrival"><option value="">Not sure yet</option><option>Before 12 PM</option><option>12 – 2 PM</option><option>2 – 4 PM</option><option>4 – 6 PM</option><option>6 – 8 PM</option><option>After 8 PM</option></select></span></label>
         <label class="bk-field"><span>Promo code <small>Optional</small></span><input class="bk-input bk-upper" id="promoCode" type="text" autocomplete="off" placeholder="STAYLONGER"></label>
         <label class="bk-field bk-wide"><span>Anything we should know? <small>Optional · early arrival, a crib, a quiet room</small></span><textarea class="bk-input" id="gNotes" rows="3"></textarea></label>
         <div class="bk-wide" id="gConsentWrap" hidden><label class="bk-consent"><input type="checkbox" id="gConsent"><span>I'd like to receive offers and news from this property by email. You can unsubscribe at any time.</span></label></div>

@@ -74,6 +74,7 @@ async function bookingConfirmation(reservationId: string, force = false) {
     ["Check-in", fmtDate(r.check_in)],
     ["Check-out", fmtDate(r.check_out)],
     ["Guests", String(r.adults || 1)],
+    ...(r.arrival_time ? [["Estimated arrival", String(r.arrival_time)] as [string, string]] : []),
     ["Total", money(r.total_cents, tenant?.currency)],
     ...(balance > 0 ? [["Balance due at property", money(balance, tenant?.currency)] as [string, string]] : [["Payment", "Paid in full"] as [string, string]])
   ];

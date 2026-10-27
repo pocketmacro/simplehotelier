@@ -704,6 +704,30 @@ select pg_temp.expect('R53 per-IP throttle (IP passed by the Edge Function): 11t
                 select encode(sha256(convert_to('203.0.113.7', 'UTF8')), 'hex'), '{tenant_b}'
                 from generate_series(1, 10)$q$);
 
+do $$
+declare
+  v_a uuid := pg_temp.id('tenant_a');
+  v_type uuid := pg_temp.id('type_a');
+  v jsonb;
+  v_arr text;
+begin
+  perform pg_temp.act_as('service');
+  v := public.create_booking(v_a, current_date + 60, current_date + 62, 'Arrival Guest',
+         'arrival@rls-check.invalid', p_room_type => v_type, p_client_ip => '203.0.113.55',
+         p_arrival_time => '4 – 6 PM');
+  reset role;
+  select arrival_time into v_arr from public.reservations where id = (v ->> 'reservation_id')::uuid;
+  perform pg_temp.verdict(v_arr = '4 – 6 PM', 'arrival_time=' || coalesce(v_arr, 'null'));
+exception when others then
+  perform pg_temp.caught('R55 guests can give an arrival window; it lands on the reservation', sqlstate, sqlerrm);
+end $$;
+select pg_temp.expect('R55b only the listed arrival windows are accepted',
+  array['service'],
+  array[$q$select public.create_booking('{tenant_a}'::uuid, current_date + 64, current_date + 66, 'Arrival Guest',
+          'arrival2@rls-check.invalid', p_room_type => '{type_a}'::uuid, p_client_ip => '203.0.113.56',
+          p_arrival_time => '<script>3am')$q$],
+  'error:P0001', '^invalid_arrival_time ');
+
 select pg_temp.expect('R54 per-IP throttle (cf-connecting-ip request header) refuses the 11th booking',
   array['service'],
   array[$q$select public.create_booking('{tenant_a}'::uuid, current_date + 40, current_date + 42, 'Ip Guest',
