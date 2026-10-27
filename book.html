@@ -7,98 +7,130 @@
 <meta name="description" content="Book direct and save.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/book.css">
 <link rel="icon" href="assets/favicon.svg">
+<script src="js/booking-theme.js"></script>
+<script>SHTheme.apply({});</script>
 </head>
 <body>
+<a class="bk-skip" href="#roomsSection">Skip to booking</a>
+
 <header class="bk-top" id="bkTop">
-  <div class="bk-brand"><span class="bk-mark" id="propMark">S</span><strong id="propName">Loading…</strong></div>
-  <span class="bk-direct">Book direct &amp; save</span>
+  <a class="bk-brand" href="#top"><span class="bk-mark" id="propMark" aria-hidden="true">S</span><span class="bk-name" id="propName">Loading…</span></a>
+  <nav class="bk-nav" aria-label="Page">
+    <a href="#roomsSection" id="navUnits">Rooms</a>
+    <a href="#termsSection" id="navPolicies">Policies</a>
+    <a href="#bkFoot">Contact</a>
+    <span class="bk-chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Book direct &amp; save</span>
+  </nav>
 </header>
 
-<section class="bk-hero" id="bkHero">
-  <h1 id="propHeadline">Find your stay</h1>
-  <p id="propSub"></p>
-</section>
-
-<main class="bk-wrap">
-  <form class="bk-search" id="searchForm">
-    <div class="bk-field"><label for="inDate">Check-in</label><input class="bk-input" id="inDate" type="date" required></div>
-    <div class="bk-field"><label for="outDate">Check-out</label><input class="bk-input" id="outDate" type="date" required></div>
-    <div class="bk-field"><label for="guests">Guests</label><input class="bk-input" id="guests" type="number" min="1" max="16" value="2"></div>
-    <div class="bk-field"><label for="promoCode">Promo code (optional)</label><input class="bk-input" id="promoCode" type="text" placeholder="e.g. STAYLONGER" autocomplete="off" style="text-transform:uppercase"></div>
-    <button class="bk-btn bk-btn-main" type="submit">Check availability</button>
+<section class="bk-hero-wrap" id="top">
+  <div class="bk-hero" id="bkHero">
+    <div class="bk-hero-text">
+      <p class="bk-eyebrow" id="propEyebrow" hidden></p>
+      <h1 id="propHeadline">Find your stay</h1>
+      <p class="bk-sub" id="propSub"></p>
+    </div>
+  </div>
+  <form class="bk-search" id="searchForm" aria-label="Find your stay">
+    <label class="bk-sf"><span>Check-in</span><input id="inDate" type="date" required></label>
+    <label class="bk-sf"><span>Check-out</span><input id="outDate" type="date" required></label>
+    <div class="bk-sf"><span id="guestsLabel">Guests</span>
+      <div class="bk-stepper" role="group" aria-labelledby="guestsLabel">
+        <button type="button" data-step="-1" aria-label="Remove a guest">−</button>
+        <output id="guestsOut" aria-live="polite">2 guests</output>
+        <button type="button" data-step="1" aria-label="Add a guest">+</button>
+      </div>
+      <input id="guests" type="hidden" value="2">
+    </div>
+    <button class="bk-search-btn" type="submit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Check availability</button>
   </form>
   <p class="bk-note" id="availNote" hidden></p>
-  <div class="bk-error" id="bookError" hidden></div>
+  <div class="bk-error" id="bookError" role="alert" hidden></div>
+</section>
 
-  <div class="bk-layout">
-    <div>
-      <section id="roomsSection">
-        <h2 class="bk-h2">Choose your room</h2>
-        <div class="bk-rooms" id="roomsList"><p class="bk-loading">Loading rooms…</p></div>
-      </section>
-      <section id="addonsSection" hidden>
-        <h2 class="bk-h2">Enhance your stay</h2>
-        <div class="bk-addons" id="addonsList"></div>
-      </section>
-      <section>
-        <h2 class="bk-h2">Your details</h2>
-        <form class="bk-guest" id="guestForm">
-          <div class="bk-field"><label for="gName">Full name</label><input class="bk-input" id="gName" autocomplete="name" required placeholder="Jane Appleseed"></div>
-          <div class="bk-field"><label for="gEmail">Email</label><input class="bk-input" id="gEmail" type="email" autocomplete="email" required placeholder="jane@email.com"></div>
-          <div class="bk-field"><label for="gPhone">Phone (optional)</label><input class="bk-input" id="gPhone" autocomplete="tel" placeholder="(555) 010-2030"></div>
-          <div class="bk-field"><label for="gNotes">Requests (optional)</label><input class="bk-input" id="gNotes" placeholder="Early arrival, crib, quiet room…"></div>
-          <div class="bk-field" id="gConsentWrap" hidden><label class="bk-consent"><input type="checkbox" id="gConsent"><span>I'd like to receive offers and news from this property by email. You can unsubscribe at any time.</span></label></div>
-        </form>
-      </section>
-      <section id="termsSection" hidden>
-        <h2 class="bk-h2">Good to know</h2>
-        <div class="bk-terms">
-          <div class="bk-term-times" id="termsTimes"></div>
-          <p class="bk-term-policy" id="termsCancellation"></p>
-          <h3 id="termsTitle">Property terms &amp; house rules</h3>
-          <ul class="bk-term-list" id="termsList"></ul>
-          <label class="bk-consent" id="termsAckWrap" hidden><input type="checkbox" id="gTermsAck"><span>I have read and agree to this property's terms and house rules.</span></label>
-        </div>
-      </section>
-    </div>
-
-    <aside class="bk-summary" id="summaryCard">
-      <h2 class="bk-h2" style="margin-top:0">Your stay</h2>
-      <div id="summaryBody"><p class="bk-muted">Pick dates and a room to see your total.</p></div>
-      <label class="bk-consent" id="depAckWrap" hidden><input type="checkbox" id="depAck"><span id="depAckText"></span></label>
-      <button class="bk-btn bk-btn-main bk-book" id="bookBtn" type="button" disabled>Select a room to continue</button>
-      <div id="payPanel" hidden>
-        <h3 class="bk-h2" style="margin:16px 0 8px">Deposit payment</h3>
-        <p class="bk-muted" id="payText" style="margin:0 0 10px"></p>
-        <div id="cardElement" class="bk-cardel"></div>
-        <p class="bk-error" id="payError" hidden style="margin-top:10px"></p>
-        <p class="bk-secure">Payments are processed securely by Stripe for this property. SimpleHotelier never sees your card number.</p>
+<main class="bk-layout" id="bkMain">
+  <div class="bk-steps">
+    <section class="bk-section" id="roomsSection" aria-labelledby="hRooms">
+      <div class="bk-section-head">
+        <h2 id="hRooms"><span class="bk-num" data-step-num></span><span id="unitsTitle">Choose your room</span></h2>
+        <p class="bk-meta" id="roomsMeta"></p>
       </div>
-      <p class="bk-secure" id="summaryPolicyNote">No payment taken now unless the property requires a deposit. Cancellation is subject to the property policy shown on this page.</p>
-    </aside>
+      <div class="bk-rooms" id="roomsList"><p class="bk-loading">Loading rooms…</p></div>
+    </section>
+
+    <section class="bk-section" id="addonsSection" aria-labelledby="hExtras" hidden>
+      <h2 id="hExtras"><span class="bk-num" data-step-num></span>Make it yours</h2>
+      <div class="bk-addons" id="addonsList"></div>
+    </section>
+
+    <section class="bk-section" aria-labelledby="hDetails">
+      <h2 id="hDetails"><span class="bk-num" data-step-num></span>Your details</h2>
+      <form class="bk-card bk-guest" id="guestForm">
+        <label class="bk-field"><span>Full name</span><input class="bk-input" id="gName" autocomplete="name" required placeholder="Jane Appleseed"></label>
+        <label class="bk-field"><span>Email</span><input class="bk-input" id="gEmail" type="email" autocomplete="email" required placeholder="jane@email.com"></label>
+        <label class="bk-field"><span>Phone <small>Optional · for arrival updates</small></span><input class="bk-input" id="gPhone" type="tel" autocomplete="tel" placeholder="(555) 010-2030"></label>
+        <label class="bk-field"><span>Promo code <small>Optional</small></span><input class="bk-input bk-upper" id="promoCode" type="text" autocomplete="off" placeholder="STAYLONGER"></label>
+        <label class="bk-field bk-wide"><span>Anything we should know? <small>Optional · early arrival, a crib, a quiet room</small></span><textarea class="bk-input" id="gNotes" rows="3"></textarea></label>
+        <div class="bk-wide" id="gConsentWrap" hidden><label class="bk-consent"><input type="checkbox" id="gConsent"><span>I'd like to receive offers and news from this property by email. You can unsubscribe at any time.</span></label></div>
+      </form>
+    </section>
+
+    <section class="bk-section" id="termsSection" aria-labelledby="hTerms" hidden>
+      <h2 id="hTerms">Good to know</h2>
+      <div class="bk-tiles" id="termsTimes"></div>
+      <p class="bk-policy" id="termsCancellation" hidden></p>
+      <div class="bk-card bk-rules" id="termsRules">
+        <h3 id="termsTitle">House rules</h3>
+        <ol class="bk-term-list" id="termsList"></ol>
+        <button type="button" class="bk-rules-toggle" id="termsToggle" aria-expanded="false" hidden><span id="termsToggleText">Read all house rules</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <label class="bk-consent bk-agree" id="termsAckWrap" hidden><input type="checkbox" id="gTermsAck"><span>I've read and agree to the house rules and cancellation policy.</span></label>
+      </div>
+    </section>
   </div>
 
-  <section class="bk-about" id="propAbout" hidden>
-    <h2 class="bk-h2" id="aboutTitle">About</h2>
-    <p id="aboutStars" hidden></p>
-    <p id="aboutDesc"></p>
-    <div class="bk-contact" id="aboutContact"></div>
-    <div class="bk-socials" id="aboutSocials"></div>
-  </section>
-
-  <section class="bk-success" id="successPanel" hidden>
-    <div class="bk-check">✓</div>
-    <h2>Request received</h2>
-    <p id="successText"></p>
-    <p class="bk-conf" id="successCode"></p>
-    <p id="redirectNote" hidden>Redirecting you now… <a id="redirectLink" href="#">Continue</a></p>
-  </section>
+  <aside class="bk-summary" id="summaryCard" aria-label="Your stay">
+    <div class="bk-summary-head"><h2>Your stay</h2><p id="summaryMeta"></p></div>
+    <div class="bk-summary-body" id="summaryBody"></div>
+    <div class="bk-summary-actions">
+      <label class="bk-consent" id="depAckWrap" hidden><input type="checkbox" id="depAck"><span id="depAckText"></span></label>
+      <button class="bk-btn bk-book" id="bookBtn" type="button" disabled>Select a room to continue</button>
+      <div class="bk-pay" id="payPanel" hidden>
+        <h3 id="payTitle">Deposit payment</h3>
+        <p id="payText"></p>
+        <div id="cardElement" class="bk-cardel"></div>
+        <p class="bk-error" id="payError" role="alert" hidden></p>
+      </div>
+      <ul class="bk-trust">
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Secure payment by Stripe. The property never sees your card number.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="trustChargeText">No payment taken now unless a deposit is required.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg><span id="summaryPolicyNote">Cancellation follows the property policy.</span></li>
+      </ul>
+    </div>
+  </aside>
 </main>
 
-<footer class="bk-foot" id="bkFoot">Powered by <strong>SimpleHotelier</strong> · Direct booking, no middleman fees</footer>
+<section class="bk-success" id="successPanel" hidden>
+  <div class="bk-check" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+  <h2>Request received</h2>
+  <p id="successText"></p>
+  <p class="bk-conf" id="successCode"></p>
+  <p id="redirectNote" hidden>Redirecting you now… <a id="redirectLink" href="#">Continue</a></p>
+</section>
+
+<footer class="bk-foot" id="bkFoot">
+  <div class="bk-foot-in" id="propAbout">
+    <div class="bk-foot-brand">
+      <span class="bk-foot-name" id="aboutTitle"></span>
+      <p class="bk-stars" id="aboutStars" hidden></p>
+      <p id="aboutDesc"></p>
+      <div class="bk-socials" id="aboutSocials"></div>
+    </div>
+    <address class="bk-contact" id="aboutContact"></address>
+  </div>
+  <p class="bk-powered">Powered by <strong>SimpleHotelier</strong> · Direct booking, no middleman fees</p>
+</footer>
 
 <script src="js/config.js"></script>
 <script src="js/book.js"></script>

@@ -91,12 +91,17 @@
   })();
   const slug = params.get("property") || params.get("slug") || hostLabel || cfg.TENANT_SLUG || "pinecrest";
   const isEmbed = params.get("embed") === "1";
+  /* Booking Page studio preview (dashboard iframe): unsaved theme/content
+     edits arrive by postMessage from the dashboard's own origin; booking is off. */
+  const isPreview = params.get("preview") === "1";
   /* Guests land here from a payment-request link once Stripe has the payment. */
   const paidRef = (params.get("paid") || "").trim().slice(0, 40);
   if (isEmbed) document.body.classList.add("embed");
 
   const $ = (s) => document.querySelector(s);
   const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  /* Card prices drop ".00" ($295, $14.50); totals keep cents. */
+  const price = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(Math.round(n * 100) / 100) ? 0 : 2, maximumFractionDigits: 2 });
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   const state = { tenant: null, rooms: [], types: {}, addons: [], taxes: [], selected: null, selectedTypeId: null, available: null, gaId: "", overrides: {}, dep: null, booked: null, paying: null, stripe: null, cardEl: null };
@@ -179,36 +184,81 @@
     return [...document.querySelectorAll("#addonsList input:checked")].map((el) => state.addons[+el.dataset.i]);
   }
 
+  const CHECK_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
+  const HOUSE_SVG = `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/></svg>`;
+  const guestsCount = () => Math.max(1, parseInt($("#guests").value, 10) || 1);
+  const shortDate = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  function stayMeta() {
+    const n = nights();
+    if (!$("#inDate").value || !$("#outDate").value || n < 1) return "";
+    return `${shortDate($("#inDate").value)} – ${shortDate($("#outDate").value)} · ${plural(n, "night", "nights")}`;
+  }
+  /* "Free cancellation until …" for the preset policies; custom wording is
+     shown as written (in Good to know), never re-interpreted. */
+  function cancelDeadline() {
+    const t = state.tenant || {};
+    const inIso = $("#inDate").value;
+    const days = { flexible: 2, moderate: 7, strict: 14 }[t.cancellation_policy];
+    if (!days || !inIso) return "";
+    const d = new Date(inIso + "T12:00:00");
+    d.setDate(d.getDate() - days);
+    if (d < new Date()) return "";
+    const when = d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+    return t.cancellation_policy === "strict" ? `50% refund until ${when}` : `Free cancellation until ${when}`;
+  }
+  /* One card for a room type (book by type) or a specific room. */
+  function roomCard({ key, keyAttr, name, facts, desc, photos, feats, rate, stayTotal, tag, tagLow, sel, booked, capacity, plan }) {
+    const n = Math.max(1, nights() || 1);
+    const tooSmall = capacity && guestsCount() > capacity;
+    const note = tooSmall ? `Sleeps up to ${capacity}: lower your guest count to book` : (booked ? "Not available for these dates" : cancelDeadline());
+    const disabled = booked || tooSmall;
+    const label = booked ? "Sold out" : sel ? "Selected" : `Select ${name}`;
+    return `<article class="bk-room${sel ? " sel" : ""}${booked ? " booked" : ""}">
+      <div class="bk-room-media">${photos.length ? `<img src="${esc(photos[0])}" alt="${esc(name)}" loading="lazy">` : `<div class="bk-room-ph">${HOUSE_SVG}<span>${esc(name)}</span></div>`}
+        ${tag ? `<span class="bk-tag${tagLow ? " low" : ""}">${esc(tag)}</span>` : ""}${photos.length > 1 ? `<span class="bk-photos">${photos.length} photos</span>` : ""}</div>
+      <div class="bk-room-body">
+        <div class="bk-room-top"><div><h3>${esc(name)}</h3><p class="bk-facts">${facts.map(esc).join(" · ")}</p></div>
+          <div class="bk-price"><p><b>${price(rate)}</b><span> / night</span></p><p class="bk-stay">${price(stayTotal || rate * n)} for ${plural(n, "night", "nights")}</p></div></div>
+        ${desc ? `<p class="bk-desc">${esc(desc)}</p>` : ""}
+        ${plan ? `<p class="bk-deal">${esc(plan.plan.name)} · save ${money(plan.saved)}</p>` : ""}
+        ${feats.length ? `<ul class="bk-amen">${feats.map((f) => `<li>${CHECK_SVG}${esc(f)}</li>`).join("")}</ul>` : ""}
+        <div class="bk-room-foot"><p${tooSmall ? ' class="warn"' : ""}>${esc(note)}</p>
+          <button class="bk-select" type="button" ${keyAttr}="${esc(key)}" aria-pressed="${sel ? "true" : "false"}"${disabled ? " disabled" : ""}>${esc(label)}</button></div>
+      </div>
+    </article>`;
+  }
+  function typeFacts(type, sleeps, extra) {
+    const facts = [`Sleeps ${sleeps}`].concat(extra || []);
+    if (type) {
+      if (Array.isArray(type.beds) && type.beds.length) {
+        const beds = new Map();
+        type.beds.forEach((b) => { const k = String(b.type || "bed").toLowerCase(); beds.set(k, (beds.get(k) || 0) + (Number(b.qty) || 1)); });
+        facts.push([...beds].map(([k, q]) => `${q} ${k}${/bed|crib|cot/.test(k) ? "" : q === 1 ? " bed" : " beds"}`).join(", "));
+      }
+      if (type.bathrooms) facts.push(`${type.bathrooms} bath`);
+      if (type.view) facts.push(type.view);
+      if (type.handicap_accessible) facts.push("Accessible");
+    }
+    return facts;
+  }
   function renderRooms() {
     const n = Math.max(1, nights() || 1);
+    $("#roomsMeta").textContent = [stayMeta(), plural(guestsCount(), "guest", "guests")].filter(Boolean).join(" · ");
     if (byType()) { renderTypeCards(n); return; }
     $("#roomsList").innerHTML = state.rooms.map((r) => {
-      const booked = state.available && !state.available.includes(r.id);
-      const sel = state.selected && state.selected.id === r.id;
       const type = state.types[r.room_type_id] || null;
-      const photos = (r.photos && r.photos.length ? r.photos : (type && type.photos) || []);
-      const meta = [`Sleeps ${esc(r.sleeps)}`, esc(r.code)];
-      if (type) {
-        if (type.bathrooms) meta.push(esc(type.bathrooms) + " bath");
-        if (type.view) meta.push(esc(type.view));
-        if (type.max_occupants) meta.push("max " + esc(type.max_occupants) + " guests");
-        if (type.smoking_policy === "non-smoking") meta.push("Non-smoking");
-        if (type.handicap_accessible) meta.push("Accessible");
-        if (Array.isArray(type.beds) && type.beds.length) meta.push(type.beds.map((b) => (Number(b.qty) || 1) + "× " + b.type).join(", "));
-      }
-      const feats = type && Array.isArray(type.features) ? type.features.slice(0, 8) : [];
-      const ap = applicablePlan(r, Math.max(1, nights() || 1));
-      return `<article class="bk-room${sel ? " sel" : ""}${booked ? " booked" : ""}">
-        ${photos.length ? `<img class="bk-room-img" src="${esc(photos[0])}" alt="${esc(r.name)}">` : `<div class="bk-room-ph">${esc((r.name || "R").slice(0, 1))}</div>`}
-        <h3>${esc(r.name)}</h3>
-        <div class="meta">${meta.join(" · ")}</div>
-        ${type && type.description ? `<div class="meta">${esc(type.description)}</div>` : ""}
-        ${ap ? `<div class="bk-feats"><span class="bk-feat bk-plan">${esc(ap.plan.name)} · save ${money(ap.saved)}</span></div>` : ""}
-        ${feats.length ? `<div class="bk-feats">${feats.map((f) => `<span class="bk-feat">${esc(f)}</span>`).join("")}</div>` : ""}
-        <div class="price"><div><b>${money(baseRate(r))}</b> <span>/ night · ${money(nightlyRatesFor(r).reduce((a, b) => a + b, 0) || baseRate(r) * n)} for ${n} night${n > 1 ? "s" : ""}</span></div>
-        <button class="bk-select" type="button" data-room="${r.id}" ${booked ? "disabled" : ""}>${booked ? "Booked" : sel ? "Selected ✓" : "Select"}</button></div>
-      </article>`;
-    }).join("") || `<p class="bk-loading">No rooms are listed yet.</p>`;
+      const booked = !!(state.available && !state.available.includes(r.id));
+      return roomCard({
+        key: r.id, keyAttr: "data-room", name: r.name,
+        facts: typeFacts(type, (type && type.max_occupants) || r.sleeps || 2),
+        desc: type && type.description, photos: r.photos && r.photos.length ? r.photos : (type && type.photos) || [],
+        feats: type && Array.isArray(type.features) ? type.features.slice(0, 6) : [],
+        rate: baseRate(r), stayTotal: nightlyRatesFor(r).reduce((a, b) => a + b, 0),
+        tag: booked ? "Booked" : "", sel: !!(state.selected && state.selected.id === r.id), booked,
+        capacity: (type && type.max_occupants) || r.sleeps || 0, plan: applicablePlan(r, n)
+      });
+    }).join("") || `<p class="bk-loading">No ${unitWords().many} are listed yet.</p>`;
     postHeight();
   }
   /* Book-by-type: one card per room type with live availability counts.
@@ -225,35 +275,22 @@
     return groups;
   }
   function renderTypeCards(n) {
-    const groups = typeGroups();
-    $("#roomsList").innerHTML = groups.map(({ type, units }) => {
+    $("#roomsList").innerHTML = typeGroups().map(({ type, units }) => {
       const free = chooseUnits(units, state.available);
       const availKnown = !!state.available;
       const booked = availKnown && free.length === 0;
       const rep = free[0] || units[0];
-      const sel = state.selectedTypeId === type.id;
-      const photos = (type.photos && type.photos.length ? type.photos : (rep.photos && rep.photos.length ? rep.photos : []));
-      const meta = [`Sleeps ${esc(type.max_occupants || rep.sleeps || 2)}`, `${units.length} room${units.length === 1 ? "" : "s"}`];
-      if (type.bathrooms) meta.push(esc(type.bathrooms) + " bath");
-      if (type.view) meta.push(esc(type.view));
-      if (type.smoking_policy === "non-smoking") meta.push("Non-smoking");
-      if (type.handicap_accessible) meta.push("Accessible");
-      if (Array.isArray(type.beds) && type.beds.length) meta.push(type.beds.map((b) => (Number(b.qty) || 1) + "× " + b.type).join(", "));
-      const availNote = !availKnown ? "" : booked ? "Sold out for these dates" : free.length <= 2 ? `Only ${free.length} left` : `${free.length} available`;
-      const feats = Array.isArray(type.features) ? type.features.slice(0, 8) : [];
-      const ap = applicablePlan(rep, Math.max(1, nights() || 1));
-      return `<article class="bk-room${sel ? " sel" : ""}${booked ? " booked" : ""}">
-        ${photos.length ? `<img class="bk-room-img" src="${esc(photos[0])}" alt="${esc(type.name)}">` : `<div class="bk-room-ph">${esc((type.name || "R").slice(0, 1))}</div>`}
-        <h3>${esc(type.name)}</h3>
-        <div class="meta">${meta.join(" · ")}</div>
-        ${type.description ? `<div class="meta">${esc(type.description)}</div>` : ""}
-        ${availNote ? `<div class="bk-feats"><span class="bk-feat">${esc(availNote)}</span></div>` : ""}
-        ${ap ? `<div class="bk-feats"><span class="bk-feat bk-plan">${esc(ap.plan.name)} · save ${money(ap.saved)}</span></div>` : ""}
-        ${feats.length ? `<div class="bk-feats">${feats.map((f) => `<span class="bk-feat">${esc(f)}</span>`).join("")}</div>` : ""}
-        <div class="price"><div><b>${money(baseRate(rep))}</b> <span>/ night · ${money(nightlyRatesFor(rep).reduce((a, b) => a + b, 0) || baseRate(rep) * n)} for ${n} night${n > 1 ? "s" : ""}</span></div>
-        <button class="bk-select" type="button" data-type="${type.id}" ${booked ? "disabled" : ""}>${booked ? "Sold out" : sel ? "Selected ✓" : "Select"}</button></div>
-      </article>`;
-    }).join("") || `<p class="bk-loading">No rooms are listed yet.</p>`;
+      const tag = !availKnown ? (units.length > 1 ? `${units.length} ${unitWords().many}` : "") : booked ? "Sold out" : free.length <= 2 ? `Only ${free.length} left` : `${free.length} available`;
+      return roomCard({
+        key: type.id, keyAttr: "data-type", name: type.name,
+        facts: typeFacts(type, type.max_occupants || rep.sleeps || 2),
+        desc: type.description, photos: type.photos && type.photos.length ? type.photos : (rep.photos || []),
+        feats: Array.isArray(type.features) ? type.features.slice(0, 6) : [],
+        rate: baseRate(rep), stayTotal: nightlyRatesFor(rep).reduce((a, b) => a + b, 0),
+        tag, tagLow: availKnown && !booked && free.length <= 2, sel: state.selectedTypeId === type.id, booked,
+        capacity: type.max_occupants || rep.sleeps || 0, plan: applicablePlan(rep, n)
+      });
+    }).join("") || `<p class="bk-loading">No ${unitWords().many} are listed yet.</p>`;
     postHeight();
   }
 
@@ -262,9 +299,28 @@
     wrap.hidden = !state.addons.length;
     $("#addonsList").innerHTML = state.addons.map((a, i) => `
       <label class="bk-addon"><input type="checkbox" data-i="${i}">
-        <span><strong>${esc(a.name)} · ${money(a.price_cents / 100)}<small> / ${esc(a.per)}</small></strong><span>${esc(a.description || "")}</span></span>
+        <span class="bk-addon-text"><span class="bk-addon-name">${esc(a.name)}<span>${price(a.price_cents / 100)} <small>/ ${esc(a.per)}</small></span></span>
+        ${a.description ? `<span class="bk-addon-desc">${esc(a.description)}</span>` : ""}</span>
       </label>`).join("");
     [...document.querySelectorAll("#addonsList input")].forEach((el) => el.addEventListener("change", renderSummary));
+    numberSteps();
+  }
+  /* 01, 02, 03 on the visible steps (the theme can turn numbering off). */
+  function numberSteps() {
+    let i = 0;
+    document.querySelectorAll("[data-step-num]").forEach((el) => {
+      const section = el.closest(".bk-section");
+      const on = state.theme ? state.theme.numberedSteps : true;
+      el.textContent = section && !section.hidden && on ? String(++i).padStart(2, "0") : "";
+    });
+  }
+  /* What the property calls its units ("cabin", "suite"…): the theme's choice,
+     else a guess from the room type names. */
+  function unitWords() {
+    if (state.theme && state.theme.unitNoun) return SHTheme.unitWords(state.theme);
+    const names = Object.values(state.types).map((t) => t.name).concat(state.rooms.map((r) => r.name)).join(" ").toLowerCase();
+    const guess = Object.keys(SHTheme.UNIT_NOUNS).find((w) => w !== "room" && w !== "unit" && new RegExp("\\b" + w).test(names));
+    return SHTheme.unitWords({ unitNoun: guess || "room" });
   }
   function typeFor(room) { return state.types[room.room_type_id] || null; }
   /* Pricing lives on the room type (hotels price King/Queen/Suite, not units):
@@ -369,10 +425,14 @@
     // so Stripe.js uses the platform key without a connected-account header.
     state.stripe = window.Stripe(cfg.STRIPE_PUBLISHABLE_KEY);
     const elements = state.stripe.elements();
-    state.cardEl = elements.create("card", { style: { base: { fontFamily: "'Public Sans', sans-serif", fontSize: "15px", color: "#101f1e" } } });
+    const ink = (state.theme && state.theme.colors.ink) || "#1c2620";
+    state.cardEl = elements.create("card", { style: { base: { fontSize: "16px", color: ink, iconColor: ink, "::placeholder": { color: ink + "99" } } } });
     state.cardEl.mount("#cardElement");
   }
   function showSuccess(code, total, extra) {
+    // The property still confirms every online booking, so never say "confirmed" here.
+    const mode = state.paying && state.paying.mode;
+    $("#successPanel h2").textContent = mode === "deposit" ? "Deposit received" : mode === "setup" ? "Booking received" : "Request received";
     document.querySelector(".bk-layout").style.display = "none";
     $("#searchForm").style.display = "none";
     $("#availNote").hidden = true;
@@ -473,6 +533,7 @@
     const wrap = $("#termsAckWrap");
     return !!(wrap && !wrap.hidden);
   }
+  const RULES_SHOWN = 4; // the rest fold behind "Read all N house rules"
   function renderTerms() {
     const t = state.tenant;
     if (!t) return;
@@ -482,28 +543,50 @@
     const hasTimes = !!(t.check_in_time || t.check_out_time);
     const section = $("#termsSection");
     section.hidden = !(lines.length || policy || hasTimes);
+    numberSteps();
     if (section.hidden) return;
-    const times = [];
-    if (t.check_in_time) times.push(`<span>Check-in: ${esc(t.check_in_time)}</span>`);
-    if (t.check_out_time) times.push(`<span>Check-out: ${esc(t.check_out_time)}</span>`);
-    $("#termsTimes").innerHTML = times.join("");
-    const policyEl = $("#termsCancellation");
-    policyEl.textContent = policy;
-    policyEl.hidden = !policy;
-    $("#termsTitle").hidden = !lines.length;
-    $("#termsList").innerHTML = lines.map((line) => `<li>${esc(line)}</li>`).join("");
+    const tiles = [];
+    if (t.check_in_time) tiles.push(`<div class="bk-tile"><span>Check-in</span><b>from ${esc(t.check_in_time)}</b></div>`);
+    if (t.check_out_time) tiles.push(`<div class="bk-tile"><span>Check-out</span><b>by ${esc(t.check_out_time)}</b></div>`);
+    if (policy) tiles.push(`<div class="bk-tile${policy.length > 70 ? " wide" : ""}"><span>Cancellation</span><b class="small">${esc(policy)}</b></div>`);
+    $("#termsTimes").innerHTML = tiles.join("");
+    $("#termsCancellation").hidden = true; // the policy lives in its tile
+    $("#termsRules").hidden = !lines.length;
+    $("#termsList").innerHTML = lines.map((line, i) => `<li${i >= RULES_SHOWN ? ' class="extra"' : ""}>${esc(line)}</li>`).join("");
+    const toggle = $("#termsToggle");
+    toggle.hidden = lines.length <= RULES_SHOWN;
+    $("#termsToggleText").textContent = `Read all ${lines.length} house rules`;
     $("#termsAckWrap").hidden = !lines.length;
-    const note = $("#summaryPolicyNote");
-    if (note) note.textContent = policy || "No payment taken now unless the property requires a deposit.";
+    renderPolicyNote();
+  }
+  function renderPolicyNote() {
+    const t = state.tenant || {};
+    const deadline = cancelDeadline();
+    const policy = cancellationText(t);
+    $("#summaryPolicyNote").textContent = deadline ? deadline + "." : policy ? (policy.length > 140 ? policy.slice(0, 137).trimEnd() + "…" : policy) : "Cancellation follows the property policy.";
   }
 
+  /* Summary header + "what happens today" note follow the dates, guests and
+     the property's card/deposit rules. */
+  function renderSummaryMeta() {
+    $("#summaryMeta").textContent = [stayMeta(), plural(guestsCount(), "guest", "guests")].filter(Boolean).join(" · ");
+    const dep = state.tenant && state.tenant.deposit_enabled;
+    $("#trustChargeText").textContent = dep
+      ? `A ${Math.min(100, Math.max(1, parseInt(state.tenant.deposit_percent, 10) || 25))}% deposit is due when you book; the balance is paid at the property.`
+      : cardRequired() ? "A card holds your booking. Nothing is charged today." : "No payment is taken today.";
+    renderPolicyNote();
+  }
   function renderSummary() {
     const n = nights();
     const btn = $("#bookBtn");
+    renderSummaryMeta();
     if (!state.selected || !n || n < 1) {
-      $("#summaryBody").innerHTML = `<p class="bk-muted">${!state.selected ? "Pick dates and a room to see your total." : "Check-out must be after check-in."}</p>`;
+      const unit = unitWords().one;
+      $("#summaryBody").innerHTML = !state.selected
+        ? `<div class="bk-empty">${HOUSE_SVG}<p>Pick a ${esc(unit)} to see your total.</p></div>`
+        : `<p class="bk-muted">Check-out must be after check-in.</p>`;
       btn.disabled = true;
-      btn.textContent = state.selected ? "Fix your dates" : "Select a room to continue";
+      btn.textContent = state.selected ? "Fix your dates" : `Choose a ${unit} to continue`;
       return null;
     }
     const type = typeFor(state.selected);
@@ -551,17 +634,17 @@
       $("#depAckText").textContent = `I understand a deposit of ${money(dep.due)} (${dep.pct}% of the total) is required to confirm this booking. The property will arrange collection.`;
     } else ackWrap.hidden = true;
     $("#summaryBody").innerHTML =
-      `<div class="bk-line"><span>${esc(byType() && type ? type.name : state.selected.name)} × ${n} night${n > 1 ? "s" : ""}${byType() ? " · room assigned on confirmation" : ""}</span><b>${money(q.subtotal)}</b></div>` +
-      (ap ? `<div class="bk-line"><span>${esc(ap.plan.name)} applied</span><b>−${money(ap.saved)}</b></div>` : "") +
-      (!ap && code ? `<div class="bk-line"><span>Code ${esc(code)} didn't apply to this room or stay length</span><b></b></div>` : "") +
+      `<div class="bk-line"><span>${esc(byType() && type ? type.name : state.selected.name)} × ${plural(n, "night", "nights")}${byType() ? `<small>Your ${esc(unitWords().one)} is assigned when you book</small>` : ""}</span><b>${money(q.subtotal)}</b></div>` +
+      (ap ? `<div class="bk-line save"><span>${esc(ap.plan.name)} applied</span><b>−${money(ap.saved)}</b></div>` : "") +
+      (!ap && code ? `<div class="bk-line note"><span>Code ${esc(code)} didn't apply to this stay</span></div>` : "") +
       q.addonLines.map((l) => `<div class="bk-line"><span>${esc(l.name)}</span><b>${money(l.amount)}</b></div>`).join("") +
       q.taxLines.map((l) => `<div class="bk-line"><span>${esc(l.name)}</span><b>${money(l.amount)}</b></div>`).join("") +
       `<div class="bk-line total"><span>Total</span><b>${money(q.total)}</b></div>` +
-      (dep ? `<div class="bk-line"><span>Deposit due today (${dep.pct}%)</span><b>${money(dep.due)}</b></div><div class="bk-line"><span>Balance at the property</span><b>${money(round2(q.total - dep.due))}</b></div>`
-        : cardRequired() ? `<div class="bk-line"><span>Due today · card required to hold</span><b>${money(0)}</b></div>` : "");
+      (dep ? `<div class="bk-line due"><span>Due today (${dep.pct}% deposit)</span><b>${money(dep.due)}</b></div><div class="bk-line"><span>Balance at the property</span><b>${money(round2(q.total - dep.due))}</b></div>`
+        : cardRequired() ? `<div class="bk-line due"><span>Due today · card holds booking</span><b>${money(0)}</b></div>` : "");
     if (state.paying) { btn.disabled = false; btn.textContent = state.paying.mode === "setup" ? "Save card & confirm booking" : "Pay " + money(state.paying.due) + " deposit"; }
     else if (state.booked) { btn.disabled = false; btn.textContent = "Try the card form again"; }
-    else if (termsRequired() && !$("#gTermsAck").checked) { btn.disabled = true; btn.textContent = "Agree to the property terms to continue"; }
+    else if (termsRequired() && !$("#gTermsAck").checked) { btn.disabled = true; btn.textContent = "Agree to the house rules to continue"; }
     else if (needsAck && !$("#depAck").checked) { btn.disabled = true; btn.textContent = "Tick the deposit box to continue"; }
     else {
       btn.disabled = false;
@@ -572,12 +655,15 @@
     return q;
   }
 
+  let availSeq = 0; // only the latest date change may update availability
   async function checkAvailability() {
+    const seq = ++availSeq;
     try {
       const rows = await api("rpc/get_available_room_ids", {
         method: "POST",
         body: JSON.stringify({ p_tenant: state.tenant.id, p_check_in: $("#inDate").value, p_check_out: $("#outDate").value })
       });
+      if (seq !== availSeq) return; // an older request answered late
       state.available = (rows || []).map((r) => (typeof r === "string" ? r : r.get_available_room_ids))
         .filter((id) => { const room = state.rooms.find((x) => x.id === id); return room && !ruleBlock(room); });
       $("#availNote").hidden = false;
@@ -585,6 +671,7 @@
         ? typeGroups().filter((g) => chooseUnits(g.units, state.available).length).length + " room types available for these dates — we assign your exact room when you book."
         : state.available.length + " of " + state.rooms.length + " rooms available for these dates.";
     } catch {
+      if (seq !== availSeq) return;
       state.available = null; // availability function not installed yet: constraint still protects at submit
       $("#availNote").hidden = false;
       $("#availNote").textContent = "Showing all rooms — the property confirms availability with your request.";
@@ -617,6 +704,60 @@
     });
   }
 
+  /* Name, headline, hero, logo, footer contact. `content` carries unsaved
+     studio edits in preview mode; normally everything comes from the tenant. */
+  function presentTenant(content = {}) {
+    const t = state.tenant;
+    const pick = (key, fallback) => (content[key] !== undefined ? content[key] : fallback);
+    const name = pick("name", t.name) || t.name;
+    const words = unitWords();
+    document.title = "Book · " + name;
+    $("#propName").textContent = name;
+    $("#aboutTitle").textContent = name;
+    $("#propHeadline").textContent = pick("headline", t.booking_headline) || ("Stay at " + name);
+    $("#propSub").textContent = pick("sub", t.booking_subheading) || t.description || "";
+    const eyebrow = state.theme.eyebrow || [t.city, t.state].filter(Boolean).join(", ");
+    $("#propEyebrow").textContent = eyebrow;
+    $("#propEyebrow").hidden = !eyebrow;
+    $("#navUnits").textContent = words.many.replace(/^./, (c) => c.toUpperCase());
+    $("#unitsTitle").textContent = "Choose your " + words.one;
+
+    const heroEl = $("#bkHero");
+    const heroUrl = safeUrl(pick("heroUrl", t.hero_image_url), { httpsOnly: true });
+    const focus = pick("heroFocus", { x: t.hero_focus_x, y: t.hero_focus_y }) || {};
+    const pct = (v, dflt) => (v == null || isNaN(Number(v)) ? dflt : Math.min(100, Math.max(0, Number(v))));
+    if (heroUrl) {
+      heroEl.style.backgroundImage = `linear-gradient(180deg, rgb(14 22 17 / 0%) 30%, rgb(14 22 17 / 72%) 100%), url("${heroUrl.replace(/["\\]/g, encodeURIComponent)}")`;
+      heroEl.style.backgroundPosition = `${pct(focus.x, 50)}% ${pct(focus.y, 35)}%`;
+    } else {
+      heroEl.style.backgroundImage = "";
+      heroEl.style.backgroundPosition = "";
+    }
+
+    const mk = $("#propMark");
+    const logo = safeUrl(t.logo_url, { httpsOnly: true });
+    mk.classList.toggle("has-logo", !!logo);
+    if (logo) mk.innerHTML = `<img src="${esc(logo)}" alt="">`;
+    else mk.textContent = (name || "S").slice(0, 1).toUpperCase();
+
+    // Footer: description + contact as real links (tel:, mailto:, website, socials).
+    const addr = [t.address_line1, t.address_line2, [t.city, t.state].filter(Boolean).join(", "), t.postcode, t.country].filter(Boolean).join(", ");
+    const contact = [];
+    if (addr) contact.push(`<span>${esc(addr)}</span>`);
+    if (t.phone) contact.push(`<a href="tel:${esc(String(t.phone).replace(/[^\d+]/g, ""))}">${esc(t.phone)}</a>`);
+    if (t.contact_email) contact.push(`<a href="mailto:${esc(t.contact_email)}">${esc(t.contact_email)}</a>`);
+    if (safeUrl(t.website_url)) contact.push(`<a href="${esc(safeUrl(t.website_url))}" target="_blank" rel="noopener">Property website</a>`);
+    $("#aboutContact").innerHTML = contact.join("");
+    $("#aboutDesc").textContent = t.description || "";
+    $("#aboutSocials").innerHTML = [["Facebook", t.facebook_url], ["Instagram", t.instagram_url], ["Twitter / X", t.twitter_url], ["YouTube", t.youtube_url]]
+      .map(([label, u]) => [label, safeUrl(u)])
+      .filter(([, u]) => u).map(([label, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${label}</a>`).join("");
+    const st = $("#aboutStars");
+    st.hidden = !(t.star_rated && t.star_count);
+    if (!st.hidden) st.textContent = "★".repeat(Math.min(5, t.star_count)) + " rated property";
+    $("#gConsentWrap").hidden = !t.gdpr_consent;
+  }
+
   async function load() {
     if (!base || !anon) { showError("Booking is not configured yet. Please contact the property directly."); return; }
     try {
@@ -624,68 +765,13 @@
       // secrets (ical_token, Stripe customer ids, private notification
       // emails) that the anon key must not be able to read (see the
       // 20261112000000_demo_lockdown migration).
-      const tenantCols = "id,name,slug,contact_email,phone,logo_url,brand_color,booking_bg_color,booking_fg_color,hero_image_url,hero_focus_x,hero_focus_y,booking_headline,booking_subheading,description,address_line1,address_line2,postcode,city,state,country,website_url,facebook_url,instagram_url,twitter_url,youtube_url,star_rated,star_count,gdpr_consent,check_in_time,check_out_time,cancellation_policy,cancellation_policy_text,rental_terms,currency,stripe_account_id,stripe_onboarding_complete,ga_measurement_id,booking_redirect_url,deposit_enabled,deposit_percent,booking_by_type,included_occupants,maximum_total_occupants,min_room_rate_cents";
+      const tenantCols = "id,name,slug,contact_email,phone,logo_url,booking_theme,hero_image_url,hero_focus_x,hero_focus_y,booking_headline,booking_subheading,description,address_line1,address_line2,postcode,city,state,country,website_url,facebook_url,instagram_url,twitter_url,youtube_url,star_rated,star_count,gdpr_consent,check_in_time,check_out_time,cancellation_policy,cancellation_policy_text,rental_terms,currency,stripe_account_id,stripe_onboarding_complete,ga_measurement_id,booking_redirect_url,deposit_enabled,deposit_percent,booking_by_type,included_occupants,maximum_total_occupants,min_room_rate_cents";
       const tenants = await api("tenants?slug=eq." + encodeURIComponent(slug) + "&select=" + tenantCols);
       state.tenant = tenants && tenants[0];
       if (!state.tenant) { showError("We could not find this property. Check the link and try again."); return; }
       const t = state.tenant;
-      document.title = "Book · " + t.name;
-      $("#propName").textContent = t.name;
-      $("#propMark").textContent = (t.name || "S").slice(0, 1).toUpperCase();
-      $("#propHeadline").textContent = t.booking_headline || ("Stay at " + t.name);
-      $("#propSub").textContent = t.booking_subheading || t.description || "";
-      {
-        // Property details from Settings (About / contact / socials / GDPR).
-        const addr = [t.address_line1, t.address_line2, [t.city, t.state].filter(Boolean).join(", "), t.postcode, t.country].filter(Boolean).join(" · ");
-        const contact = [];
-        if (addr) contact.push(`<span>${esc(addr)}</span>`);
-        if (t.phone) contact.push(`<span>${esc(t.phone)}</span>`);
-        if (t.contact_email) contact.push(`<span>${esc(t.contact_email)}</span>`);
-        if (safeUrl(t.website_url)) contact.push(`<a href="${esc(safeUrl(t.website_url))}" target="_blank" rel="noopener">Property website</a>`);
-        const socials = [["Facebook", t.facebook_url], ["Instagram", t.instagram_url], ["Twitter / X", t.twitter_url], ["YouTube", t.youtube_url]]
-          .map(([label, u]) => [label, safeUrl(u)])
-          .filter(([, u]) => u).map(([label, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${label}</a>`).join("");
-        const hasAbout = !!(t.description || contact.length || socials);
-        $("#propAbout").hidden = !hasAbout;
-        if (hasAbout) {
-          $("#aboutTitle").textContent = "About " + t.name;
-          $("#aboutDesc").textContent = t.description || "";
-          $("#aboutContact").innerHTML = contact.map((c) => c.startsWith("<a") ? c : c).join("");
-          $("#aboutSocials").innerHTML = socials;
-          if (t.star_rated && t.star_count) {
-            const st = $("#aboutStars");
-            st.hidden = false;
-            st.textContent = "★".repeat(Math.min(5, t.star_count)) + " rated property";
-          }
-        }
-        if (t.gdpr_consent) $("#gConsentWrap").hidden = false;
-      }
-      if (t.brand_color) {
-        document.documentElement.style.setProperty("--brand", t.brand_color);
-        document.documentElement.style.setProperty("--brand-2", t.brand_color);
-      }
-      // Owner-picked page colors (validated hex; anything else is ignored).
-      const hexColor = (v) => (/^#[0-9a-f]{6}$/i.test(v || "") ? v : "");
-      if (hexColor(t.booking_bg_color)) document.documentElement.style.setProperty("--bg", t.booking_bg_color);
-      if (hexColor(t.booking_fg_color)) {
-        document.documentElement.style.setProperty("--ink", t.booking_fg_color);
-        document.documentElement.style.setProperty("--ink-2", t.booking_fg_color);
-      }
-      const heroUrl = safeUrl(t.hero_image_url, { httpsOnly: true });
-      if (heroUrl) {
-        const heroEl = $("#bkHero");
-        if (heroEl) {
-          heroEl.classList.add("has-hero");
-          heroEl.style.backgroundImage = `linear-gradient(180deg, rgb(8 20 20 / 38%), rgb(8 20 20 / 60%)), url("${heroUrl.replace(/["\\]/g, encodeURIComponent)}")`;
-          const pct = (v, d) => (v == null || isNaN(Number(v)) ? d : Math.min(100, Math.max(0, Number(v))));
-          heroEl.style.backgroundPosition = `${pct(t.hero_focus_x, 50)}% ${pct(t.hero_focus_y, 50)}%`;
-        }
-      }
-      if (t.logo_url) {
-        const mk = $("#propMark");
-        mk.innerHTML = `<img src="${esc(t.logo_url)}" alt="">`;
-        mk.style.background = "none";
-      }
+      state.theme = SHTheme.apply(t.booking_theme);
+      presentTenant();
       setupGA();
       const tid = "tenant_id=eq." + t.id;
       const overrideRows = await api("room_rate_overrides?" + tid + "&select=room_type_id,date,rate_cents,min_stay,max_stay,closed,cta,ctd").catch(() => []);
@@ -711,12 +797,45 @@
       state.addons = addons || [];
       state.taxes = (taxes || []).map((x) => ({ name: x.name, kind: x.kind, value: Number(x.rate), applies: x.applies_to }));
       await loadRatePlans();
+      presentTenant(); // unit words can now come from the room types
+      setGuests(guestsCount());
       renderTerms();
       renderRooms(); renderAddons(); renderSummary(); postHeight();
       if (paidRef) showPaidThanks();
+      if (isPreview && window.parent !== window) window.parent.postMessage({ type: "simplehotelier:preview-ready" }, location.origin);
     } catch (e) {
       showError("Booking is temporarily unavailable. Please contact the property directly.");
     }
+  }
+
+  /* Guests: a −/+ stepper over the hidden #guests input, capped by the property. */
+  function setGuests(v) {
+    const cap = Number(state.tenant && state.tenant.maximum_total_occupants) || 16;
+    const g = Math.min(cap, Math.max(1, v));
+    $("#guests").value = g;
+    $("#guestsOut").textContent = plural(g, "guest", "guests");
+    document.querySelectorAll(".bk-stepper [data-step]").forEach((b) => { b.disabled = (+b.dataset.step < 0 && g <= 1) || (+b.dataset.step > 0 && g >= cap); });
+  }
+  document.querySelector(".bk-stepper").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-step]");
+    if (!b || b.disabled) return;
+    setGuests(guestsCount() + Number(b.dataset.step));
+    renderRooms(); renderSummary();
+  });
+  $("#termsToggle").addEventListener("click", () => {
+    const box = $("#termsRules");
+    const open = box.classList.toggle("open");
+    $("#termsToggle").setAttribute("aria-expanded", String(open));
+    $("#termsToggleText").textContent = open ? "Hide full house rules" : `Read all ${document.querySelectorAll("#termsList li").length} house rules`;
+    postHeight();
+  });
+  if (isPreview) {
+    window.addEventListener("message", (e) => {
+      if (e.origin !== location.origin || !e.data || e.data.type !== "simplehotelier:preview" || !state.tenant) return;
+      state.theme = SHTheme.apply(e.data.theme || {});
+      presentTenant(e.data.content || {});
+      renderTerms(); renderRooms(); renderAddons(); renderSummary();
+    });
   }
 
   /* Defaults: a week out, two nights. */
@@ -759,6 +878,7 @@
   $("#depAck").addEventListener("change", () => renderSummary());
   $("#gTermsAck").addEventListener("change", () => renderSummary());
   $("#bookBtn").addEventListener("click", async () => {
+    if (isPreview) { showError("This is a preview — open your booking page to make a real booking."); return; }
     if (state.paying) { await payDeposit(); return; }
     if (state.booked) { await startCardStep(); return; }
     showError("");

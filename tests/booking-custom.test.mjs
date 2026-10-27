@@ -1,20 +1,38 @@
-// Focused test: booking page customization (background/foreground colors,
-// color pickers, hero image) flows studio -> tenant columns -> guest page.
+// Focused test: booking page customization — themes (fonts, colors,
+// corners, wording) flow studio -> tenants.booking_theme -> guest page, and a
+// stored theme can never inject CSS or load arbitrary stylesheets.
 // Run: node --test tests/booking-custom.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 
-const html = readFileSync(new URL("../app.html", import.meta.url), "utf8");
-const bookHtml = readFileSync(new URL("../book.html", import.meta.url), "utf8");
-const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
-const book = readFileSync(new URL("../js/book.js", import.meta.url), "utf8");
-const bookCss = readFileSync(new URL("../css/book.css", import.meta.url), "utf8");
+const read = (p) => readFileSync(new URL("../" + p, import.meta.url), "utf8");
+const html = read("app.html");
+const bookHtml = read("book.html");
+const app = read("js/app.js");
+const book = read("js/book.js");
+const bookCss = read("css/book.css");
 
-test("studio offers color pickers for brand, background and foreground", () => {
-  for (const id of ["bkBrand", "bkBg", "bkFg"]) {
-    assert.match(html, new RegExp(`<input type="color" id="${id}"`), `missing color picker #${id}`);
+// Load the shared theme module the way both pages do (classic script).
+const styles = {};
+globalThis.window = {};
+globalThis.document = {
+  documentElement: { style: { setProperty: (k, v) => { styles[k] = v; } }, dataset: {} },
+  head: { appendChild: (el) => { globalThis.__fontLink = el; } },
+  getElementById: () => globalThis.__fontLink || null,
+  createElement: () => ({})
+};
+eval(read("js/booking-theme.js"));
+const T = window.SHTheme;
+
+test("studio offers themes, fonts, six colors, corners, unit name, eyebrow", () => {
+  for (const id of ["bkPresets", "bkHeadFont", "bkBodyFont", "bkColorGrid", "bkRadius", "bkUnit", "bkEyebrow", "bkNumbered", "bkPreview", "bkDevice"]) {
+    assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
   }
+  assert.equal(T.COLOR_KEYS.length, 6);
+  assert.ok(Object.keys(T.PRESETS).length >= 6);
+  assert.ok(html.indexOf("js/booking-theme.js") < html.indexOf("js/app.js"), "theme module loads before app.js");
+  assert.ok(bookHtml.indexOf("js/booking-theme.js") < bookHtml.indexOf("js/book.js"));
 });
 
 test("studio offers a hero image upload and removal", () => {
@@ -25,39 +43,65 @@ test("studio offers a hero image upload and removal", () => {
   assert.match(app, /updateTenantSettings\(\{ hero_image_url: null \}\)/);
 });
 
-test("publish saves the three colors and hero, live load restores them", () => {
+test("publish saves the theme; live load restores it", () => {
   const pub = app.slice(app.indexOf('a === "publish-page"'), app.indexOf('a === "copy-embed"'));
-  assert.match(pub, /brand_color:/);
-  assert.match(pub, /booking_bg_color:/);
-  assert.match(pub, /booking_fg_color:/);
+  assert.match(pub, /booking_theme: studioTheme/);
+  assert.match(pub, /brand_color: studioTheme\.colors\.brand/);
   assert.match(pub, /hero_image_url:/);
-  assert.match(app, /live\.tenant\.booking_bg_color/);
-  assert.match(app, /live\.tenant\.booking_fg_color/);
-  assert.match(app, /live\.tenant\.hero_image_url/);
+  assert.match(app, /studioTheme = SHTheme\.normalize\(live\.tenant\.booking_theme\)/);
 });
 
-test("guest page applies tenant colors and hero image", () => {
-  const line = book.split("\n").find((l) => l.includes("tenants?slug=") || l.includes("tenantCols"));
+test("guest page reads booking_theme and applies it", () => {
   const colsLine = book.split("\n").find((l) => l.includes("const tenantCols"));
-  assert.ok(colsLine, "tenantCols not found");
-  for (const c of ["booking_bg_color", "booking_fg_color", "hero_image_url"]) {
-    assert.ok(colsLine.includes(c), `public tenant select missing ${c}`);
-  }
-  assert.match(book, /booking_bg_color/);
-  assert.match(book, /booking_fg_color/);
-  assert.match(book, /hero_image_url/);
-  assert.match(book, /has-hero/);
+  assert.ok(colsLine && colsLine.includes("booking_theme") && colsLine.includes("hero_image_url"));
+  assert.match(book, /state\.theme = SHTheme\.apply\(t\.booking_theme\)/);
   assert.match(bookHtml, /id="bkHero"/);
-  assert.match(bookCss, /\.bk-hero\.has-hero/);
+  for (const v of ["--font-head", "--font-body", "--brand", "--r-panel"]) assert.ok(bookCss.includes(`var(${v})`), v);
 });
 
-test("migration adds the columns and grants only those to anon", () => {
-  const path = new URL("../supabase/migrations/20261113000000_booking_customization.sql", import.meta.url);
-  assert.ok(existsSync(path), "booking customization migration missing");
-  const sql = readFileSync(path, "utf8");
-  for (const c of ["booking_bg_color", "booking_fg_color", "hero_image_url"]) {
-    assert.match(sql, new RegExp(`add column if not exists ${c} text`));
+test("preview messages are accepted only from the dashboard's own origin", () => {
+  assert.match(book, /if \(e\.origin !== location\.origin \|\| !e\.data \|\| e\.data\.type !== "simplehotelier:preview"/);
+  assert.match(book, /if \(isPreview\) \{ showError\("This is a preview/);
+  assert.match(app, /postMessage\(\{\s*type: "simplehotelier:preview"[\s\S]*?\}, location\.origin\)/);
+});
+
+test("normalize: unknown fonts, bad colors and junk fall back safely", () => {
+  const t = T.normalize({
+    preset: "nope", headingFont: "Comic Sans'; } body { display:none", bodyFont: "playfair",
+    colors: { bg: "red", ink: "#12345", brand: "#ABCDEF", accent: "url(javascript:x)" },
+    radius: "blob", eyebrow: "Lake\nside " + "x".repeat(100), unitNoun: "castle"
+  });
+  assert.equal(t.preset, "meadow");
+  assert.equal(t.headingFont, "instrument-serif", "unknown font -> preset font");
+  assert.equal(t.bodyFont, "inter", "heading-only face is not allowed as body font");
+  assert.equal(t.colors.bg, T.PRESETS.meadow.colors.bg);
+  assert.equal(t.colors.ink, T.PRESETS.meadow.colors.ink);
+  assert.equal(t.colors.brand, "#abcdef");
+  assert.equal(t.colors.accent, T.PRESETS.meadow.colors.accent);
+  assert.equal(t.radius, "soft");
+  assert.ok(!/[\n\r]/.test(t.eyebrow) && t.eyebrow.length <= 60);
+  assert.equal(t.unitNoun, "");
+});
+
+test("apply: only allowlisted fonts load, text on buttons stays readable", () => {
+  const t = T.apply({ headingFont: "playfair", bodyFont: "dm-sans", colors: { brand: "#d4a85a" } });
+  assert.equal(t.headingFont, "playfair");
+  assert.match(globalThis.__fontLink.href, /^https:\/\/fonts\.googleapis\.com\/css2\?family=Playfair\+Display:wght@500;600;700&family=DM\+Sans:wght@400;500;600;700&display=swap$/);
+  assert.equal(styles["--brand-ink"], "#111111", "dark text on a light gold button");
+  assert.equal(T.onColor("#1f5f7a"), "#ffffff");
+  assert.ok(T.contrast("#1c2620", "#f3f4ef") >= 4.5, "Meadow text passes AA");
+  for (const p of Object.values(T.PRESETS)) {
+    assert.ok(T.contrast(p.colors.ink, p.colors.bg) >= 4.5, `${p.label}: text contrast`);
+    assert.ok(T.contrast(p.colors.ink, p.colors.surface) >= 4.5, `${p.label}: card text contrast`);
   }
-  assert.match(sql, /grant select \(booking_bg_color, booking_fg_color, hero_image_url\) on public\.tenants to anon/);
+});
+
+test("migration keeps the theme small, an object, and anon-readable", () => {
+  const path = new URL("../supabase/migrations/20261118000000_booking_theme.sql", import.meta.url);
+  assert.ok(existsSync(path));
+  const sql = readFileSync(path, "utf8");
+  assert.match(sql, /add column if not exists booking_theme jsonb not null default '\{\}'::jsonb/);
+  assert.match(sql, /jsonb_typeof\(booking_theme\) = 'object' and pg_column_size\(booking_theme\) < 4096/);
+  assert.match(sql, /grant select \(booking_theme\) on public\.tenants to anon/);
   assert.ok(!/ical_token|stripe_customer_id/.test(sql), "migration must not widen secret access");
 });

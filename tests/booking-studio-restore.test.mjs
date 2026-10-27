@@ -17,7 +17,7 @@ test("live load restores property name and page address into the studio", () => 
   assert.match(restore, /\$\("#bkName"\)\.value = live\.tenant\.name/);
   assert.match(restore, /\$\("#bkUrl"\)\.value = live\.tenant\.slug \+ "\.simplehotelier\.com"/);
   assert.match(restore, /\$\("#bkUrlPrev"\)\.textContent = live\.tenant\.slug \+ "\.simplehotelier\.com"/);
-  assert.match(restore, /\$\("#mockName"\)\.textContent = \(live\.tenant\.name/);
+  assert.match(restore, /setPreviewSrc\(\);/, "the live preview loads the property's own page");
 });
 
 test("studio preview never appends the demo location", () => {

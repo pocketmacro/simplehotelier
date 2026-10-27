@@ -25,7 +25,8 @@ test("preview positions the hero from the focus point", () => {
   const preview = app.slice(app.indexOf("function applyStudioPreview()"), app.indexOf("function bindStudio()"));
   assert.match(preview, /studioHeroFocus\.x/);
   assert.match(preview, /studioHeroFocus\.y/);
-  assert.match(preview, /\/ cover/);
+  assert.match(app, /heroUrl: studioHeroUrl \|\| null, heroFocus: studioHeroFocus/, "the live preview gets the focus point");
+  assert.match(book, /heroEl\.style\.backgroundPosition = `\$\{pct\(focus\.x, 50\)\}% \$\{pct\(focus\.y, 35\)\}%`/);
 });
 
 test("focus is saved on Publish and restored on live load (not before)", () => {

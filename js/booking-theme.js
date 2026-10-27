@@ -1,0 +1,144 @@
+/* SimpleHotelier — booking page themes (fonts, colors, corners, wording).
+   Shared by the guest page (book.html) and the Booking Page studio
+   (app.html). A property's tenants.booking_theme is untrusted input: only
+   allowlisted fonts, #rrggbb colors and known options are ever applied, so a
+   stored theme can never inject CSS or load an arbitrary stylesheet. */
+"use strict";
+
+(function () {
+  /* Google Fonts allowlist: key -> family, CSS stack and the css2 axis spec. */
+  const FONTS = {
+    "instrument-serif": { label: "Instrument Serif", family: "Instrument Serif", stack: "'Instrument Serif', Georgia, serif", spec: "ital@0;1", heading: true },
+    "playfair": { label: "Playfair Display", family: "Playfair Display", stack: "'Playfair Display', Georgia, serif", spec: "wght@500;600;700", heading: true },
+    "fraunces": { label: "Fraunces", family: "Fraunces", stack: "'Fraunces', Georgia, serif", spec: "wght@400;600;700", heading: true },
+    "dm-serif": { label: "DM Serif Display", family: "DM Serif Display", stack: "'DM Serif Display', Georgia, serif", spec: "ital@0;1", heading: true },
+    "cormorant": { label: "Cormorant Garamond", family: "Cormorant Garamond", stack: "'Cormorant Garamond', Georgia, serif", spec: "wght@500;600;700", heading: true },
+    "libre-baskerville": { label: "Libre Baskerville", family: "Libre Baskerville", stack: "'Libre Baskerville', Georgia, serif", spec: "wght@400;700", heading: true, body: true },
+    "lora": { label: "Lora", family: "Lora", stack: "'Lora', Georgia, serif", spec: "wght@400;500;600;700", heading: true, body: true },
+    "sora": { label: "Sora", family: "Sora", stack: "'Sora', system-ui, sans-serif", spec: "wght@600;700;800", heading: true },
+    "space-grotesk": { label: "Space Grotesk", family: "Space Grotesk", stack: "'Space Grotesk', system-ui, sans-serif", spec: "wght@500;600;700", heading: true },
+    "outfit": { label: "Outfit", family: "Outfit", stack: "'Outfit', system-ui, sans-serif", spec: "wght@400;500;600;700", heading: true, body: true },
+    "montserrat": { label: "Montserrat", family: "Montserrat", stack: "'Montserrat', system-ui, sans-serif", spec: "wght@400;500;600;700", heading: true, body: true },
+    "poppins": { label: "Poppins", family: "Poppins", stack: "'Poppins', system-ui, sans-serif", spec: "wght@400;500;600;700", heading: true, body: true },
+    "inter": { label: "Inter", family: "Inter", stack: "'Inter', system-ui, sans-serif", spec: "wght@400;500;600;700", heading: true, body: true },
+    "public-sans": { label: "Public Sans", family: "Public Sans", stack: "'Public Sans', system-ui, sans-serif", spec: "wght@400;500;600;700", body: true },
+    "dm-sans": { label: "DM Sans", family: "DM Sans", stack: "'DM Sans', system-ui, sans-serif", spec: "wght@400;500;600;700", body: true },
+    "work-sans": { label: "Work Sans", family: "Work Sans", stack: "'Work Sans', system-ui, sans-serif", spec: "wght@400;500;600;700", body: true },
+    "nunito-sans": { label: "Nunito Sans", family: "Nunito Sans", stack: "'Nunito Sans', system-ui, sans-serif", spec: "wght@400;600;700", body: true },
+    "source-sans": { label: "Source Sans 3", family: "Source Sans 3", stack: "'Source Sans 3', system-ui, sans-serif", spec: "wght@400;600;700", body: true },
+    "karla": { label: "Karla", family: "Karla", stack: "'Karla', system-ui, sans-serif", spec: "wght@400;500;600;700", body: true }
+  };
+
+  /* Heading weight that suits each face (display serifs read best light). */
+  const HEAD_WEIGHT = { "instrument-serif": 400, "dm-serif": 400, "cormorant": 600, "playfair": 600, "fraunces": 600,
+    "libre-baskerville": 700, "lora": 600, "sora": 700, "space-grotesk": 600, "outfit": 600, "montserrat": 700, "poppins": 600, "inter": 700 };
+
+  const COLOR_KEYS = [
+    ["bg", "Page background"], ["surface", "Cards & panels"], ["ink", "Text"],
+    ["brand", "Buttons & links"], ["accent", "Accent"], ["footer", "Footer"]
+  ];
+  const RADII = { square: [4, 6, 8, 10, 6], soft: [10, 16, 20, 24, 999], rounded: [14, 22, 28, 32, 999] }; // input, card, panel, hero, button
+  const UNIT_NOUNS = { cabin: "cabins", room: "rooms", suite: "suites", home: "homes", cottage: "cottages", villa: "villas", lodge: "lodges", site: "sites", tent: "tents", unit: "units" };
+
+  const PRESETS = {
+    meadow: { label: "Meadow", headingFont: "instrument-serif", bodyFont: "inter", radius: "soft",
+      colors: { bg: "#f3f4ef", surface: "#ffffff", ink: "#1c2620", brand: "#2f5d46", accent: "#8a6a2e", footer: "#1c2620" } },
+    pine: { label: "Pine", headingFont: "sora", bodyFont: "public-sans", radius: "soft",
+      colors: { bg: "#eef2ef", surface: "#ffffff", ink: "#101f1e", brand: "#0c3b3c", accent: "#b97a2a", footer: "#0a2a2b" } },
+    coastal: { label: "Coastal", headingFont: "fraunces", bodyFont: "dm-sans", radius: "rounded",
+      colors: { bg: "#f2f6f8", surface: "#ffffff", ink: "#13232f", brand: "#1f5f7a", accent: "#c26a3d", footer: "#10242f" } },
+    desert: { label: "Desert", headingFont: "dm-serif", bodyFont: "work-sans", radius: "soft",
+      colors: { bg: "#f7f1ea", surface: "#fffdf9", ink: "#2b1d14", brand: "#a0522d", accent: "#6b8e5a", footer: "#2b1d14" } },
+    modern: { label: "Modern", headingFont: "space-grotesk", bodyFont: "inter", radius: "square",
+      colors: { bg: "#ffffff", surface: "#f5f5f2", ink: "#111111", brand: "#111111", accent: "#e4572e", footer: "#111111" } },
+    evening: { label: "Evening", headingFont: "cormorant", bodyFont: "inter", radius: "soft",
+      colors: { bg: "#14171a", surface: "#1d2126", ink: "#edeae4", brand: "#d4a85a", accent: "#d4a85a", footer: "#0d0f11" } }
+  };
+  const DEFAULT_PRESET = "meadow";
+
+  const isHex = (v) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
+  const clean = (v, max) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, max);
+
+  /* Any stored/edited theme -> a complete, safe theme. Unknown values fall
+     back to the preset (or Meadow). */
+  function normalize(raw) {
+    const t = raw && typeof raw === "object" ? raw : {};
+    const presetKey = PRESETS[t.preset] ? t.preset : DEFAULT_PRESET;
+    const base = PRESETS[presetKey];
+    const colors = {};
+    COLOR_KEYS.forEach(([k]) => { colors[k] = isHex(t.colors && t.colors[k]) ? t.colors[k].toLowerCase() : base.colors[k]; });
+    const font = (key, kind, fallback) => (FONTS[key] && FONTS[key][kind] ? key : fallback);
+    return {
+      preset: presetKey,
+      headingFont: font(t.headingFont, "heading", base.headingFont),
+      bodyFont: font(t.bodyFont, "body", base.bodyFont),
+      radius: RADII[t.radius] ? t.radius : base.radius,
+      colors,
+      eyebrow: clean(t.eyebrow, 60),
+      unitNoun: UNIT_NOUNS[t.unitNoun] ? t.unitNoun : "",
+      numberedSteps: t.numberedSteps !== false
+    };
+  }
+
+  /* Relative luminance + WCAG contrast, for auto text colors and studio warnings. */
+  function luminance(hex) {
+    const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  }
+  function contrast(a, b) {
+    const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+    return (x + 0.05) / (y + 0.05);
+  }
+  const onColor = (hex) => (contrast(hex, "#ffffff") >= contrast(hex, "#111111") ? "#ffffff" : "#111111");
+
+  function fontsHref(theme) {
+    const keys = [...new Set([theme.headingFont, theme.bodyFont])];
+    const families = keys.map((k) => "family=" + FONTS[k].family.replace(/ /g, "+") + ":" + FONTS[k].spec).join("&");
+    return "https://fonts.googleapis.com/css2?" + families + "&display=swap";
+  }
+
+  /* Apply a theme to a document: CSS variables on :root plus one font link. */
+  function apply(raw, doc) {
+    const d = doc || document;
+    const t = normalize(raw);
+    const c = t.colors;
+    const [rIn, rCard, rPanel, rHero, rBtn] = RADII[t.radius];
+    const vars = {
+      "--bg": c.bg, "--surface": c.surface, "--ink": c.ink, "--brand": c.brand, "--accent": c.accent, "--footer": c.footer,
+      "--brand-ink": onColor(c.brand), "--footer-ink": onColor(c.footer),
+      "--ink-2": `color-mix(in srgb, ${c.ink} 82%, ${c.surface})`,
+      "--muted": `color-mix(in srgb, ${c.ink} 64%, ${c.bg})`,
+      "--line": `color-mix(in srgb, ${c.ink} 12%, ${c.bg})`,
+      "--field-line": `color-mix(in srgb, ${c.ink} 24%, ${c.surface})`,
+      "--brand-soft": `color-mix(in srgb, ${c.brand} 10%, ${c.surface})`,
+      "--brand-hover": `color-mix(in srgb, ${c.brand} 82%, #000)`,
+      "--chip": `color-mix(in srgb, ${c.brand} 13%, ${c.bg})`,
+      "--placeholder": `color-mix(in srgb, ${c.brand} 14%, ${c.bg})`,
+      "--eyebrow": `color-mix(in srgb, ${c.accent} 35%, #ffffff)`,
+      "--footer-muted": `color-mix(in srgb, ${onColor(c.footer)} 68%, ${c.footer})`,
+      "--font-head": FONTS[t.headingFont].stack, "--font-body": FONTS[t.bodyFont].stack,
+      "--head-weight": String(HEAD_WEIGHT[t.headingFont] || 600),
+      "--r-input": rIn + "px", "--r-card": rCard + "px", "--r-panel": rPanel + "px", "--r-hero": rHero + "px", "--r-btn": rBtn + "px"
+    };
+    Object.entries(vars).forEach(([k, v]) => d.documentElement.style.setProperty(k, v));
+    d.documentElement.dataset.theme = t.preset;
+    let link = d.getElementById("shThemeFonts");
+    if (!link) {
+      link = d.createElement("link");
+      link.id = "shThemeFonts";
+      link.rel = "stylesheet";
+      d.head.appendChild(link);
+    }
+    const href = fontsHref(t);
+    if (link.href !== href) link.href = href;
+    return t;
+  }
+
+  const unitWords = (t) => {
+    const one = t.unitNoun || "room";
+    return { one, many: UNIT_NOUNS[one] || "rooms" };
+  };
+
+  window.SHTheme = { FONTS, PRESETS, COLOR_KEYS, RADII, UNIT_NOUNS, DEFAULT_PRESET, normalize, apply, contrast, onColor, fontsHref, unitWords, isHex };
+})();

@@ -311,24 +311,29 @@ table.data .guest span { color: var(--muted); font-size: 12.3px; }
 .preview-bar .dots { display: flex; gap: 5px; }
 .preview-bar .dots i { width: 10px; height: 10px; border-radius: 50%; background: #cdd8d4; }
 .preview-url { background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; font-family: var(--font-mono); font-size: 11.8px; }
-.mock { --mock-brand: #0c3b3c; --mock-accent: #c98a2e; }
-.mock-hero { background: linear-gradient(180deg, rgb(12 59 60 / 92%), rgb(12 59 60 / 78%)), repeating-linear-gradient(115deg, #134e4e 0 26px, #0e4142 26px 52px); color: #fff; padding: 44px 36px 30px; }
-.mock-hero .m-kicker { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #f0d9ae; }
-.mock-hero h2 { color: #fff; font-size: 34px; line-height: 1.1; margin: 8px 0 6px; max-width: 520px; }
-.mock-hero p { color: #dce9e6; max-width: 480px; font-size: 14px; }
-.mock-search { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; background: #fff; border-radius: 12px; padding: 12px; margin: -22px 28px 0; position: relative; box-shadow: var(--shadow-2); }
-.mock-search label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
-.mock-search .ms { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; color: var(--ink); font-weight: 600; font-size: 13px; }
-.mock-search .ms span { display: block; font-size: 10.5px; color: var(--faint); font-weight: 500; }
-.mock-rooms { padding: 22px 28px 30px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-.mock-room { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.mock-room .img { height: 110px; }
-.mock-room .bd { padding: 12px 13px; }
-.mock-room strong { color: var(--ink); font-size: 13.5px; }
-.mock-room p { font-size: 12px; color: var(--muted); margin: 2px 0 8px; }
-.mock-room .pr { display: flex; align-items: center; justify-content: space-between; }
-.mock-room .pr b { font-family: var(--font-display); color: var(--ink); }
 .swatch-row { display: flex; gap: 8px; }
+/* Studio: themes, fonts, colors, live preview of the real booking page */
+.studio .preview-shell { position: sticky; top: 16px; }
+.studio .form-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.studio .select, .studio .input { min-width: 0; max-width: 100%; }
+.theme-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.theme-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 7px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; text-align: left; font: inherit; }
+.theme-card:hover { border-color: #b3c3bf; }
+.theme-card.sel { border-color: var(--brand-3); box-shadow: 0 0 0 3px rgb(26 100 101 / 18%); }
+.theme-swatch { display: flex; align-items: flex-end; gap: 3px; width: 100%; height: 34px; border-radius: 6px; padding: 5px; border: 1px solid rgb(0 0 0 / 8%); }
+.theme-swatch i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgb(255 255 255 / 50%); }
+.theme-name { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.theme-font { font-size: 11px; color: var(--faint); margin-top: -3px; }
+.color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.color-cell { display: flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.color-cell .color-pick { width: 38px; height: 32px; flex: none; }
+.color-cell span { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.color-cell b { font-weight: 500; font-size: 11px; color: var(--faint); }
+#bkContrast.warn { color: var(--warning); font-weight: 600; }
+.seg-sm button { padding: 4px 10px; font-size: 12px; }
+.preview-frame { position: relative; overflow: hidden; background: #e9edeb; height: 600px; }
+.preview-frame iframe { position: absolute; top: 0; left: 0; border: 0; transform-origin: 0 0; background: #fff; }
+.preview-note { margin: 0; padding: 8px 13px; font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); background: var(--surface-2); }
 .color-row { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
 .color-pick { width: 46px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 9px; background: #fff; cursor: pointer; }
 .color-val { font-size: 12px; color: var(--muted); }

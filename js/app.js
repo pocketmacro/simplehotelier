@@ -1227,28 +1227,88 @@ function updateEmbed(tenant) {
   const open = $("#bkOpenLink");
   if (open) open.href = bookingBase() + "/book.html?property=" + encodeURIComponent(slug);
 }
-function renderMockRooms() {
-  const imgs = ["linear-gradient(135deg,#285b5c,#0c3b3c)", "linear-gradient(135deg,#7a5a33,#3d2c14)", "linear-gradient(135deg,#3f6b8a,#1f3a5f)"];
-  $("#mockRooms").innerHTML = rooms.slice(0, 3).map((r, i) => `
-    <div class="mock-room"><div class="img" style="background:${imgs[i % 3]}"></div>
-      <div class="bd"><strong>${esc(r.name)}</strong><p>${esc(r.type)} · ★ 4.9</p>
-        <div class="pr"><b>${money(roomRate(r))}<span style="font-weight:500;font-size:11.5px;color:var(--faint)"> /night</span></b><button class="btn btn-primary btn-xs" data-action="mock-search" type="button">Select</button></div></div></div>`).join("");
+/* ---------------- Booking page design (fonts, colors, corners, wording) ----------------
+   The studio edits one theme object (js/booking-theme.js normalizes it) and
+   previews the real booking page in an iframe: unsaved edits are posted to
+   it on this origin only; Publish changes saves tenants.booking_theme. */
+let studioTheme = SHTheme.normalize({});
+let studioDevice = "desktop", studioPreviewTimer = null;
+const STUDIO_UNITS = [["", "Automatic (from your room types)"], ["cabin", "Cabins"], ["room", "Rooms"], ["suite", "Suites"], ["home", "Homes"], ["cottage", "Cottages"], ["villa", "Villas"], ["lodge", "Lodges"], ["site", "Sites"], ["tent", "Tents"], ["unit", "Units"]];
+function setStudioTheme(patch) {
+  studioTheme = SHTheme.normalize({ ...studioTheme, ...patch, colors: { ...studioTheme.colors, ...((patch && patch.colors) || {}) } });
+  renderStudioDesign();
+  queuePreview();
 }
+function renderStudioDesign() {
+  const t = studioTheme;
+  const presets = $("#bkPresets");
+  if (presets) presets.innerHTML = Object.entries(SHTheme.PRESETS).map(([k, p]) => `
+    <button type="button" class="theme-card${t.preset === k ? " sel" : ""}" data-preset="${k}" aria-pressed="${t.preset === k}">
+      <span class="theme-swatch" style="background:${p.colors.bg}"><i style="background:${p.colors.brand}"></i><i style="background:${p.colors.accent}"></i><i style="background:${p.colors.ink}"></i></span>
+      <span class="theme-name">${esc(p.label)}</span><span class="theme-font">${esc(SHTheme.FONTS[p.headingFont].label)}</span></button>`).join("");
+  const fontOpts = (kind, current) => Object.entries(SHTheme.FONTS).filter(([, f]) => f[kind])
+    .map(([k, f]) => `<option value="${k}"${k === current ? " selected" : ""}>${esc(f.label)}</option>`).join("");
+  if ($("#bkHeadFont")) $("#bkHeadFont").innerHTML = fontOpts("heading", t.headingFont);
+  if ($("#bkBodyFont")) $("#bkBodyFont").innerHTML = fontOpts("body", t.bodyFont);
+  const grid = $("#bkColorGrid");
+  if (grid && !grid.children.length) {
+    grid.innerHTML = SHTheme.COLOR_KEYS.map(([k, label]) => `
+      <label class="color-cell"><input type="color" class="color-pick" data-color="${k}" aria-label="${esc(label)}"><span>${esc(label)}<b class="mono" data-color-val="${k}"></b></span></label>`).join("");
+  }
+  SHTheme.COLOR_KEYS.forEach(([k]) => {
+    const inp = $(`#bkColorGrid [data-color="${k}"]`); if (inp && inp.value !== t.colors[k]) inp.value = t.colors[k];
+    const val = $(`#bkColorGrid [data-color-val="${k}"]`); if (val) val.textContent = t.colors[k];
+  });
+  $$("#bkRadius [data-r]").forEach((b) => b.classList.toggle("active", b.dataset.r === t.radius));
+  const unit = $("#bkUnit");
+  if (unit) unit.innerHTML = STUDIO_UNITS.map(([v, l]) => `<option value="${v}"${v === t.unitNoun ? " selected" : ""}>${esc(l)}</option>`).join("");
+  const eb = $("#bkEyebrow"); if (eb && document.activeElement !== eb) eb.value = t.eyebrow;
+  const num = $("#bkNumbered"); if (num) num.checked = t.numberedSteps;
+  // Readability: WCAG 4.5:1 for text, 3:1 for buttons against the page.
+  const warn = [];
+  if (SHTheme.contrast(t.colors.ink, t.colors.bg) < 4.5) warn.push("Text is hard to read on this background.");
+  if (SHTheme.contrast(t.colors.ink, t.colors.surface) < 4.5) warn.push("Text is hard to read on the card color.");
+  if (SHTheme.contrast(t.colors.brand, t.colors.bg) < 3) warn.push("Buttons blend into the background.");
+  const c = $("#bkContrast");
+  if (c) { c.textContent = warn.length ? "⚠ " + warn.join(" ") : "Text and buttons pass readability contrast checks."; c.classList.toggle("warn", warn.length > 0); }
+}
+function studioSlug() {
+  const v = ($("#bkUrl") ? $("#bkUrl").value : "").trim().split(".")[0].toLowerCase().replace(/[^a-z0-9-]/g, "");
+  return (liveTenant && liveTenant.slug) || v || "pinecrest";
+}
+function setPreviewSrc() {
+  const f = $("#bkPreview");
+  if (!f || !location.protocol.startsWith("http")) return;
+  const src = location.origin + "/book.html?property=" + encodeURIComponent(studioSlug()) + "&preview=1";
+  if (f.dataset.src !== src) { f.dataset.src = src; f.src = src; }
+  sizePreview();
+}
+function sizePreview() {
+  const box = $("#bkPreviewBox"), f = $("#bkPreview");
+  if (!box || !f) return;
+  const w = studioDevice === "mobile" ? 390 : 1280, h = studioDevice === "mobile" ? 760 : 1180;
+  const scale = Math.min(1, box.clientWidth / w);
+  f.style.width = w + "px"; f.style.height = h + "px";
+  f.style.transform = `scale(${scale})`;
+  f.style.left = studioDevice === "mobile" ? Math.max(0, (box.clientWidth - w * scale) / 2) + "px" : "0";
+  box.style.height = Math.round(h * scale) + "px";
+}
+function sendPreview() {
+  const f = $("#bkPreview");
+  if (!f || !f.contentWindow || !location.protocol.startsWith("http")) return;
+  f.contentWindow.postMessage({
+    type: "simplehotelier:preview", theme: studioTheme,
+    content: { name: $("#bkName") ? $("#bkName").value : undefined, headline: $("#bkHead") ? $("#bkHead").value : undefined, sub: $("#bkSub") ? $("#bkSub").value : undefined, heroUrl: studioHeroUrl || null, heroFocus: studioHeroFocus }
+  }, location.origin);
+}
+function queuePreview() { clearTimeout(studioPreviewTimer); studioPreviewTimer = setTimeout(sendPreview, 120); }
+window.addEventListener("message", (e) => {
+  const f = $("#bkPreview");
+  if (e.origin === location.origin && f && e.source === f.contentWindow && e.data && e.data.type === "simplehotelier:preview-ready") sendPreview();
+});
+window.addEventListener("resize", sizePreview);
 /* Reflect the studio's colors + hero in the live preview (right pane). */
 function applyStudioPreview() {
-  const brand = $("#bkBrand") ? $("#bkBrand").value : "#0c3b3c";
-  const bg = $("#bkBg") ? $("#bkBg").value : "#f2f5f3";
-  const fg = $("#bkFg") ? $("#bkFg").value : "#101f1e";
-  document.body.dataset.brand = brand;
-  if ($("#bkBrandVal")) $("#bkBrandVal").textContent = brand;
-  if ($("#bkBgVal")) $("#bkBgVal").textContent = bg;
-  if ($("#bkFgVal")) $("#bkFgVal").textContent = fg;
-  const hero = $("#mockHero");
-  if (hero) {
-    hero.style.background = studioHeroUrl
-      ? `linear-gradient(180deg, rgb(8 20 20 / 42%), rgb(8 20 20 / 62%)), url("${String(studioHeroUrl).replace(/"/g, "%22")}") ${studioHeroFocus.x}% ${studioHeroFocus.y}% / cover no-repeat`
-      : `linear-gradient(180deg, ${brand}e8, ${brand}c2), repeating-linear-gradient(115deg, ${brand} 0 26px, rgb(0 0 0 / 22%) 26px 52px)`;
-  }
   const focusEl = $("#bkHeroFocus"), focusDot = $("#bkHeroFocusDot"), focusVal = $("#bkHeroFocusVal");
   if (focusEl) {
     focusEl.hidden = !studioHeroUrl;
@@ -1260,30 +1320,36 @@ function applyStudioPreview() {
     focusVal.hidden = !studioHeroUrl;
     focusVal.textContent = `Focus: ${Math.round(studioHeroFocus.x)}% across · ${Math.round(studioHeroFocus.y)}% down — the preview follows it; saved with Publish changes`;
   }
-  const page = $("#mockPage");
-  if (page) { page.style.background = bg; page.style.color = fg; }
   const thumb = $("#bkHeroThumb"), empty = $("#bkHeroEmpty");
   if (thumb) { thumb.src = studioHeroUrl || ""; thumb.hidden = !studioHeroUrl; }
   if (empty) empty.style.display = studioHeroUrl ? "none" : "grid";
+  queuePreview();
 }
 function bindStudio() {
-  $("#bkName").addEventListener("input", (e) => { $("#mockName").textContent = (e.target.value || "Your property").toUpperCase(); });
-  $("#bkHead").addEventListener("input", (e) => { $("#mockHead").textContent = e.target.value; });
-  $("#bkSub").addEventListener("input", (e) => { $("#mockSub").textContent = e.target.value; });
+  ["bkName", "bkHead", "bkSub"].forEach((id) => { const el = document.getElementById(id); if (el) el.addEventListener("input", queuePreview); });
   $("#bkUrl").addEventListener("input", (e) => { $("#bkUrlPrev").textContent = e.target.value || "you.simplehotelier.com"; });
-  $("#bkColors").addEventListener("click", (e) => {
-    const b = e.target.closest(".swatch"); if (!b) return;
-    $$("#bkColors .swatch").forEach((s) => s.classList.toggle("sel", s === b));
-    if ($("#bkBrand")) $("#bkBrand").value = b.dataset.c;
-    applyStudioPreview();
+  renderStudioDesign();
+  $("#bkPresets").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-preset]"); if (!b) return;
+    const p = SHTheme.PRESETS[b.dataset.preset];
+    // A preset swaps fonts, colors and corners; the property's wording stays.
+    setStudioTheme({ ...p, colors: { ...p.colors }, preset: b.dataset.preset });
   });
-  ["bkBrand", "bkBg", "bkFg"].forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener("input", () => {
-      if (id === "bkBrand") $$("#bkColors .swatch").forEach((s) => s.classList.toggle("sel", s.dataset.c === el.value));
-      applyStudioPreview();
-    });
+  $("#bkHeadFont").addEventListener("change", (e) => setStudioTheme({ headingFont: e.target.value }));
+  $("#bkBodyFont").addEventListener("change", (e) => setStudioTheme({ bodyFont: e.target.value }));
+  $("#bkColorGrid").addEventListener("input", (e) => { const k = e.target.dataset.color; if (k) setStudioTheme({ colors: { [k]: e.target.value } }); });
+  $("#bkRadius").addEventListener("click", (e) => { const b = e.target.closest("[data-r]"); if (b) setStudioTheme({ radius: b.dataset.r }); });
+  $("#bkUnit").addEventListener("change", (e) => setStudioTheme({ unitNoun: e.target.value }));
+  $("#bkEyebrow").addEventListener("input", (e) => setStudioTheme({ eyebrow: e.target.value }));
+  $("#bkNumbered").addEventListener("change", (e) => setStudioTheme({ numberedSteps: e.target.checked }));
+  $("#bkDevice").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-device]"); if (!b) return;
+    studioDevice = b.dataset.device;
+    $$("#bkDevice [data-device]").forEach((x) => x.classList.toggle("active", x === b));
+    sizePreview();
   });
+  if (window.ResizeObserver && $("#bkPreviewBox")) new ResizeObserver(sizePreview).observe($("#bkPreviewBox"));
+  setPreviewSrc();
   const heroFile = $("#bkHeroFile");
   if (heroFile) heroFile.addEventListener("change", async (e) => {
     const f = e.target.files && e.target.files[0];
@@ -1808,9 +1874,8 @@ document.addEventListener("click", (e) => {
         slug: slugVal || undefined,
         booking_headline: $("#bkHead").value.trim(),
         booking_subheading: $("#bkSub").value.trim(),
-        brand_color: $("#bkBrand") ? $("#bkBrand").value : (document.body.dataset.brand || "#0c3b3c"),
-        booking_bg_color: $("#bkBg") ? $("#bkBg").value : null,
-        booking_fg_color: $("#bkFg") ? $("#bkFg").value : null,
+        booking_theme: studioTheme,
+        brand_color: studioTheme.colors.brand,
         hero_image_url: studioHeroUrl || null,
         hero_focus_x: Math.round(studioHeroFocus.x),
         hero_focus_y: Math.round(studioHeroFocus.y),
@@ -2060,7 +2125,7 @@ $("#globalSearch").addEventListener("keydown", (e) => {
 /* ---------------- Boot ---------------- */
 renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
 renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns();
-renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview(); renderRateMgmt();
+renderAddons(); renderTaxes(); renderReports(); renderOverview(); renderRateMgmt();
 bindStudio(); updateEmbed(null);
 
 /* Stripe Connect sends owners back to /app.html?stripe=done|refresh. */
@@ -2092,7 +2157,7 @@ function clearAllData() {
 function renderAll() {
   renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
   renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns();
-  renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview();
+  renderAddons(); renderTaxes(); renderReports(); renderOverview();
 }
 function openPropertySetup() {
   openModal({
@@ -2238,7 +2303,7 @@ function loadLiveIntoUI() {
     liveTenant = live.tenant;
     liveMembersCount = live.membersCount != null ? live.membersCount : 1;
     renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
-    renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns(); renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview(); renderRateMgmt();
+    renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns(); renderAddons(); renderTaxes(); renderReports(); renderOverview(); renderRateMgmt();
     renderTeamInvites();
     syncStripeStatus();
     if (live.user) {
@@ -2248,9 +2313,8 @@ function loadLiveIntoUI() {
     }
     if ($("#bkGa")) $("#bkGa").value = live.tenant.ga_measurement_id || "";
     if ($("#bkRedirect")) $("#bkRedirect").value = live.tenant.booking_redirect_url || "";
-    if (live.tenant.brand_color && $("#bkBrand")) { $("#bkBrand").value = live.tenant.brand_color; $$("#bkColors .swatch").forEach((s) => s.classList.toggle("sel", s.dataset.c === live.tenant.brand_color)); }
-    if (live.tenant.booking_bg_color && $("#bkBg")) $("#bkBg").value = live.tenant.booking_bg_color;
-    if (live.tenant.booking_fg_color && $("#bkFg")) $("#bkFg").value = live.tenant.booking_fg_color;
+    studioTheme = SHTheme.normalize(live.tenant.booking_theme);
+    renderStudioDesign();
     studioHeroUrl = live.tenant.hero_image_url || "";
     if (live.tenant.hero_focus_x != null) studioHeroFocus.x = Math.min(100, Math.max(0, Number(live.tenant.hero_focus_x) || 0));
     if (live.tenant.hero_focus_y != null) studioHeroFocus.y = Math.min(100, Math.max(0, Number(live.tenant.hero_focus_y) || 0));
@@ -2259,11 +2323,11 @@ function loadLiveIntoUI() {
     if ($("#bkByType")) $("#bkByType").checked = live.tenant.booking_by_type !== false;
     if ($("#bkDepositPct") && live.tenant.deposit_percent) $("#bkDepositPct").value = live.tenant.deposit_percent;
     if ($("#bkName")) $("#bkName").value = live.tenant.name || "";
-    if ($("#mockName")) $("#mockName").textContent = (live.tenant.name || "Your property").toUpperCase() + (live.tenant.city ? " · " + String(live.tenant.city).toUpperCase() : "");
     if (live.tenant.slug && $("#bkUrl")) $("#bkUrl").value = live.tenant.slug + ".simplehotelier.com";
     if (live.tenant.slug && $("#bkUrlPrev")) $("#bkUrlPrev").textContent = live.tenant.slug + ".simplehotelier.com";
-    if (live.tenant.booking_headline && $("#bkHead")) { $("#bkHead").value = live.tenant.booking_headline; $("#mockHead").textContent = live.tenant.booking_headline; }
-    if (live.tenant.booking_subheading && $("#bkSub")) { $("#bkSub").value = live.tenant.booking_subheading; $("#mockSub").textContent = live.tenant.booking_subheading; }
+    if (live.tenant.booking_headline && $("#bkHead")) $("#bkHead").value = live.tenant.booking_headline;
+    if (live.tenant.booking_subheading && $("#bkSub")) $("#bkSub").value = live.tenant.booking_subheading;
+    setPreviewSrc();
     updateEmbed(live.tenant);
     if ($("#pfName")) $("#pfName").value = live.tenant.name || "";
     if ($("#pfEmail")) $("#pfEmail").value = live.tenant.contact_email || "";
