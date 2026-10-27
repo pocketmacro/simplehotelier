@@ -2043,11 +2043,12 @@ bindStudio(); updateEmbed(null);
   const s = new URLSearchParams(location.search).get("stripe");
   if (s !== "done" && s !== "refresh") return;
   history.replaceState(null, "", location.pathname);
+  /* Delayed past the live-data setup router so the Stripe landing wins. */
   setTimeout(() => {
     goto("settings");
     if (s === "done") toast("Stripe connected", "Payouts are on their way — check Plan & billing for status", "ok");
     else toast("Stripe link expired", "Open Settings and click Connect Stripe again for a fresh link", "warn");
-  }, 700);
+  }, 2200);
 })();
 
 /* ---------------- Onboarding: property first, then card + 30-day trial ---------------- */
