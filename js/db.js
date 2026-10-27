@@ -343,6 +343,14 @@
     if (!res.ok) throw new Error("Upload failed (" + res.status + ")");
     return baseUrl + "/storage/v1/object/public/" + bucket + "/" + encoded;
   }
+  /* ---------------- Team invites ---------------- */
+  async function listInvites() {
+    if (!ctx.tenantId) return [];
+    const rows = await rest("invites?tenant_id=eq." + ctx.tenantId + "&accepted_at=is.null&select=id,email,role,created_at&order=created_at.desc").catch(() => []);
+    return (rows || []).map((i) => ({ id: i.id, email: i.email, role: i.role, when: new Date(i.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) }));
+  }
+  async function deleteInvite(id) { if (id) await rest("invites?id=eq." + id, { method: "DELETE" }); }
+
   /* ---------------- Maintenance tickets + iCal feeds ---------------- */
   async function createTicket(t) {
     if (!ctx.tenantId) return null;
@@ -428,6 +436,7 @@
     createReservation, setReservationStatus, updateReservationPaid, addTransaction,
     createAddon, setAddonActive, deleteAddon, createTax, deleteTax, createRoom, updateRoom,
     createRoomType, updateRoomType, deleteRoomType, upsertRateOverrides, deleteRateOverride, uploadPublic,
-    createTicket, setTicketStatus, deleteTicket, createIcalFeed, deleteIcalFeed
+    createTicket, setTicketStatus, deleteTicket, createIcalFeed, deleteIcalFeed,
+    listInvites, deleteInvite
   };
 })();

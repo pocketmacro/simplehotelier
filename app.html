@@ -519,6 +519,12 @@
               </div>
               <p class="hint" style="margin-top:10px">Guest payments use your connected Stripe account and are separate from this subscription.</p>
             </div>
+            <div class="card card-pad" style="margin-top:18px">
+              <div class="section-title" style="margin:0 0 6px"><h3 style="font-size:15px">Team &amp; invites</h3><div class="line"></div></div>
+              <p class="hint" style="margin:0 0 10px">Cleaners and staff get a free account and join this property automatically — no card or trial for them.</p>
+              <div id="teamInvites"><p class="hint">Loading…</p></div>
+              <button class="btn btn-primary btn-sm" type="button" data-action="invite" style="margin-top:12px">Invite your team</button>
+            </div>
           </div>
         </div>
 
@@ -645,6 +651,7 @@
         <button id="tabSignup" type="button">Create account</button>
       </div>
       <div class="auth-error" id="authError" hidden></div>
+      <div id="inviteBanner" hidden style="background:#e7f2ec;border:1px solid #bcd8c8;color:#14532d;border-radius:10px;padding:10px 14px;font-size:13.5px;margin-bottom:12px">You've been invited to join a property team. Create your free account with the invited email — no property, card, or trial needed.</div>
 
       <form id="loginForm">
         <div class="field"><label for="liEmail">Email</label><input class="input" id="liEmail" type="email" autocomplete="email" required placeholder="you@yourproperty.com"></div>

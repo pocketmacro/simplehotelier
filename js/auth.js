@@ -24,6 +24,15 @@
   function sessionUser() {
     try { return JSON.parse(localStorage.getItem("sh_user") || "null"); } catch { return null; }
   }
+
+  /* Team invites: app.html?invite=TOKEN. Captured immediately (the link may be
+     opened before account setup); the claim itself happens in js/app.js once
+     the new user is signed in. Invitees skip property creation and billing. */
+  try {
+    const inv = new URLSearchParams(location.search).get("invite");
+    if (inv) localStorage.setItem("sh_invite_token", inv);
+  } catch { /* no storage */ }
+  const invitePending = () => { try { return !!localStorage.getItem("sh_invite_token"); } catch { return false; } };
   function accessToken() { return localStorage.getItem("sh_access_token") || ""; }
 
   /* Exchange the stored refresh token for a fresh session (tokens expire hourly). */
@@ -192,6 +201,15 @@
     $("#toLogin").addEventListener("click", () => setTab("login"));
     if (location.hash === "#signup") setTab("signup");
     if (location.hash === "#login") setTab("login");
+    if (invitePending()) {
+      // Invited teammate: different account setup — free account only.
+      const banner = $("#inviteBanner"); if (banner) banner.hidden = false;
+      const propField = $("#suProperty") && $("#suProperty").closest(".field");
+      if (propField) propField.hidden = true;
+      if ($("#suProperty")) $("#suProperty").removeAttribute("required");
+      const submit = $("#suSubmit"); if (submit) submit.textContent = "Create free account & join";
+      setTab("signup");
+    }
     $("#demoBtn").addEventListener("click", () => { gate().hidden = true; });
     $("#signOutBtn").addEventListener("click", async () => { await logout(); location.reload(); });
 
@@ -208,19 +226,23 @@
     $("#signupForm").addEventListener("submit", async (e) => {
       e.preventDefault(); showError("");
       const btn = $("#suSubmit"); btn.disabled = true; btn.textContent = "Creating…";
-      if (!$("#suProperty").value.trim()) { showError("Give your property a name — it becomes your booking page title."); $("#suProperty").focus(); btn.disabled = false; btn.textContent = "Create property & log in"; return; }
+      const invited = invitePending();
+      if (!invited && !$("#suProperty").value.trim()) { showError("Give your property a name — it becomes your booking page title."); $("#suProperty").focus(); btn.disabled = false; btn.textContent = "Create property & log in"; return; }
       try {
         const data = await signup($("#suEmail").value.trim(), $("#suPassword").value);
         if (!accessToken()) {
-          showError("Account created. Please check your email to confirm, then log in.");
+          showError(invited
+            ? "Account created. Please check your email to confirm, then log in — we'll join you to the property automatically."
+            : "Account created. Please check your email to confirm, then log in.");
           setTab("login");
           return;
         }
+        if (invited) { enterApp(sessionUser()); return; } // app.js claims the invite; no property, no trial
         const tenant = await createProperty($("#suProperty").value.trim());
         const billed = await tryBilling(tenant);
         if (!billed) enterApp(sessionUser());
       } catch (err) { showError(err.message); }
-      btn.disabled = false; btn.textContent = "Create property & log in";
+      btn.disabled = false; btn.textContent = invited ? "Create free account & join" : "Create property & log in";
     });
 
     // Returning session? Validate in the background; otherwise show the gate.

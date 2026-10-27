@@ -1850,26 +1850,38 @@ document.addEventListener("click", (e) => {
     })();
   }
   else if (a === "invite") {
-    const link = location.origin + location.pathname.replace(/[^/]*$/, "") + "app.html#signup";
+    if (!window.SHDB || !SHDB.hasLive()) { toast("Sign in live first", "Invites are tied to your property account", "warn"); return; }
     openModal({
-      title: "Invite your cleaners", sub: "They sign up free and only see housekeeping",
-      body: `<div class="field"><label>Cleaner email</label><input class="input" id="invEmail" type="email" placeholder="cleaner@email.com"></div>
-        <div class="field"><label>Signup link</label><input class="input mono" id="invLink" readonly value="${esc(link)}"></div>`,
-      foot: `<button class="btn btn-ghost btn-sm" data-action="invite-copy" type="button">Copy link</button>
-        <button class="btn btn-primary btn-sm" data-action="invite-send" type="button">Open email invite</button>`
+      title: "Invite your team", sub: "They get an email, create a free account, and land in this property — no card or trial",
+      body: `<div class="field"><label>Email</label><input class="input" id="invEmail" type="email" placeholder="teammate@email.com"></div>
+        <div class="field"><label>Role</label><select class="select" id="invRole">
+          <option value="cleaner">Cleaner — housekeeping and turnover lists</option>
+          <option value="staff">Staff — day-to-day front desk</option>
+          <option value="admin">Admin — everything except billing ownership</option>
+        </select><span class="help">The invite is stored for this property and matched to their account email when they sign up.</span></div>
+        <div class="section-title" style="margin:16px 0 8px"><h2 style="font-size:14px">Pending invites</h2><div class="line"></div></div>
+        <div id="invPending"><p class="hint">Loading…</p></div>`,
+      foot: `<button class="btn btn-ghost btn-sm" data-close type="button">Close</button>
+        <button class="btn btn-primary btn-sm" data-action="invite-send" type="button">Send invite email</button>`,
+      wide: true
     });
-  }
-  else if (a === "invite-copy") {
-    const i = $("#invLink"); if (i) { navigator.clipboard?.writeText(i.value).catch(() => {}); toast("Invite link copied", "Send it to your cleaner", "ok"); }
+    renderInvPending();
   }
   else if (a === "invite-send") {
-    const email = $("#invEmail").value.trim();
-    const link = $("#invLink").value;
-    const subject = encodeURIComponent("Join SimpleHotelier housekeeping");
-    const body = encodeURIComponent("Hi,\n\nYou are invited to help with housekeeping. Sign up here, then tell the property owner your email so they can add you:\n" + link + "\n\nThanks!");
-    location.href = `mailto:${email}?subject=${subject}&body=${body}`;
-    closeModal();
-    toast("Email draft opened", email || "Address it to your cleaner", "ok");
+    const email = $("#invEmail").value.trim().toLowerCase();
+    const role = $("#invRole").value;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast("Enter their email", "The invite is matched to this address", "warn"); return; }
+    (async () => {
+      try {
+        const d = await fnInvoke("send-email", { action: "team_invite", tenant_id: SHDB.tenantId(), email, role });
+        toast("Invite sent", `${email} · ${role}`, d.sent ? "ok" : "warn");
+        $("#invEmail").value = "";
+        renderInvPending(); renderTeamInvites();
+      } catch (e) { toast("Could not send invite", e.message, "warn"); }
+    })();
+  }
+  else if (a === "invite-revoke") {
+    if (window.SHDB) SHDB.deleteInvite(el.dataset.id).then(() => { renderInvPending(); renderTeamInvites(); toast("Invite revoked", "That link no longer joins anyone", "ok"); }).catch(() => toast("Revoke failed", "Supabase write failed", "warn"));
   }
   else if (a === "setup-step") {
     const step = computeSetup().steps.find((s) => s.key === el.dataset.key);
@@ -2123,6 +2135,49 @@ async function startTrialCheckout(tenantId) {
 }
 let checkoutToastShown = false, billingReminderShown = false;
 
+/* Pending invites, shown in the invite modal and the Settings team card. */
+function inviteRowsHTML(list) {
+  if (!list.length) return `<p class="hint">No pending invites. Send one above and it will wait here until they sign up.</p>`;
+  return list.map((i) => `
+    <div class="kv-row" style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0"><strong style="font-size:13.5px">${esc(i.email)}</strong> <span class="pill">${esc(i.role)}</span> <span style="color:var(--muted);font-size:12.5px">invited ${esc(i.when)}</span></div>
+      <button class="btn btn-ghost btn-xs" data-action="invite-revoke" data-id="${i.id}" type="button">Revoke</button>
+    </div>`).join("");
+}
+async function renderInvPending() {
+  const el = $("#invPending");
+  if (!el || !window.SHDB || !SHDB.hasLive()) return;
+  el.innerHTML = inviteRowsHTML(await SHDB.listInvites());
+}
+async function renderTeamInvites() {
+  const el = $("#teamInvites");
+  if (!el) return;
+  if (!window.SHDB || !SHDB.hasLive()) { el.innerHTML = `<p class="hint">Sign in with your property account to invite your team.</p>`; return; }
+  const list = await SHDB.listInvites();
+  el.innerHTML = (list.length ? inviteRowsHTML(list) : `<p class="hint">No pending invites. Invite cleaners and staff — they create a free account and join this property automatically.</p>`);
+}
+
+/* Claim a pending team invite for the signed-in user (token from the invite
+   link and/or their account email). Runs once per sign-in. */
+let inviteClaimTried = false;
+async function tryClaimInvite() {
+  if (inviteClaimTried) return false;
+  inviteClaimTried = true;
+  try {
+    let token = "";
+    try { token = localStorage.getItem("sh_invite_token") || ""; } catch { /* no storage */ }
+    const d = await fnInvoke("accept-invite", token ? { token } : {});
+    if (d && d.joined) {
+      try { localStorage.removeItem("sh_invite_token"); } catch { /* no storage */ }
+      toast("Welcome to the team", `You joined ${d.tenant ? d.tenant.name : "the property"} as ${d.role}`, "ok");
+      return true;
+    }
+  } catch (e) {
+    if (e && /different email|invited email/i.test(e.message || "")) toast("Use the invited email", e.message, "warn");
+  }
+  return false;
+}
+
 /* Live Supabase data (falls back silently to demo data when unconfigured).
    Reservations require a signed-in member under RLS; rooms/add-ons/taxes are public. */
 function loadLiveIntoUI() {
@@ -2137,12 +2192,14 @@ function loadLiveIntoUI() {
       return;
     }
     if (!live.tenant) {
-      // Signed in but no property yet: never show the demo property. Start blank
-      // and walk them through setup (property name, then card + free trial).
+      // Signed in but no property yet. An invited teammate joins their
+      // property here instead of creating one (no card, no trial).
       if (statusEl) statusEl.textContent = "Signed in as " + (live.user ? live.user.email : "") + " — set up your property to get started.";
       clearAllData();
       renderAll();
-      openPropertySetup();
+      if (live.user) {
+        tryClaimInvite().then((joined) => { if (joined) loadLiveIntoUI(); else openPropertySetup(); });
+      } else openPropertySetup();
       return;
     }
     // Real account: replace wholesale, even when empty — demo data must never leak in.
@@ -2162,6 +2219,7 @@ function loadLiveIntoUI() {
     liveMembersCount = live.membersCount != null ? live.membersCount : 1;
     renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
     renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns(); renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview(); renderRateMgmt();
+    renderTeamInvites();
     syncStripeStatus();
     if (live.user) {
       $("#userName").textContent = live.user.email;

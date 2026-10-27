@@ -124,13 +124,60 @@ async function chargeReceipt(body: any) {
   return json({ sent: res.sent });
 }
 
+/* Team invite: a signed-in property member stores an invite and we email it.
+   The invitee creates a free account (no property, no card) and is joined to
+   the property by accept-invite, matched on token + account email. */
+async function callerUser(req: Request) {
+  const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!token) return null;
+  const { data } = await admin.auth.getUser(token);
+  return data?.user || null;
+}
+
+async function teamInvite(req: Request, body: any) {
+  const user = await callerUser(req);
+  if (!user) return json({ error: "Sign in first" }, 401);
+  const tenantId = String(body.tenant_id || "");
+  const email = String(body.email || "").trim().toLowerCase();
+  const role = ["admin", "staff", "cleaner"].includes(body.role) ? body.role : "cleaner";
+  if (!tenantId || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "tenant_id and a valid email are required" }, 400);
+  const { data: mem } = await admin.from("tenant_members").select("user_id").eq("tenant_id", tenantId).eq("user_id", user.id).maybeSingle();
+  if (!mem) return json({ error: "Only property team members can send invites" }, 403);
+  const { data: tenant } = await admin.from("tenants").select("name").eq("id", tenantId).maybeSingle();
+  if (!tenant) return json({ error: "property not found" }, 404);
+  if (!emailConfigured()) return json({ sent: false, reason: "email not configured" }, 503);
+
+  // One live invite per person per property: replace any pending one.
+  await admin.from("invites").delete().eq("tenant_id", tenantId).eq("email", email).is("accepted_at", null);
+  const { data: invite, error } = await admin.from("invites")
+    .insert({ tenant_id: tenantId, email, role, invited_by: user.id })
+    .select("token").single();
+  if (error || !invite) return json({ error: "could not store the invite" }, 500);
+
+  const origin = req.headers.get("origin") || "https://simplehotelier.com";
+  const link = `${origin.replace(/\/$/, "")}/app.html?invite=${invite.token}`;
+  const roleLabel = role === "cleaner" ? "housekeeping" : role;
+  const res = await sendMail({
+    to: email,
+    subject: `You're invited to join ${tenant.name} on SimpleHotelier`,
+    html: emailShell(`Join ${tenant.name}`,
+      p(`Hi,`) +
+      p(`You've been invited to join <strong>${tenant.name}</strong> on SimpleHotelier as ${roleLabel}. Create your free account with this email address and you'll be taken straight into the property — no card or trial needed.`) +
+      p(`<a href="${link}" style="display:inline-block;background:#0c3b3c;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;padding:12px 22px;border-radius:10px">Accept invite &amp; create account</a>`) +
+      p(`Or paste this link into your browser:<br><span style="word-break:break-all">${link}</span>`),
+      `This invite was sent to ${email}. If it wasn't meant for you, you can ignore this email.`)
+  });
+  return json({ sent: res.sent, email, role });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
     const body = await req.json();
     if (body.action === "booking_confirmation" && body.reservation_id) return await bookingConfirmation(String(body.reservation_id));
     if (body.action === "charge_receipt" && body.reservation_id) return await chargeReceipt(body);
-    return json({ error: "action booking_confirmation or charge_receipt with reservation_id required" }, 400);
+    if (body.action === "team_invite") return await teamInvite(req, body);
+    return json({ error: "action booking_confirmation, charge_receipt or team_invite required" }, 400);
   } catch (e: any) {
     return json({ error: e.message ?? "send-email failed" }, 500);
   }
