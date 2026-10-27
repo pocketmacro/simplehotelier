@@ -17,6 +17,9 @@ h1, h2 { font-family: "Sora", "Segoe UI", sans-serif; color: var(--ink); letter-
 .bk-hero { max-width: 1080px; margin: 0 auto; padding: 26px 22px 8px; }
 .bk-hero h1 { font-size: clamp(28px, 5vw, 42px); line-height: 1.08; margin: 0 0 8px; max-width: 640px; }
 .bk-hero p { color: var(--muted); max-width: 560px; margin: 0; font-size: 15.5px; }
+.bk-hero.has-hero { margin-top: 16px; padding: 72px 30px 44px; border-radius: 18px; background-size: cover; background-position: center; }
+.bk-hero.has-hero h1 { color: #fff; }
+.bk-hero.has-hero p { color: rgb(255 255 255 / 88%); }
 .bk-wrap { max-width: 1080px; margin: 0 auto; padding: 18px 22px 54px; }
 .bk-search { display: grid; grid-template-columns: 1fr 1fr .7fr 1fr auto; gap: 12px; align-items: end; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: 0 1px 2px rgb(16 31 30 / 7%), 0 4px 14px rgb(16 31 30 / 6%); }
 .bk-field { display: flex; flex-direction: column; gap: 5px; }

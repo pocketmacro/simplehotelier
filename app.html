@@ -289,13 +289,27 @@
             <div class="field"><label for="bkName">Property name</label><input class="input" id="bkName" value="Pinecrest Cabins"></div>
             <div class="field"><label for="bkHead">Headline</label><input class="input" id="bkHead" value="Cabins under the pines, minutes from the park."></div>
             <div class="field"><label for="bkSub">Subheading</label><textarea class="textarea" id="bkSub">Eight private cabins with hot tubs, fire pits and trailhead access. Book direct and save 10%.</textarea></div>
-            <div class="field"><label>Brand color</label><div class="swatch-row" id="bkColors">
+            <div class="field"><label>Brand color</label><div class="color-row"><div class="swatch-row" id="bkColors">
               <button class="swatch sel" style="background:#0c3b3c" data-c="#0c3b3c" type="button" aria-label="Pine"></button>
               <button class="swatch" style="background:#1f3a5f" data-c="#1f3a5f" type="button" aria-label="Lake"></button>
               <button class="swatch" style="background:#5b2e1e" data-c="#5b2e1e" type="button" aria-label="Ember"></button>
               <button class="swatch" style="background:#3d3a34" data-c="#3d3a34" type="button" aria-label="Stone"></button>
               <button class="swatch" style="background:#6d2440" data-c="#6d2440" type="button" aria-label="Berry"></button>
-            </div></div>
+            </div><input type="color" id="bkBrand" class="color-pick" value="#0c3b3c" aria-label="Custom brand color"><span class="color-val mono" id="bkBrandVal">#0c3b3c</span></div><span class="help">Pick a swatch or use the color picker for any custom brand color.</span></div>
+            <div class="form-2">
+              <div class="field"><label for="bkBg">Background color</label><div class="color-row"><input type="color" id="bkBg" class="color-pick" value="#f2f5f3"><span class="color-val mono" id="bkBgVal">#f2f5f3</span></div><span class="help">The page background behind your rooms and booking form.</span></div>
+              <div class="field"><label for="bkFg">Foreground color</label><div class="color-row"><input type="color" id="bkFg" class="color-pick" value="#101f1e"><span class="color-val mono" id="bkFgVal">#101f1e</span></div><span class="help">Headings and main text color. Pick something readable on your background.</span></div>
+            </div>
+            <div class="field"><label>Hero image</label>
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <img id="bkHeroThumb" alt="Hero preview" style="width:120px;height:68px;border-radius:10px;object-fit:cover;border:1px solid var(--line);background:var(--surface-2)" hidden>
+                <div id="bkHeroEmpty" style="width:120px;height:68px;border-radius:10px;border:1.5px dashed var(--line);display:grid;place-items:center;color:var(--faint);font-size:11px;text-align:center;padding:4px">No hero image</div>
+                <label class="btn btn-ghost btn-sm" for="bkHeroFile" style="cursor:pointer">Upload hero image</label>
+                <input type="file" id="bkHeroFile" accept="image/*" hidden>
+                <button class="btn btn-ghost btn-sm" id="bkHeroRemove" type="button">Remove</button>
+              </div>
+              <span class="help">Shown at the top of your booking page behind your headline. JPG or PNG, up to 5 MB. Saved as soon as you upload; colors are saved with Publish changes.</span>
+            </div>
             <div class="field"><label for="bkUrl">Page address</label><input class="input mono" id="bkUrl" value="pinecrest.simplehotelier.com"></div>
             <div class="toggle-row"><div>Show add-ons at checkout<small id="bkAddonCount">6 add-ons enabled</small></div><span class="switch"><input type="checkbox" checked disabled><span class="tr"></span></span></div>
             <div class="section-title" style="margin:20px 0 10px"><h2 style="font-size:14px">Booking deposit</h2><div class="line"></div></div>

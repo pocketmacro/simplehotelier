@@ -329,6 +329,9 @@ table.data .guest span { color: var(--muted); font-size: 12.3px; }
 .mock-room .pr { display: flex; align-items: center; justify-content: space-between; }
 .mock-room .pr b { font-family: var(--font-display); color: var(--ink); }
 .swatch-row { display: flex; gap: 8px; }
+.color-row { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
+.color-pick { width: 46px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 9px; background: #fff; cursor: pointer; }
+.color-val { font-size: 12px; color: var(--muted); }
 .swatch { width: 34px; height: 34px; border-radius: 9px; border: 2px solid transparent; cursor: pointer; padding: 0; }
 .swatch.sel { border-color: var(--ink); }
 .toggle-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); font-size: 13.5px; color: var(--ink); }

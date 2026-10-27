@@ -140,6 +140,7 @@ let tickets = [
 ];
 let icalFeeds = [];
 let liveSlug = "", liveIcalToken = "";
+let studioHeroUrl = ""; // booking-page hero image (saved on upload, like the logo)
 
 const txns = [
   { when: "Today · 9:41 AM", desc: "R-1043 · Balance · Priya Nair", method: "Visa **** 8810", status: "paid", amount: 202.10 },
@@ -1216,6 +1217,27 @@ function renderMockRooms() {
       <div class="bd"><strong>${esc(r.name)}</strong><p>${esc(r.type)} · ★ 4.9</p>
         <div class="pr"><b>${money(roomRate(r))}<span style="font-weight:500;font-size:11.5px;color:var(--faint)"> /night</span></b><button class="btn btn-primary btn-xs" data-action="mock-search" type="button">Select</button></div></div></div>`).join("");
 }
+/* Reflect the studio's colors + hero in the live preview (right pane). */
+function applyStudioPreview() {
+  const brand = $("#bkBrand") ? $("#bkBrand").value : "#0c3b3c";
+  const bg = $("#bkBg") ? $("#bkBg").value : "#f2f5f3";
+  const fg = $("#bkFg") ? $("#bkFg").value : "#101f1e";
+  document.body.dataset.brand = brand;
+  if ($("#bkBrandVal")) $("#bkBrandVal").textContent = brand;
+  if ($("#bkBgVal")) $("#bkBgVal").textContent = bg;
+  if ($("#bkFgVal")) $("#bkFgVal").textContent = fg;
+  const hero = $("#mockHero");
+  if (hero) {
+    hero.style.background = studioHeroUrl
+      ? `linear-gradient(180deg, rgb(8 20 20 / 42%), rgb(8 20 20 / 62%)), url("${String(studioHeroUrl).replace(/"/g, "%22")}") center / cover no-repeat`
+      : `linear-gradient(180deg, ${brand}e8, ${brand}c2), repeating-linear-gradient(115deg, ${brand} 0 26px, rgb(0 0 0 / 22%) 26px 52px)`;
+  }
+  const page = $("#mockPage");
+  if (page) { page.style.background = bg; page.style.color = fg; }
+  const thumb = $("#bkHeroThumb"), empty = $("#bkHeroEmpty");
+  if (thumb) { thumb.src = studioHeroUrl || ""; thumb.hidden = !studioHeroUrl; }
+  if (empty) empty.style.display = studioHeroUrl ? "none" : "grid";
+}
 function bindStudio() {
   $("#bkName").addEventListener("input", (e) => { $("#mockName").textContent = (e.target.value || "Your property").toUpperCase() + " · ESTES PARK"; });
   $("#bkHead").addEventListener("input", (e) => { $("#mockHead").textContent = e.target.value; });
@@ -1224,8 +1246,45 @@ function bindStudio() {
   $("#bkColors").addEventListener("click", (e) => {
     const b = e.target.closest(".swatch"); if (!b) return;
     $$("#bkColors .swatch").forEach((s) => s.classList.toggle("sel", s === b));
-    document.body.dataset.brand = b.dataset.c;
-    $("#mockHero").style.background = `linear-gradient(180deg, ${b.dataset.c}e8, ${b.dataset.c}c2), repeating-linear-gradient(115deg, ${b.dataset.c} 0 26px, rgb(0 0 0 / 22%) 26px 52px)`;
+    if ($("#bkBrand")) $("#bkBrand").value = b.dataset.c;
+    applyStudioPreview();
+  });
+  ["bkBrand", "bkBg", "bkFg"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", () => {
+      if (id === "bkBrand") $$("#bkColors .swatch").forEach((s) => s.classList.toggle("sel", s.dataset.c === el.value));
+      applyStudioPreview();
+    });
+  });
+  const heroFile = $("#bkHeroFile");
+  if (heroFile) heroFile.addEventListener("change", async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { toast("Hero image too large", "Please use an image under 5 MB", "warn"); return; }
+    try {
+      let url;
+      if (window.SHDB && SHDB.hasLive()) {
+        url = await SHDB.uploadPublic("property-logos", `${SHDB.tenantId()}/hero-${Date.now()}.${(f.name.split(".").pop() || "png").toLowerCase()}`, f);
+        await SHDB.updateTenantSettings({ hero_image_url: url });
+        toast("Hero image saved", "It now tops your booking page", "ok");
+      } else {
+        url = URL.createObjectURL(f);
+        toast("Hero preview only", "Sign in live to save it to your property", "warn");
+      }
+      studioHeroUrl = url;
+      applyStudioPreview();
+    } catch { toast("Hero upload failed", "Check the image and try again", "err"); }
+  });
+  const heroRemove = $("#bkHeroRemove");
+  if (heroRemove) heroRemove.addEventListener("click", async () => {
+    if (!studioHeroUrl) return;
+    if (window.SHDB && SHDB.hasLive()) {
+      try { await SHDB.updateTenantSettings({ hero_image_url: null }); } catch { toast("Could not remove hero", "Supabase write failed", "warn"); return; }
+    }
+    studioHeroUrl = "";
+    if (heroFile) heroFile.value = "";
+    applyStudioPreview();
+    toast("Hero image removed", "Your headline sits on the brand color again", "ok");
   });
 }
 
@@ -1832,7 +1891,10 @@ document.addEventListener("click", (e) => {
         slug: slugVal || undefined,
         booking_headline: $("#bkHead").value.trim(),
         booking_subheading: $("#bkSub").value.trim(),
-        brand_color: document.body.dataset.brand || "#0c3b3c",
+        brand_color: $("#bkBrand") ? $("#bkBrand").value : (document.body.dataset.brand || "#0c3b3c"),
+        booking_bg_color: $("#bkBg") ? $("#bkBg").value : null,
+        booking_fg_color: $("#bkFg") ? $("#bkFg").value : null,
+        hero_image_url: studioHeroUrl || null,
         ga_measurement_id: $("#bkGa").value.trim() || null,
         booking_redirect_url: $("#bkRedirect").value.trim() || null,
         booking_by_type: !!($("#bkByType") && $("#bkByType").checked),
@@ -2274,6 +2336,11 @@ function loadLiveIntoUI() {
     }
     if ($("#bkGa")) $("#bkGa").value = live.tenant.ga_measurement_id || "";
     if ($("#bkRedirect")) $("#bkRedirect").value = live.tenant.booking_redirect_url || "";
+    if (live.tenant.brand_color && $("#bkBrand")) { $("#bkBrand").value = live.tenant.brand_color; $$("#bkColors .swatch").forEach((s) => s.classList.toggle("sel", s.dataset.c === live.tenant.brand_color)); }
+    if (live.tenant.booking_bg_color && $("#bkBg")) $("#bkBg").value = live.tenant.booking_bg_color;
+    if (live.tenant.booking_fg_color && $("#bkFg")) $("#bkFg").value = live.tenant.booking_fg_color;
+    studioHeroUrl = live.tenant.hero_image_url || "";
+    applyStudioPreview();
     if ($("#bkDepositOn")) $("#bkDepositOn").checked = !!live.tenant.deposit_enabled;
     if ($("#bkByType")) $("#bkByType").checked = live.tenant.booking_by_type !== false;
     if ($("#bkDepositPct") && live.tenant.deposit_percent) $("#bkDepositPct").value = live.tenant.deposit_percent;
