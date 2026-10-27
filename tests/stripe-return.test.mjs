@@ -24,3 +24,11 @@ test("the app greets Stripe Connect returns and routes to Settings", () => {
   assert.match(app, /get\("stripe"\)/);
   assert.match(app, /toast\("Stripe connected"/);
 });
+
+test("connect status syncs from Stripe (source of truth) into the tenant flag", () => {
+  assert.match(connect, /action === "status"/);
+  assert.match(connect, /charges_enabled && account\.details_submitted/);
+  assert.match(connect, /stripe_onboarding_complete: connected/);
+  assert.match(app, /async function syncStripeStatus\(\)/);
+  assert.match(app, /btn\.textContent = x\.done \? "Connected ✓" : "Connect"/);
+});

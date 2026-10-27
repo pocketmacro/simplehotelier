@@ -292,7 +292,28 @@ function renderSetupUI() {
     const strong = row.querySelector("strong"); if (strong) strong.textContent = x.title;
     const p = row.querySelector("p"); if (p) p.textContent = x.desc;
     const goEdit = row.querySelector(".check-go"); if (goEdit) goEdit.style.display = x.done ? "" : "none";
+    if (x.key === "payouts") {
+      const btn = row.querySelector("[data-action='connect-bank']");
+      if (btn) { btn.textContent = x.done ? "Connected ✓" : "Connect"; btn.disabled = !!x.done; }
+    }
   });
+}
+
+/* Ask Stripe (via our function) whether Connect onboarding is really done,
+   and refresh the checklist when it is. Runs on load and after ?stripe=done. */
+let stripeSyncTried = false;
+async function syncStripeStatus() {
+  if (stripeSyncTried || !window.SHDB || !SHDB.hasLive()) return;
+  if (!liveTenant || !liveTenant.stripe_account_id || liveTenant.stripe_onboarding_complete) return;
+  stripeSyncTried = true;
+  try {
+    const d = await fnInvoke("stripe-connect", { tenant_id: SHDB.tenantId(), action: "status" });
+    if (d && d.connected) {
+      liveTenant.stripe_onboarding_complete = true;
+      renderSetupUI();
+      toast("Stripe connected", "Bank payouts are live — you can charge guest cards now", "ok");
+    }
+  } catch { /* Stripe not reachable; the Connect button stays for a retry */ }
 }
 function renderOverview() {
   const greetEl = $("#ovGreet"), subEl = $("#ovSub");
@@ -2046,7 +2067,7 @@ bindStudio(); updateEmbed(null);
   /* Delayed past the live-data setup router so the Stripe landing wins. */
   setTimeout(() => {
     goto("settings");
-    if (s === "done") toast("Stripe connected", "Payouts are on their way — check Plan & billing for status", "ok");
+    if (s === "done") { syncStripeStatus(); toast("Stripe connected", "Payouts are on their way — check Plan & billing for status", "ok"); }
     else toast("Stripe link expired", "Open Settings and click Connect Stripe again for a fresh link", "warn");
   }, 2200);
 })();
@@ -2141,6 +2162,7 @@ function loadLiveIntoUI() {
     liveMembersCount = live.membersCount != null ? live.membersCount : 1;
     renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
     renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns(); renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview(); renderRateMgmt();
+    syncStripeStatus();
     if (live.user) {
       $("#userName").textContent = live.user.email;
       $("#userRole").textContent = "Owner · " + live.tenant.name;

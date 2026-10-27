@@ -18,12 +18,30 @@ const CORS = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
-    const { tenant_id } = await req.json();
+    const { tenant_id, action } = await req.json();
     if (!tenant_id) return json({ error: "tenant_id required" }, 400);
 
     const { data: tenant, error } = await admin
       .from("tenants").select("id, name, contact_email, stripe_account_id").eq("id", tenant_id).single();
     if (error || !tenant) return json({ error: "tenant not found" }, 404);
+
+    /* Status sync: Stripe is the source of truth for onboarding completion.
+       The dashboard calls this after Connect onboarding and on load so the
+       Settings checklist / Connect button reflect reality. */
+    if (action === "status") {
+      if (!tenant.stripe_account_id) return json({ connected: false, has_account: false });
+      const account = await stripe.accounts.retrieve(tenant.stripe_account_id as string);
+      const connected = !!(account.charges_enabled && account.details_submitted);
+      await admin.from("tenants")
+        .update({ stripe_onboarding_complete: connected })
+        .eq("id", tenant.id);
+      return json({
+        connected, has_account: true,
+        charges_enabled: !!account.charges_enabled,
+        details_submitted: !!account.details_submitted,
+        payouts_enabled: !!account.payouts_enabled
+      });
+    }
 
     let accountId = tenant.stripe_account_id as string | null;
     if (!accountId) {
