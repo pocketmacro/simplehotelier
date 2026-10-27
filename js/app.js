@@ -385,11 +385,11 @@ function renderOverview() {
   const nh = $("#navHkCount"); if (nh) { nh.textContent = dirty; nh.style.display = dirty ? "" : "none"; }
   const kv = $("#bkPerfKv");
   if (kv) kv.innerHTML = `
-    <dt>Rooms listed</dt><dd class="mono">${rooms.length}</dd>
-    <dt>Room types</dt><dd class="mono">${roomTypes.length}</dd>
-    <dt>Add-ons enabled</dt><dd class="mono">${addons.filter((a) => a.on).length}</dd>
-    <dt>Reservations on file</dt><dd class="mono">${active.length}</dd>
-    <dt>Booked revenue</dt><dd class="mono">${money(active.reduce((s, r) => s + r.total, 0))}</dd>`;
+    <dt>Rooms listed</dt><dd class="tnum">${rooms.length}</dd>
+    <dt>Room types</dt><dd class="tnum">${roomTypes.length}</dd>
+    <dt>Add-ons enabled</dt><dd class="tnum">${addons.filter((a) => a.on).length}</dd>
+    <dt>Reservations on file</dt><dd class="tnum">${active.length}</dd>
+    <dt>Booked revenue</dt><dd class="tnum">${money(active.reduce((s, r) => s + r.total, 0))}</dd>`;
 }
 
 function renderMiniRooms() {
@@ -1212,7 +1212,7 @@ function renderFolios() {
       <td class="mono">${esc(r.ref)}</td><td><span class="room-code">${esc(r.room)}</span></td>
       <td><span class="tag">Room</span><span class="tag">Taxes</span>${r.ref === "R-1044" ? `<span class="tag">Firewood</span>` : ""}</td>
       <td class="num">${money(r.paid)}</td><td class="num" style="color:var(--danger)">${money(balance(r))}</td>
-      <td style="text-align:right"><button class="btn btn-brass btn-xs" data-action="charge" data-ref="${esc(r.ref)}" type="button">Charge ${money(balance(r))}</button></td></tr>`).join("") ||
+      <td style="text-align:right"><button class="btn btn-ghost btn-xs" data-action="charge" data-ref="${esc(r.ref)}" type="button">Charge ${money(balance(r))}</button></td></tr>`).join("") ||
     `<tr><td colspan="7"><div class="empty">All folios settled.</div></td></tr>`;
 }
 function renderTxns() {

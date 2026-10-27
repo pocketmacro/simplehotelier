@@ -29,6 +29,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css">
 <link rel="stylesheet" href="css/landing.css">
 <link rel="icon" href="assets/favicon.svg">
 </head>
@@ -108,9 +109,21 @@
         <p>Firewood, breakfast baskets, pet fees, late checkout. Percent and per-night taxes stack the way your county actually collects them.</p>
       </article>
       <article class="cell img rv"><img src="assets/cabin-interior.jpg" alt="Cabin bedroom with wood walls, white linen and a wood stove by the window" loading="lazy"></article>
-      <article class="cell wide rv">
+      <article class="cell wide report rv">
         <h3>Reports you can read</h3>
         <p>Revenue by day, where bookings come from, top rooms, and exactly how much tax you collected and owe.</p>
+        <div class="mini-rep" aria-hidden="true">
+          <div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="days"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+        </div>
+        <div class="mini-rep" aria-hidden="true">
+          <dl>
+            <div><dt>Booked this week</dt><dd>$6,240</dd></div>
+            <div><dt>Direct bookings</dt><dd>71%</dd></div>
+            <div><dt>Top room</dt><dd>C1 Grove</dd></div>
+            <div><dt>Lodging tax owed</dt><dd>$312.00</dd></div>
+          </dl>
+        </div>
       </article>
     </div>
   </section>

@@ -1,0 +1,41 @@
+/* SimpleHotelier — platform palette and type, shared by the dashboard
+   (css/app.css) and the marketing site (css/landing.css), so the two stay
+   one brand: deep pine, bone, brass. Guest booking pages use per-property
+   themes instead (js/booking-theme.js, css/book.css). */
+:root {
+  /* Pine: brand surfaces, primary actions, the dashboard sidebar. */
+  --sh-pine-950: #08292a;
+  --sh-pine-900: #0a2a2b;
+  --sh-pine-800: #0c3b3c;
+  --sh-pine-700: #115152;
+  --sh-pine-600: #1a6465;
+  --sh-pine-100: #dce9e6;
+
+  /* Brass: the accent. 600 carries white text (4.9:1); 500 is decorative only. */
+  --sh-brass-500: #b97a2a;
+  --sh-brass-600: #96621e;
+  --sh-brass-700: #7d5118;
+  --sh-brass-100: #f7ecda;
+
+  /* Ink: text on light surfaces. */
+  --sh-ink-900: #101f1e;
+  --sh-ink-700: #33413f;
+  --sh-ink-500: #5d6f6b;
+  --sh-ink-400: #5f7a73;
+
+  /* Surfaces and lines. Bone is the marketing canvas; the app canvas is a
+     touch deeper so white cards separate on long working sessions. */
+  --sh-bone: #f4f6f1;
+  --sh-canvas: #edf0ee;
+  --sh-paper: #fdfffc;
+  --sh-surface-2: #f6f8f7;
+  --sh-surface-3: #e9efed;
+  --sh-line: #dbe4e1;
+  --sh-line-soft: #e8eeec;
+
+  --sh-font-display: "Sora", "Segoe UI", system-ui, sans-serif;
+  --sh-font-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --sh-font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+::selection { background: color-mix(in srgb, var(--sh-pine-600) 24%, transparent); color: var(--sh-ink-900); }
