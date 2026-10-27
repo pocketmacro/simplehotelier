@@ -28,8 +28,9 @@ test("the dashboard never selects every tenants column", () => {
   assert.match(db, /rpc\("member_tenant", \{ p_tenant: mem\[0\]\.tenant_id \}\)/);
   assert.match(db, /tenants\?select=id,name,slug,contact_email,subscription_status,current_period_end,created_at&order=/);
   assert.match(auth, /restInsert\("tenants\?select=id,name,slug,created_by,contact_email"/);
-  const starReads = (db.match(/tenants\?[^"]*select=\*/g) || []);
-  assert.equal(starReads.length, 1, "only the pre-migration fallback reads tenants with select=*");
+  // The only select=* on tenants is the fallback for a database without member_tenant().
+  assert.match(db, /\.catch\(\(\) => rest\("tenants\?id=eq\." \+ mem\[0\]\.tenant_id \+ "&select=\*"\)/);
+  assert.doesNotMatch(db, /"tenants\?select=\*/);
   assert.match(app, /!ROLE_VIEWS\[liveRole\] && !live\.tenant\.stripe_customer_id/, "billing reminder is for owners/admins");
 });
 
