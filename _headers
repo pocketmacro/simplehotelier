@@ -1,9 +1,9 @@
 # SimpleHotelier — security headers (Cloudflare Workers static assets).
 # Every response gets the baseline; each HTML page gets its own
-# (Cloudflare Web Analytics' beacon is allowed on every page: the zone injects it.)
 # Content-Security-Policy. Scripts may only come from this site (no inline
-# script anywhere) plus the few services each page needs. tests/headers.test.mjs
-# keeps these in sync with the pages.
+# script anywhere) plus the few services each page needs. Cloudflare Web
+# Analytics' beacon is allowed on every page because the zone injects it.
+# tests/hardening.test.mjs keeps these in sync with the pages.
 
 /*
   X-Content-Type-Options: nosniff
