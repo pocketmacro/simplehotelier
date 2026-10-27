@@ -83,8 +83,11 @@
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   const state = { tenant: null, rooms: [], types: {}, addons: [], taxes: [], selected: null, selectedTypeId: null, available: null, gaId: "", overrides: {}, dep: null, paying: null, stripe: null, cardEl: null };
-  /* Properties choose: guests book a room type (we auto-assign a unit) or the exact room. */
-  const byType = () => !!(state.tenant && state.tenant.booking_by_type !== false);
+  /* Properties choose: guests book a room type (we auto-assign a unit) or the exact room.
+     Safety net: by-type only engages when at least one room actually has a type —
+     otherwise fall back to specific rooms so the page never comes up empty. */
+  const byType = () => !!(state.tenant && state.tenant.booking_by_type !== false
+    && state.rooms.some((r) => r.room_type_id && state.types[r.room_type_id]));
 
   /* Promo code can arrive in the link, e.g. book.html?property=you&PROMO=EXTENDED_STAY */
   const urlPromo = (params.get("PROMO") || params.get("promo") || "").trim().toUpperCase();
