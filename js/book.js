@@ -489,11 +489,23 @@
     // Deposits are destination charges on the platform account (charge-guest),
     // so Stripe.js uses the platform key without a connected-account header.
     state.stripe = window.Stripe(cfg.STRIPE_PUBLISHABLE_KEY);
-    const elements = state.stripe.elements();
-    const ink = (state.theme && state.theme.colors.ink) || "#1c2620";
-    state.cardEl = elements.create("card", { style: { base: { fontSize: "16px", color: ink, iconColor: ink, "::placeholder": { color: ink + "99" } } } });
+    // The card field sits on a card, so it uses the theme's Card text color
+    // (not the page text, which can be light on a dark page) and body font.
+    const t = state.theme || SHTheme.normalize({});
+    const text = t.colors.surfaceInk, hint = mixHex(text, t.colors.surface, 0.58);
+    const elements = state.stripe.elements({ fonts: [{ cssSrc: SHTheme.fontsHref(t) }] });
+    state.cardEl = elements.create("card", { style: {
+      base: { fontSize: "16px", fontFamily: SHTheme.FONTS[t.bodyFont].stack, color: text, iconColor: text, "::placeholder": { color: hint } },
+      invalid: { color: "#a8261d", iconColor: "#a8261d" }
+    } });
     state.cardEl.mount("#cardElement");
   }
+  /* #rrggbb a over b at weight w (Stripe styles need plain colors, not color-mix). */
+  function mixHex(a, b, w) {
+    return "#" + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * w + parseInt(b.slice(i, i + 2), 16) * (1 - w))
+      .toString(16).padStart(2, "0")).join("");
+  }
+  $("#cardLabel").addEventListener("click", () => { if (state.cardEl) state.cardEl.focus(); });
   function showSuccess(code, total, extra) {
     // The property still confirms every online booking, so never say "confirmed" here.
     const mode = state.paying && state.paying.mode;

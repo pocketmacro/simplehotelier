@@ -99,7 +99,9 @@
       <div class="bk-pay" id="payPanel" hidden>
         <h3 id="payTitle">Deposit payment</h3>
         <p id="payText"></p>
-        <div id="cardElement" class="bk-cardel"></div>
+        <p class="bk-card-label" id="cardLabel"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Card details</p>
+        <div id="cardElement" class="bk-cardel" role="group" aria-labelledby="cardLabel" aria-describedby="cardHelp"></div>
+        <p class="bk-card-help" id="cardHelp">Card number, expiry date, security code (CVC) and ZIP code.</p>
         <p class="bk-error" id="payError" role="alert" hidden></p>
       </div>
       <ul class="bk-trust">

@@ -193,3 +193,17 @@ test("links and badges stay readable when the button color matches the page", ()
   assert.match(bookCss, /^a \{ color: var\(--link\); \}/m);
   assert.match(bookCss, /--link: var\(--card-link\);/);
 });
+
+test("the card field is readable on any theme and clearly labelled", () => {
+  // Regression: the Stripe field used the page text color, so on a dark page
+  // with light cards its text and placeholders were invisible.
+  assert.match(book, /const text = t\.colors\.surfaceInk, hint = mixHex\(text, t\.colors\.surface, 0\.58\);/);
+  assert.match(book, /base: \{ fontSize: "16px", fontFamily: SHTheme\.FONTS\[t\.bodyFont\]\.stack, color: text, iconColor: text, "::placeholder": \{ color: hint \} \}/);
+  assert.doesNotMatch(book, /colors\.ink\) \|\| "#1c2620"/);
+  assert.match(bookHtml, /<p class="bk-card-label" id="cardLabel">[\s\S]*?Card details<\/p>/);
+  assert.match(bookHtml, /<div id="cardElement" class="bk-cardel" role="group" aria-labelledby="cardLabel" aria-describedby="cardHelp"><\/div>/);
+  assert.match(bookHtml, /id="cardHelp">Card number, expiry date, security code \(CVC\) and ZIP code\./);
+  const headers = readFileSync(new URL("../_headers", import.meta.url), "utf8");
+  const bookCsp = headers.split(/\n(?=\/)/).find((b) => b.startsWith("/book\n")) || "";
+  assert.match(bookCsp, /connect-src [^;]*https:\/\/fonts\.googleapis\.com/, "Stripe fetches the font CSS for the card field");
+});
