@@ -128,9 +128,10 @@ test("Spark has a per-user daily limit enforced before the paid API call", () =>
   assert.match(read("js/support.js"), /res\.status === 429/);
 });
 
-test("CI runs the tests and lints the functions", () => {
+test("CI runs the tests, lints and type-checks the functions", () => {
   const ci = read(".github/workflows/ci.yml");
   assert.match(ci, /node --test tests\/\*\.test\.mjs/);
   assert.match(ci, /deno lint supabase\/functions/);
+  assert.match(ci, /deno check supabase\/functions\/\*\/index\.ts/);
   assert.match(ci, /permissions:\s*\n\s*contents: read/);
 });

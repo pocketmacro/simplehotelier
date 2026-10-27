@@ -7,6 +7,8 @@
  * Return `candidate`'s origin when it is one of ours, otherwise `site`.
  * Ours: the configured site, https://simplehotelier.com and its subdomains,
  * any origin listed in `extra`, and http://localhost / 127.0.0.1 for dev.
+ * @param {string | null | undefined} candidate
+ * @param {{ site?: string, extra?: string[] }} [options]
  */
 export function safeOrigin(candidate, { site = "https://simplehotelier.com", extra = [] } = {}) {
   const fallback = String(site).replace(/\/$/, "");
@@ -24,6 +26,8 @@ export function safeOrigin(candidate, { site = "https://simplehotelier.com", ext
 /**
  * Browser origins allowed to call our functions (CORS): the site, property
  * subdomains, the workers.dev deployment, localhost/127.0.0.1, and `extra`.
+ * @param {string | null | undefined} origin
+ * @param {string[]} [extra]
  */
 export function isOwnOrigin(origin, extra = []) {
   let u;

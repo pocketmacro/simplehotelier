@@ -15,6 +15,7 @@ export function overlapNights(r, start, end) {
  * computeWeeklyStats({ roomCount, reservations, transactions, weekStart, today, arrivalWindowDays })
  * week is [weekStart, weekStart+7). Revenue = paid transactions in the week,
  * falling back to reservation paid_cents collected in the week when no ledger rows exist.
+ * @param {{ roomCount?: number, reservations?: any[], transactions?: any[], weekStart: string, today: string, arrivalWindowDays?: number }} input
  */
 export function computeWeeklyStats({ roomCount = 0, reservations = [], transactions = [], weekStart, today, arrivalWindowDays = 7 }) {
   const weekEnd = addDaysISO(weekStart, 7);
