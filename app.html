@@ -25,6 +25,7 @@
       <span class="prop-dot"></span>
       <span><strong id="propNameSide">Pinecrest Cabins</strong><span id="propSubSide">8 units · Estes Park, CO</span></span>
     </button>
+    <div id="demoBanner" hidden style="margin:10px 4px 0;padding:9px 12px;border:1px solid #e3c878;background:#fdf6e0;color:#6b5410;border-radius:10px;font-size:12.5px;line-height:1.45"><strong>Demo — sample property.</strong> Nothing here is real, saved, or connected to an account. <button class="btn btn-ghost btn-xs" id="demoExit" type="button" style="margin-top:6px">Exit demo &amp; sign in</button></div>
 
     <div class="nav-label">Manage</div>
     <nav class="nav" id="mainNav">
@@ -235,9 +236,9 @@
           <button class="btn btn-brass" type="button" data-action="charge">Charge customer</button>
         </div>
         <div class="grid g-kpi" style="grid-template-columns:repeat(3,1fr)">
-          <div class="card kpi"><div class="k-label">Collected · Oct</div><div class="k-value">$16.1<small>k</small></div><div class="k-sub">92 charges · 0 failed today</div></div>
-          <div class="card kpi"><div class="k-label">Outstanding balances</div><div class="k-value">$2.3<small>k</small></div><div class="k-sub">Across 5 open folios</div></div>
-          <div class="card kpi"><div class="k-label">Next payout</div><div class="k-value">$4.8<small>k</small></div><div class="k-sub">Arrives Wed · **** 4412</div></div>
+          <div class="card kpi"><div class="k-label">Collected</div><div class="k-value" id="payCollected">$0.00</div><div class="k-sub" id="payCollectedSub">0 charges</div></div>
+          <div class="card kpi"><div class="k-label">Outstanding balances</div><div class="k-value" id="payOutstanding">$0.00</div><div class="k-sub" id="payOutstandingSub">Across 0 open folios</div></div>
+          <div class="card kpi"><div class="k-label">Next payout</div><div class="k-value">—</div><div class="k-sub">No payout scheduled</div></div>
         </div>
         <div class="section-title"><h2>Open folios</h2><div class="line"></div></div>
         <div class="table-wrap"><table class="data" id="folioTable">

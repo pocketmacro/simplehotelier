@@ -520,7 +520,12 @@
   async function load() {
     if (!base || !anon) { showError("Booking is not configured yet. Please contact the property directly."); return; }
     try {
-      const tenants = await api("tenants?slug=eq." + encodeURIComponent(slug) + "&select=*");
+      // Public booking profile only — never select=*: tenants also hold
+      // secrets (ical_token, Stripe customer ids, private notification
+      // emails) that the anon key must not be able to read (see the
+      // 20261112000000_demo_lockdown migration).
+      const tenantCols = "id,name,slug,contact_email,phone,logo_url,brand_color,booking_headline,booking_subheading,description,address_line1,address_line2,postcode,city,state,country,website_url,facebook_url,instagram_url,twitter_url,youtube_url,star_rated,star_count,gdpr_consent,check_in_time,check_out_time,cancellation_policy,cancellation_policy_text,rental_terms,currency,stripe_account_id,stripe_onboarding_complete,ga_measurement_id,booking_redirect_url,deposit_enabled,deposit_percent,booking_by_type,included_occupants,maximum_total_occupants,min_room_rate_cents";
+      const tenants = await api("tenants?slug=eq." + encodeURIComponent(slug) + "&select=" + tenantCols);
       state.tenant = tenants && tenants[0];
       if (!state.tenant) { showError("We could not find this property. Check the link and try again."); return; }
       const t = state.tenant;
@@ -575,7 +580,7 @@
         };
       });
       const [rooms, addons, taxes, typeRows] = await Promise.all([
-        api("rooms?" + tid + "&select=*&order=sort_order.asc"),
+        api("rooms?" + tid + "&select=id,tenant_id,room_type_id,code,name,sleeps,rate_cents,weekend_rate_cents,photos,sort_order&order=sort_order.asc"),
         api("addons?" + tid + "&active=eq.true&select=*&order=name.asc"),
         api("tax_rules?" + tid + "&active=eq.true&select=*&order=sort_order.asc"),
         api("room_types?" + tid + "&select=*&order=name.asc").catch(() => [])

@@ -1,7 +1,10 @@
 /* SimpleHotelier — Supabase data layer (REST, no build step).
-   If js/config.js is empty, everything no-ops and the app keeps demo data.
-   Only the anon key is used in the browser. Signed-in reads send the user's
-   access token from localStorage ("sh_access_token") once login is added. */
+   The dashboard only ever loads a property the signed-in user is a member
+   of. There is deliberately no anonymous/demo tenant lookup here: demo mode
+   is a purely local, explicit opt-in in the UI (see js/app.js, js/auth.js)
+   and must never adopt a real tenant id. Only the anon (publishable) key is
+   used in the browser; signed-in reads send the user's access token from
+   localStorage ("sh_access_token"). */
 "use strict";
 
 (function () {
@@ -139,12 +142,12 @@
       if (mt) {
         user = mt.user;
         tenant = mt.tenant;
-        if (!tenant) return { tenant: null, user, rooms: [], reservations: [], addons: [], taxes: [] };
       }
       if (!tenant) {
-        const tenants = await rest("tenants?slug=eq." + encodeURIComponent(cfg.TENANT_SLUG || "pinecrest") + "&select=*");
-        tenant = tenants && tenants[0];
-        if (!tenant) return null;
+        // No signed-in member, no data. Never fall back to a named "demo"
+        // tenant: that would load a real property into an anonymous
+        // session and adopt its id for writes (hasLive() === true).
+        return { tenant: null, user, rooms: [], reservations: [], addons: [], taxes: [], roomTypes: [], txns: [], tickets: [], icalFeeds: [] };
       }
       const tid = "tenant_id=eq." + tenant.id;
       ctx.tenantId = tenant.id;
@@ -208,7 +211,7 @@
         }))
       };
     } catch (err) {
-      console.warn("[SimpleHotelier] Live load failed, using demo data:", err.message);
+      console.warn("[SimpleHotelier] Live load failed:", err.message);
       return null;
     }
   }

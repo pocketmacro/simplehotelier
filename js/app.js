@@ -1135,7 +1135,23 @@ function openRoomPhotos(code) {
 }
 
 /* ---------------- Payments ---------------- */
+/* KPI cards are computed from this account's folios/transactions only —
+   a new account has none, so it must read $0.00 / 0, never sample figures. */
+function renderPaymentStats() {
+  const collectedEl = $("#payCollected");
+  if (!collectedEl) return;
+  const paid = txns.filter((t) => t.status === "paid");
+  collectedEl.textContent = money(paid.reduce((s, t) => s + (Number(t.amount) || 0), 0));
+  const collectedSub = $("#payCollectedSub");
+  if (collectedSub) collectedSub.textContent = `${paid.length} charge${paid.length === 1 ? "" : "s"}`;
+  const open = reservations.filter((r) => balance(r) > 0 && r.status !== "cancelled");
+  const outstandingEl = $("#payOutstanding");
+  if (outstandingEl) outstandingEl.textContent = money(open.reduce((s, r) => s + balance(r), 0));
+  const outstandingSub = $("#payOutstandingSub");
+  if (outstandingSub) outstandingSub.textContent = `Across ${open.length} open folio${open.length === 1 ? "" : "s"}`;
+}
 function renderFolios() {
+  renderPaymentStats();
   const open = reservations.filter((r) => balance(r) > 0 && r.status !== "cancelled");
   $("#folioTable tbody").innerHTML = open.map((r) => `
     <tr><td class="guest"><strong>${esc(r.guest)}</strong><span>${esc(r.contact)}</span></td>
@@ -1146,10 +1162,12 @@ function renderFolios() {
     `<tr><td colspan="7"><div class="empty">All folios settled.</div></td></tr>`;
 }
 function renderTxns() {
+  renderPaymentStats();
   $("#txnTable tbody").innerHTML = txns.map((t) => `
     <tr style="cursor:default"><td style="white-space:nowrap">${esc(t.when)}</td><td>${esc(t.desc)}</td>
       <td>${esc(t.method)}</td><td>${t.status === "paid" ? pill(["paid", "Paid"]) : pill(["neutral", "Refunded"])}</td>
-      <td class="num">${money(t.amount)}</td></tr>`).join("");
+      <td class="num">${money(t.amount)}</td></tr>`).join("") ||
+    `<tr><td colspan="5"><div class="empty">No transactions yet.</div></td></tr>`;
 }
 
 /* ---------------- Add-ons + taxes ---------------- */
@@ -2178,28 +2196,56 @@ async function tryClaimInvite() {
   return false;
 }
 
-/* Live Supabase data (falls back silently to demo data when unconfigured).
-   Reservations require a signed-in member under RLS; rooms/add-ons/taxes are public. */
+/* Demo mode is explicit and local-only: it is entered only via the
+   "Explore the demo first" button (sessionStorage flag, set in js/auth.js),
+   shows the built-in sample data, and never reads or writes a real
+   property. Every other path loads only the signed-in member's property;
+   a failed load shows an empty app, never the demo data. */
+function demoMode() {
+  try { return sessionStorage.getItem("sh_demo") === "1"; } catch { return false; }
+}
+function renderDemoBanner() {
+  const b = $("#demoBanner");
+  if (b) b.hidden = !demoMode();
+}
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#demoExit")) return;
+  try { sessionStorage.removeItem("sh_demo"); } catch { /* no storage */ }
+  location.reload();
+});
+/* Live Supabase data for the signed-in member's property only. */
 function loadLiveIntoUI() {
   const statusEl = $("#dbStatus");
+  renderDemoBanner();
+  if (demoMode()) {
+    if (statusEl) statusEl.textContent = "Data source: demo data (sample property — nothing here is real, saved, or connected to an account)";
+    return;
+  }
   if (!window.SHDB || !SHDB.configured()) {
     if (statusEl) statusEl.textContent = "Data source: demo data (add your Supabase keys in js/config.js)";
     return;
   }
   SHDB.loadLiveData().then((live) => {
     if (!live) {
-      if (statusEl) statusEl.textContent = "Data source: demo data (Supabase unreachable — check js/config.js)";
+      // Configured backend failed: show nothing rather than sample data on
+      // what may be a real account's screen.
+      clearAllData();
+      renderAll();
+      if (statusEl) statusEl.textContent = "Could not load your property data — check your connection and reload. No sample data is shown on a real account.";
       return;
     }
     if (!live.tenant) {
-      // Signed in but no property yet. An invited teammate joins their
-      // property here instead of creating one (no card, no trial).
-      if (statusEl) statusEl.textContent = "Signed in as " + (live.user ? live.user.email : "") + " — set up your property to get started.";
       clearAllData();
       renderAll();
-      if (live.user) {
-        tryClaimInvite().then((joined) => { if (joined) loadLiveIntoUI(); else openPropertySetup(); });
-      } else openPropertySetup();
+      if (!live.user) {
+        // Anonymous: the login gate handles sign-in / explicit demo entry.
+        if (statusEl) statusEl.textContent = "Sign in to load your property.";
+        return;
+      }
+      // Signed in but no property yet. An invited teammate joins their
+      // property here instead of creating one (no card, no trial).
+      if (statusEl) statusEl.textContent = "Signed in as " + live.user.email + " — set up your property to get started.";
+      tryClaimInvite().then((joined) => { if (joined) loadLiveIntoUI(); else openPropertySetup(); });
       return;
     }
     // Real account: replace wholesale, even when empty — demo data must never leak in.

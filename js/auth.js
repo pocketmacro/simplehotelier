@@ -187,7 +187,14 @@
     $("#signupForm").hidden = which !== "signup";
     showError("");
   }
+  /* Demo is an explicit, local-only opt-in. It sets a session flag and
+     reloads so the dashboard boots straight into sample data without ever
+     querying a real property (see demoMode() in js/app.js). */
+  const demoChosen = () => { try { return sessionStorage.getItem("sh_demo") === "1"; } catch { return false; } };
+  const clearDemo = () => { try { sessionStorage.removeItem("sh_demo"); } catch { /* no storage */ } };
+
   function enterApp(user) {
+    clearDemo();
     if (gate()) gate().hidden = true;
     const out = $("#signOutBtn"); if (out) out.hidden = false;
     window.dispatchEvent(new CustomEvent("sh-auth", { detail: { user } }));
@@ -210,8 +217,11 @@
       const submit = $("#suSubmit"); if (submit) submit.textContent = "Create free account & join";
       setTab("signup");
     }
-    $("#demoBtn").addEventListener("click", () => { gate().hidden = true; });
-    $("#signOutBtn").addEventListener("click", async () => { await logout(); location.reload(); });
+    $("#demoBtn").addEventListener("click", () => {
+      try { sessionStorage.setItem("sh_demo", "1"); } catch { /* no storage */ }
+      location.reload();
+    });
+    $("#signOutBtn").addEventListener("click", async () => { clearDemo(); await logout(); location.reload(); });
 
     $("#loginForm").addEventListener("submit", async (e) => {
       e.preventDefault(); showError("");
@@ -244,6 +254,9 @@
       } catch (err) { showError(err.message); }
       btn.disabled = false; btn.textContent = invited ? "Create free account & join" : "Create property & log in";
     });
+
+    // Demo was explicitly chosen: skip the gate (app.js renders sample data).
+    if (demoChosen() && !accessToken()) { gate().hidden = true; return; }
 
     // Returning session? Validate in the background; otherwise show the gate.
     if (accessToken()) {
