@@ -357,7 +357,9 @@
   async function mountCard() {
     if (state.cardEl) return;
     await loadStripeJs();
-    state.stripe = window.Stripe(cfg.STRIPE_PUBLISHABLE_KEY, { stripeAccount: state.tenant.stripe_account_id });
+    // Deposits are destination charges on the platform account (charge-guest),
+    // so Stripe.js uses the platform key without a connected-account header.
+    state.stripe = window.Stripe(cfg.STRIPE_PUBLISHABLE_KEY);
     const elements = state.stripe.elements();
     state.cardEl = elements.create("card", { style: { base: { fontFamily: "'Public Sans', sans-serif", fontSize: "15px", color: "#101f1e" } } });
     state.cardEl.mount("#cardElement");
@@ -734,8 +736,17 @@
       fnPost("send-email", { action: "booking_confirmation", reservation_id: resId }).catch(() => {});
       if (state.dep && state.dep.collectible && booked.deposit_cents > 0) {
         // Deposit required: the server works out the amount; switch the button to Pay.
+        // The booking is already saved, so a payment-setup failure must never
+        // re-offer "Request booking" (a retry would book a second room).
         btn.textContent = "Preparing secure payment…";
-        const pi = await fnPost("charge-guest", { tenant_id: state.tenant.id, reservation_id: resId });
+        let pi;
+        try {
+          pi = await fnPost("charge-guest", { tenant_id: state.tenant.id, reservation_id: resId });
+          if (!pi.client_secret) throw new Error("no client secret");
+        } catch {
+          showSuccess(code, total, ` We couldn't start the card payment for your ${money(booked.deposit_cents / 100)} deposit right now — the property will contact you to collect it.`);
+          return;
+        }
         const due = (pi.amount_cents || booked.deposit_cents) / 100;
         state.paying = { resId, code, total, due, clientSecret: pi.client_secret };
         $("#payText").textContent = `A deposit of ${money(due)} (${booked.deposit_percent}% of ${money(total)}) is due today to confirm ${state.selected.name}. The balance is due at the property.`;

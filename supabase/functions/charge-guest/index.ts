@@ -5,9 +5,13 @@
 // percent of the total that create_booking() priced server-side, and only
 // for a fresh, unpaid, online booking request.
 // POST { action: "confirm", tenant_id, payment_intent_id } -> { paid, status }
-// The browser confirms the PaymentIntent with Stripe.js (publishable key);
-// confirm re-reads it from Stripe and records it once (record_stripe_payment).
-// stripe-webhook records the same payment if the browser never comes back.
+// The browser confirms the PaymentIntent with Stripe.js (platform publishable
+// key); confirm re-reads it from Stripe and records it once
+// (record_stripe_payment). stripe-webhook records it if the browser never returns.
+// Destination charges: Stripe does not allow direct charges on Express accounts
+// for new platforms, so the intent lives on the platform with
+// transfer_data.destination = the property's account (funds minus our fee go
+// there) and on_behalf_of = that account (it is the merchant of record).
 // Deploy: supabase functions deploy charge-guest
 // deno-lint-ignore-file no-explicit-any
 import Stripe from "https://esm.sh/stripe@14?target=deno";
@@ -43,12 +47,14 @@ Deno.serve(async (req) => {
       .select("id, currency, stripe_account_id, stripe_onboarding_complete, deposit_enabled, deposit_percent")
       .eq("id", tenantId).maybeSingle();
     if (!tenant?.stripe_account_id) return json({ error: "property has not connected Stripe" }, 400);
-    const stripeAccount = tenant.stripe_account_id as string;
+    const destination = tenant.stripe_account_id as string;
 
     if (body.action === "confirm") {
       if (!body.payment_intent_id) return json({ error: "payment_intent_id required" }, 400);
-      const intent = await stripe.paymentIntents.retrieve(String(body.payment_intent_id), {}, { stripeAccount });
-      if (intent.metadata?.tenant_id !== tenant.id) return json({ error: "payment does not belong to this property" }, 403);
+      const intent = await stripe.paymentIntents.retrieve(String(body.payment_intent_id));
+      if (intent.metadata?.tenant_id !== tenant.id || intent.transfer_data?.destination !== destination) {
+        return json({ error: "payment does not belong to this property" }, 403);
+      }
       const paid = await recordIfSucceeded(intent);
       return json({ paid, status: intent.status });
     }
@@ -74,7 +80,7 @@ Deno.serve(async (req) => {
       .eq("reservation_id", resv.id).eq("status", "pending").not("stripe_payment_intent_id", "is", null)
       .order("created_at", { ascending: false }).limit(1);
     if (open && open[0]) {
-      const existing = await stripe.paymentIntents.retrieve(String(open[0].stripe_payment_intent_id), {}, { stripeAccount });
+      const existing = await stripe.paymentIntents.retrieve(String(open[0].stripe_payment_intent_id));
       if (existing.amount === amount && OPEN_STATUSES.includes(existing.status)) {
         return json({ client_secret: existing.client_secret, payment_intent_id: existing.id, amount_cents: amount });
       }
@@ -88,9 +94,10 @@ Deno.serve(async (req) => {
         currency: (tenant.currency ?? "usd").toLowerCase(),
         description,
         application_fee_amount: Math.round((amount * APP_FEE_PERCENT) / 100),
+        transfer_data: { destination },
+        on_behalf_of: destination,
         metadata: { tenant_id: tenant.id, reservation_id: resv.id, kind: "deposit" },
-      },
-      { stripeAccount }
+      }
     );
 
     await admin.from("transactions").insert({

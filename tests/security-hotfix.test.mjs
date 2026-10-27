@@ -171,6 +171,20 @@ test("charge-guest computes the deposit server-side and records payments atomica
   assert.match(fn("stripe-webhook"), /rpc\("record_stripe_payment"/);
 });
 
+test("deposits are destination charges (Stripe refuses direct charges on Express accounts)", () => {
+  const src = fn("charge-guest");
+  assert.doesNotMatch(src, /stripeAccount/, "no Stripe-Account header: the intent lives on the platform");
+  assert.match(src, /transfer_data: \{ destination \}/);
+  assert.match(src, /on_behalf_of: destination/);
+  assert.match(src, /intent\.transfer_data\?\.destination !== destination/);
+  assert.match(book, /window\.Stripe\(cfg\.STRIPE_PUBLISHABLE_KEY\);/, "Stripe.js must not target the connected account");
+});
+
+test("a deposit setup failure after the booking is saved never re-offers Request booking", () => {
+  const block = book.slice(book.indexOf('fnPost("charge-guest", { tenant_id'), book.indexOf("await mountCard();"));
+  assert.match(block, /catch \{\s*showSuccess\(code, total,/);
+});
+
 test("emails escape guest/owner text and invite links never trust the Origin header", () => {
   const send = fn("send-email");
   assert.doesNotMatch(send, /req\.headers\.get\("origin"\) \|\|/);
