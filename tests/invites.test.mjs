@@ -32,8 +32,11 @@ test("accept-invite joins by token or account email and marks acceptance", () =>
 
 test("invitee account setup skips property creation and billing", () => {
   assert.match(auth, /sh_invite_token/);
-  assert.match(auth, /Create free account & join/);
-  assert.match(auth, /if \(invited\) \{ enterApp\(sessionUser\(\)\); return; \}/);
+  assert.match(auth, /Set password & join/);
+  // The invite branch returns before property creation and billing.
+  const submit = auth.slice(auth.indexOf('$("#signupForm").addEventListener("submit"'));
+  assert.ok(submit.indexOf("if (invited) {") >= 0 && submit.indexOf("if (invited) {") < submit.indexOf("createProperty("));
+  assert.match(submit, /enterApp\(user\);\s+return;\s+\}/);
   assert.match(app, /async function tryClaimInvite\(\)/);
   assert.match(app, /fnInvoke\("accept-invite"/);
 });

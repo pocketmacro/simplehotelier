@@ -271,8 +271,8 @@ let liveTenant = null, liveMembersCount = 1, setupRouted = false;
 let liveRole = "owner";
 const ROLE_VIEWS = {
   staff: ["overview", "reservations", "calendar", "rooms", "housekeeping", "maintenance", "payments", "reports", "support"],
-  cleaner: ["housekeeping", "maintenance", "support"],
-  maintenance: ["maintenance", "support"]
+  cleaner: ["housekeeping", "maintenance"],
+  maintenance: ["maintenance"]
 };
 const ROLE_LABELS = { owner: "Owner", admin: "Admin", staff: "Front desk", cleaner: "Housekeeping", maintenance: "Maintenance" };
 const canSee = (view) => !ROLE_VIEWS[liveRole] || ROLE_VIEWS[liveRole].includes(view) || view === "admin";
@@ -2060,6 +2060,12 @@ document.addEventListener("click", (e) => {
       } catch (e) { toast("Could not send invite", e.message, "warn"); }
     })();
   }
+  else if (a === "member-remove") {
+    const { user, email } = el.dataset;
+    confirmAction(`Remove ${email} from the team?`,
+      `They lose access to ${esc(tenantDisplayName || "this property")} right away. You can invite them again later.`, "Remove",
+      () => applyMemberChange(() => SHDB.removeMember(user), "Removed from the team", `${email} no longer has access.`));
+  }
   else if (a === "invite-revoke") {
     if (window.SHDB) SHDB.deleteInvite(el.dataset.id).then(() => { renderInvPending(); renderTeamInvites(); toast("Invite revoked", "That link no longer joins anyone", "ok"); }).catch(() => toast("Revoke failed", "Supabase write failed", "warn"));
   }
@@ -2412,13 +2418,56 @@ async function renderInvPending() {
   if (!el || !window.SHDB || !SHDB.hasLive()) return;
   el.innerHTML = inviteRowsHTML(await SHDB.listInvites());
 }
+/* Settings → Team: who's on the property, their roles, and pending invites.
+   Owners manage anyone; admins everyone but owners (the database enforces
+   this, and keeps at least one owner). Nobody edits their own row here. */
+function teamRowsHTML(members) {
+  const iAmOwner = liveRole === "owner";
+  const roles = (iAmOwner ? ["owner"] : []).concat(["admin", "staff", "cleaner", "maintenance"]);
+  return members.map((m) => {
+    const editable = !m.me && (iAmOwner || m.role !== "owner");
+    const label = m.name || m.email;
+    return `<div class="team-row">
+      <span class="avatar">${esc(label.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?")}</span>
+      <div class="team-who"><strong>${esc(label)}${m.me ? ` <span class="tag">You</span>` : ""}</strong>${m.name ? `<span>${esc(m.email)}</span>` : ""}</div>
+      ${editable
+        ? `<select class="select team-role" data-user="${esc(m.userId)}" data-email="${esc(m.email)}" data-role="${esc(m.role)}" aria-label="Role for ${esc(label)}">${roles.map((r) => `<option value="${r}"${r === m.role ? " selected" : ""}>${ROLE_LABELS[r]}</option>`).join("")}</select>
+           <button class="btn btn-ghost btn-xs" type="button" data-action="member-remove" data-user="${esc(m.userId)}" data-email="${esc(m.email)}">Remove</button>`
+        : `<span class="pill">${esc(ROLE_LABELS[m.role] || m.role)}</span>`}
+    </div>`;
+  }).join("");
+}
 async function renderTeamInvites() {
   const el = $("#teamInvites");
   if (!el) return;
-  if (!window.SHDB || !SHDB.hasLive()) { el.innerHTML = `<p class="hint">Sign in with your property account to invite your team.</p>`; return; }
-  const list = await SHDB.listInvites();
-  el.innerHTML = (list.length ? inviteRowsHTML(list) : `<p class="hint">No pending invites. Invite cleaners and staff — they create a free account and join this property automatically.</p>`);
+  if (!window.SHDB || !SHDB.hasLive()) { el.innerHTML = `<p class="hint">Sign in with your property account to manage your team.</p>`; return; }
+  const [members, invites] = await Promise.all([SHDB.teamMembers().catch(() => []), SHDB.listInvites().catch(() => [])]);
+  el.innerHTML = (members.length ? `<div class="team-list">${teamRowsHTML(members)}</div>` : "") +
+    `<h4 class="team-sub">Pending invites</h4>` +
+    (invites.length ? inviteRowsHTML(invites) : `<p class="hint">No pending invites. Invite cleaners and staff — they create a free account and join this property automatically.</p>`);
+  liveMembersCount = members.length || liveMembersCount;
 }
+async function applyMemberChange(work, okTitle, okBody) {
+  try {
+    await work();
+    toast(okTitle, okBody, "ok");
+  } catch (e) {
+    toast("Team not changed", (e && e.details) || "Check your connection and try again.", "warn");
+  }
+  renderTeamInvites();
+}
+document.addEventListener("change", (e) => {
+  const sel = e.target.closest && e.target.closest(".team-role");
+  if (!sel) return;
+  const { user, email, role: before } = sel.dataset;
+  const role = sel.value;
+  const run = () => applyMemberChange(() => SHDB.setMemberRole(user, role), "Role updated", `${email} is now ${ROLE_LABELS[role]}.`);
+  if (role === "owner") {
+    sel.value = before; // only after they confirm
+    confirmAction(`Make ${email} an owner?`,
+      "Owners can manage billing and payouts, change anyone's role, and delete the property.", "Make owner", run);
+  } else run();
+});
 
 /* Claim a pending team invite for the signed-in user (token from the invite
    link and/or their account email). Runs once per sign-in. */

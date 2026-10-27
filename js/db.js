@@ -467,6 +467,25 @@
   }
   async function deleteInvite(id) { if (id) await rest("invites?id=eq." + id, { method: "DELETE" }); }
 
+  /* ---------------- Team members (owners/admins; RLS decides) ---------------- */
+  async function teamMembers() {
+    if (!ctx.tenantId) return [];
+    const rows = await rpc("team_members", { p_tenant: ctx.tenantId });
+    return (rows || []).map((m) => ({ userId: m.user_id, role: m.role, email: m.email || "", name: m.name || "", me: !!m.is_me }));
+  }
+  /* Role change / removal; zero rows back means the policies refused it. */
+  async function changeMember(userId, patch) {
+    const path = "tenant_members?tenant_id=eq." + ctx.tenantId + "&user_id=eq." + userId;
+    const rows = await rest(path, patch ? { method: "PATCH", headers: rep, body: JSON.stringify(patch) } : { method: "DELETE", headers: rep });
+    if (!rows || !rows.length) {
+      const err = new Error("not allowed");
+      err.details = "You don't have permission to change this team member.";
+      throw err;
+    }
+  }
+  const setMemberRole = (userId, role) => changeMember(userId, { role });
+  const removeMember = (userId) => changeMember(userId, null);
+
   /* ---------------- Maintenance tickets + iCal feeds ---------------- */
   async function createTicket(t) {
     if (!ctx.tenantId) return null;
@@ -558,7 +577,7 @@
     createAddon, setAddonActive, deleteAddon, createTax, deleteTax, createRoom, updateRoom,
     createRoomType, updateRoomType, deleteRoomType, upsertRateOverrides, deleteRateOverride, uploadPublic,
     createTicket, setTicketStatus, deleteTicket, createIcalFeed, deleteIcalFeed,
-    listInvites, deleteInvite,
+    listInvites, deleteInvite, teamMembers, setMemberRole, removeMember,
     reservationBundle, staffQuote, saveReservation, recordManualPayment
   };
 })();

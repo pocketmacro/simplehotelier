@@ -37,6 +37,10 @@ Deno.serve(withCors(async (req) => {
     });
     const { data: { user } } = await userClient.auth.getUser();
     if (!user) return json({ error: "not signed in" }, 401);
+    // Support is for the people who run a property (not housekeeping/maintenance).
+    const { data: desk } = await admin.from("tenant_members").select("role")
+      .eq("user_id", user.id).in("role", ["owner", "admin", "staff"]).limit(1);
+    if (!desk || !desk.length) return json({ error: "Support is for property owners, admins and the front desk." }, 403);
 
     const { question } = await req.json();
     if (!question) return json({ error: "question required" }, 400);

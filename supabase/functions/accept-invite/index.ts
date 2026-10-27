@@ -1,9 +1,15 @@
-// SimpleHotelier — accept a team invite after account setup.
-// POST { token? } with the new user's JWT. Matches a pending invite by token
-// (email must equal the account email) or by account email alone, joins the
-// user to that property with the invited role, and marks the invite accepted.
-// The account email must be confirmed; invites expire after 14 days; an
-// existing membership is never changed (no silent demotion of an owner).
+// SimpleHotelier — team invites.
+// POST { action: "peek", token }      (no sign-in) -> who the invite is for
+// POST { action: "signup", token, password }  (no sign-in) -> creates the
+//   invited person's account already confirmed (the emailed link proves the
+//   inbox), joins them to the property and marks the invite accepted; the
+//   page then signs in with the password. An existing confirmed account is
+//   told to log in instead; an unconfirmed one is confirmed with this password.
+// POST { token? } with a user's JWT -> accept after signing in: matches a
+//   pending invite by token (email must equal the account email) or by account
+//   email alone. The account email must be confirmed.
+// Invites expire after 14 days; an existing membership is never changed
+// (no silent demotion of an owner).
 // Deploy: supabase functions deploy accept-invite
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "../_shared/deps.ts";
@@ -18,10 +24,62 @@ const CORS = {
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 const INVITE_TTL_DAYS = 14;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ROLE_LABELS: Record<string, string> = { owner: "Owner", admin: "Admin", staff: "Front desk", cleaner: "Housekeeping", maintenance: "Maintenance" };
+
+async function pendingInvite(token: unknown) {
+  if (!token || !UUID_RE.test(String(token))) return null;
+  const since = new Date(Date.now() - INVITE_TTL_DAYS * 864e5).toISOString();
+  const { data } = await admin.from("invites").select("*")
+    .eq("token", String(token)).is("accepted_at", null).gte("created_at", since).maybeSingle();
+  return data || null;
+}
+async function join(invite: any, userId: string) {
+  const { error } = await admin.from("tenant_members")
+    .upsert({ tenant_id: invite.tenant_id, user_id: userId, role: invite.role }, { onConflict: "tenant_id,user_id", ignoreDuplicates: true }); // never change an existing member's role
+  if (error) throw error;
+  await admin.from("invites").update({ accepted_at: new Date().toISOString(), accepted_by: userId }).eq("id", invite.id);
+  const { data: tenant } = await admin.from("tenants").select("id, name, slug").eq("id", invite.tenant_id).maybeSingle();
+  return tenant;
+}
+
+/* Invite link -> account, no second email check (see the header). */
+async function inviteSignup(body: any) {
+  const invite = await pendingInvite(body.token);
+  if (!invite) return json({ error: "invite_invalid", message: "This invite link has expired or was already used. Ask for a new one." }, 404);
+  const password = typeof body.password === "string" ? body.password : "";
+  if (password.length < 8 || password.length > 72) return json({ error: "weak_password", message: "Use a password of at least 8 characters." }, 400);
+  const email = String(invite.email).toLowerCase();
+  const { data: found } = await admin.rpc("auth_user_by_email", { p_email: email });
+  const existing = Array.isArray(found) ? found[0] : null;
+  let userId: string;
+  if (existing && existing.confirmed) {
+    return json({ error: "account_exists", email, message: "You already have an account with this email. Log in and you'll join the team automatically." }, 409);
+  } else if (existing) {
+    // Signed up before but never confirmed: the invite link proves the inbox.
+    const { error } = await admin.auth.admin.updateUserById(existing.id, { password, email_confirm: true });
+    if (error) throw error;
+    userId = existing.id;
+  } else {
+    const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+    if (error || !data.user) throw error || new Error("createUser returned no user");
+    userId = data.user.id;
+  }
+  const tenant = await join(invite, userId);
+  return json({ joined: true, email, role: invite.role, tenant });
+}
 
 Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
+    const body = await req.json().catch(() => ({}));
+    if (body.action === "peek") {
+      const invite = await pendingInvite(body.token);
+      if (!invite) return json({ valid: false });
+      const { data: tenant } = await admin.from("tenants").select("name").eq("id", invite.tenant_id).maybeSingle();
+      return json({ valid: true, email: invite.email, property: tenant?.name || "the property", role: ROLE_LABELS[invite.role] || invite.role });
+    }
+    if (body.action === "signup") return await inviteSignup(body);
+
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
     if (!token) return json({ error: "Sign in first" }, 401);
     const { data: userData } = await admin.auth.getUser(token);
@@ -32,17 +90,13 @@ Deno.serve(withCors(async (req) => {
     const email = user.email.toLowerCase();
     const since = new Date(Date.now() - INVITE_TTL_DAYS * 864e5).toISOString();
 
-    const body = await req.json().catch(() => ({}));
     let invite: any = null;
-    if (body.token && UUID_RE.test(String(body.token))) {
-      const { data } = await admin.from("invites").select("*")
-        .eq("token", String(body.token)).is("accepted_at", null).gte("created_at", since).maybeSingle();
-      if (data) {
-        if (String(data.email).toLowerCase() !== email) {
-          return json({ error: `This invite was sent to ${data.email}. Create your account with that email to accept it.` }, 403);
-        }
-        invite = data;
+    const byToken = await pendingInvite(body.token);
+    if (byToken) {
+      if (String(byToken.email).toLowerCase() !== email) {
+        return json({ error: `This invite was sent to ${byToken.email}. Create your account with that email to accept it.` }, 403);
       }
+      invite = byToken;
     }
     if (!invite) {
       const { data } = await admin.from("invites").select("*")
@@ -52,13 +106,7 @@ Deno.serve(withCors(async (req) => {
     }
     if (!invite) return json({ joined: false });
 
-    const { error: memErr } = await admin.from("tenant_members")
-      .upsert({ tenant_id: invite.tenant_id, user_id: user.id, role: invite.role }, { onConflict: "tenant_id,user_id", ignoreDuplicates: true }); // never change an existing member's role
-    if (memErr) { console.error("accept-invite", memErr); await logError("accept-invite", memErr); return json({ error: "could not join the property" }, 500); }
-    await admin.from("invites")
-      .update({ accepted_at: new Date().toISOString(), accepted_by: user.id })
-      .eq("id", invite.id);
-    const { data: tenant } = await admin.from("tenants").select("id, name, slug").eq("id", invite.tenant_id).maybeSingle();
+    const tenant = await join(invite, user.id);
     return json({ joined: true, role: invite.role, tenant });
   } catch (e: any) {
     console.error("accept-invite", e); await logError("accept-invite", e);

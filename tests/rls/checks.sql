@@ -611,7 +611,8 @@ with exposed as (
   where not (proname = any (array['member_tenant_ids', 'is_tenant_member', 'has_tenant_role', 'can_claim_tenant',
                                   'is_system_admin', 'get_available_room_ids', 'get_rate_plans', 'log_client_error']))
     and not (rolname = 'authenticated' and proname = any (array['staff_quote', 'save_reservation', 'record_manual_payment',
-                                                                'housekeeping_turnovers', 'member_tenant', 'can_see_support_case']))
+                                                                'housekeeping_turnovers', 'member_tenant', 'can_see_support_case',
+                                                                'team_members']))
 )
 select pg_temp.rec('R47 only allowlisted SECURITY DEFINER functions are browser-callable',
   (select count(*) from unexpected) = 0,
@@ -1136,7 +1137,7 @@ select pg_temp.rec('R102 browsers hold no unused table privileges (anon writes, 
               (g.grantee = 'anon' and g.privilege_type in ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'))
               or (g.grantee = 'authenticated' and g.privilege_type in ('TRUNCATE', 'REFERENCES', 'TRIGGER')))), 'none'));
 
-select pg_temp.expect('R103 cleaners and maintenance only see support cases they opened',
+select pg_temp.expect('R103 cleaners and maintenance have no support access',
   array['a_cleaner', 'a_maint'],
   array[
     $q$select subject as v from public.support_cases where id = '{case_a}'$q$,
@@ -1152,13 +1153,13 @@ select pg_temp.expect('R103b the front desk sees every case for the property (co
     $q$select body as v from public.support_messages where case_id = '{case_a}'$q$
   ],
   'rows=1');
-select pg_temp.expect('R103c a cleaner opens and follows their own case (control)',
-  array['a_cleaner'],
+select pg_temp.expect('R103c housekeeping and maintenance cannot open or follow support cases',
+  array['a_cleaner', 'a_maint'],
   array[
     $q$insert into public.support_cases (tenant_id, user_id, subject) values ('{tenant_a}', '{a_cleaner}', 'Broken vacuum')$q$,
     $q$update public.support_cases set status = 'pending' where tenant_id = '{tenant_a}' and user_id = '{a_cleaner}'$q$
   ],
-  'rows=1',
+  'denied',
   null,
   $s$insert into public.support_cases (tenant_id, user_id, subject) values (pg_temp.id('tenant_a'), pg_temp.id('a_cleaner'), 'Earlier issue')$s$);
 select pg_temp.expect('R103d members cannot open cases in someone else''s name',
@@ -1183,6 +1184,49 @@ begin
 exception when others then
   perform pg_temp.caught('R104b the functions log server errors, one row per error per day', sqlstate, sqlerrm);
 end $$;
+
+-- ============================================================ R105 team management (20261127000000)
+select pg_temp.expect('R105 owners and admins see the team with login emails',
+  array['a_owner', 'a_admin'],
+  array[$q$select email as v from public.team_members('{tenant_a}')$q$],
+  'rows=5');
+select pg_temp.expect('R105b nobody else gets the team list',
+  array['a_staff', 'a_cleaner', 'a_maint', 'b_owner', 'outsider', 'anon'],
+  array[$q$select email as v from public.team_members('{tenant_a}')$q$],
+  'denied');
+select pg_temp.expect('R105c the last owner cannot remove or demote themselves',
+  array['a_owner'],
+  array[
+    $q$delete from public.tenant_members where tenant_id = '{tenant_a}' and user_id = '{a_owner}'$q$,
+    $q$update public.tenant_members set role = 'admin' where tenant_id = '{tenant_a}' and user_id = '{a_owner}'$q$
+  ],
+  'error:23514', 'last_owner');
+select pg_temp.expect('R105d with a second owner, an owner can step down (control)',
+  array['a_owner'],
+  array[$q$update public.tenant_members set role = 'admin' where tenant_id = '{tenant_a}' and user_id = '{a_owner}'$q$],
+  'rows=1', null,
+  $s$update public.tenant_members set role = 'owner' where tenant_id = pg_temp.id('tenant_a') and user_id = pg_temp.id('a_admin')$s$);
+select pg_temp.expect('R105f the owner can still delete the whole property (members go with it)',
+  array['a_owner'],
+  array[$q$delete from public.tenants where id = '{tenant_a}'$q$],
+  'rows=1');
+select pg_temp.expect('R105e owners change roles and remove members (control)',
+  array['a_owner'],
+  array[
+    $q$update public.tenant_members set role = 'cleaner' where tenant_id = '{tenant_a}' and user_id = '{a_staff}'$q$,
+    $q$delete from public.tenant_members where tenant_id = '{tenant_a}' and user_id = '{a_maint}'$q$
+  ],
+  'rows=1');
+
+-- ============================================================ R106 invite sign-up (20261128000000)
+select pg_temp.expect('R106 browsers cannot look up accounts by email',
+  array['anon', 'a_owner', 'outsider'],
+  array[$q$select id as v from public.auth_user_by_email('a-owner@rls-check.invalid')$q$],
+  'denied');
+select pg_temp.expect('R106b the invite function can (control)',
+  array['service'],
+  array[$q$select confirmed::text as v from public.auth_user_by_email('A-Owner@rls-check.invalid')$q$],
+  'value~^true$');
 
 -- ============================================================ R00 run integrity (recorded last, sorted first)
 select pg_temp.rec('R00 one transaction, fixtures in place (the final raise rolls all of it back)',

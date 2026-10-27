@@ -33,6 +33,20 @@
     if (inv) localStorage.setItem("sh_invite_token", inv);
   } catch { /* no storage */ }
   const invitePending = () => { try { return !!localStorage.getItem("sh_invite_token"); } catch { return false; } };
+  const inviteToken = () => { try { return localStorage.getItem("sh_invite_token") || ""; } catch { return ""; } };
+  const forgetInvite = () => { try { localStorage.removeItem("sh_invite_token"); } catch { /* no storage */ } };
+  /* accept-invite before sign-in: "peek" (who it's for) and "signup" (the
+     emailed link proves the inbox, so the account is created confirmed). */
+  async function inviteCall(body) {
+    const res = await fetch(base + "/functions/v1/accept-invite", {
+      method: "POST",
+      headers: { apikey: anon, Authorization: "Bearer " + anon, "Content-Type": "application/json" },
+      body: JSON.stringify({ token: inviteToken(), ...body })
+    });
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, data };
+  }
+  let invite = null; // { email, property, role } once peeked
   function accessToken() { return localStorage.getItem("sh_access_token") || ""; }
 
   /* Exchange the stored refresh token for a fresh session (tokens expire hourly). */
@@ -215,8 +229,28 @@
       const propField = $("#suProperty") && $("#suProperty").closest(".field");
       if (propField) propField.hidden = true;
       if ($("#suProperty")) $("#suProperty").removeAttribute("required");
-      const submit = $("#suSubmit"); if (submit) submit.textContent = "Create free account & join";
+      const submit = $("#suSubmit"); if (submit) submit.textContent = "Set password & join";
+      $("#suPassword").minLength = 8;
+      $("#suPassword").placeholder = "8+ characters";
+      const help = $("#suPassword").parentElement.querySelector(".help");
+      if (help) help.textContent = "You'll go straight in: the invite email already confirmed your address.";
       setTab("signup");
+      inviteCall({ action: "peek" }).then(({ data }) => {
+        if (!data.valid) {
+          forgetInvite();
+          if (banner) banner.textContent = "This invite link has expired or was already used. Ask the property for a new invite, or log in if you already joined.";
+          setTab("login");
+          return;
+        }
+        invite = data;
+        $("#suEmail").value = data.email;
+        $("#suEmail").readOnly = true;
+        if (banner) {
+          banner.textContent = "";
+          banner.append("You're joining ", Object.assign(document.createElement("strong"), { textContent: data.property }),
+            ` as ${data.role}. Set a password to finish.`);
+        }
+      }).catch(() => { /* keep the generic banner */ });
     }
     $("#demoBtn").addEventListener("click", () => {
       try { sessionStorage.setItem("sh_demo", "1"); } catch { /* no storage */ }
@@ -239,21 +273,40 @@
       const btn = $("#suSubmit"); btn.disabled = true; btn.textContent = "Creating…";
       const invited = invitePending();
       if (!invited && !$("#suProperty").value.trim()) { showError("Give your property a name — it becomes your booking page title."); $("#suProperty").focus(); btn.disabled = false; btn.textContent = "Create property & log in"; return; }
+      if (invited) {
+        // The invite link proves the inbox: create the account confirmed, join, sign in.
+        try {
+          const password = $("#suPassword").value;
+          const { ok, data } = await inviteCall({ action: "signup", password });
+          if (data.error === "account_exists") {
+            setTab("login");
+            $("#liEmail").value = data.email || "";
+            showError(data.message);
+            $("#liPassword").focus();
+          } else if (!ok) {
+            showError(data.message || "We couldn't finish joining. Please try again.");
+          } else {
+            const user = await login(data.email, password);
+            forgetInvite();
+            enterApp(user);
+            return;
+          }
+        } catch (err) { showError(err.message); }
+        btn.disabled = false; btn.textContent = "Set password & join";
+        return;
+      }
       try {
         const data = await signup($("#suEmail").value.trim(), $("#suPassword").value);
         if (!accessToken()) {
-          showError(invited
-            ? "Account created. Please check your email to confirm, then log in — we'll join you to the property automatically."
-            : "Account created. Please check your email to confirm, then log in.");
+          showError("Account created. Please check your email to confirm, then log in.");
           setTab("login");
           return;
         }
-        if (invited) { enterApp(sessionUser()); return; } // app.js claims the invite; no property, no trial
         const tenant = await createProperty($("#suProperty").value.trim());
         const billed = await tryBilling(tenant);
         if (!billed) enterApp(sessionUser());
       } catch (err) { showError(err.message); }
-      btn.disabled = false; btn.textContent = invited ? "Create free account & join" : "Create property & log in";
+      btn.disabled = false; btn.textContent = "Create property & log in";
     });
 
     // Demo was explicitly chosen: skip the gate (app.js renders sample data).

@@ -85,8 +85,8 @@ const roleEnv = new Function(block + "\nreturn { ROLE_VIEWS, ROLE_LABELS, setRol
 
 test("each role sees only its screens", () => {
   const { ROLE_VIEWS, setRole, canSee } = roleEnv;
-  assert.deepEqual(ROLE_VIEWS.cleaner, ["housekeeping", "maintenance", "support"]);
-  assert.deepEqual(ROLE_VIEWS.maintenance, ["maintenance", "support"]);
+  assert.deepEqual(ROLE_VIEWS.cleaner, ["housekeeping", "maintenance"], "Support is for owners/front desk");
+  assert.deepEqual(ROLE_VIEWS.maintenance, ["maintenance"]);
   for (const v of ["settings", "rates", "ratemgmt", "addons", "booking", "setup"]) {
     assert.ok(!ROLE_VIEWS.staff.includes(v), `staff must not see ${v}`);
   }
@@ -111,4 +111,37 @@ test("navigation falls back to the role's home screen", () => {
 test("owners can invite maintenance staff", () => {
   assert.match(app, /<option value="maintenance">Maintenance — maintenance tickets only<\/option>/);
   assert.match(sendEmail, /\["admin", "staff", "cleaner", "maintenance"\]\.includes\(body\.role\)/);
+});
+
+// ---------------------------------------------------------------- team screen + invites
+test("Settings lists the team; owners/admins change roles and remove people", () => {
+  const db = read("js/db.js");
+  assert.match(db, /rpc\("team_members", \{ p_tenant: ctx\.tenantId \}\)/);
+  assert.match(db, /if \(!rows \|\| !rows\.length\) \{/, "a refused change is reported, not silently ignored");
+  assert.match(app, /const editable = !m\.me && \(iAmOwner \|\| m\.role !== "owner"\);/, "nobody edits their own row; admins don't touch owners");
+  assert.match(app, /const roles = \(iAmOwner \? \["owner"\] : \[\]\)\.concat/, "only owners can make owners");
+  assert.match(app, /confirmAction\(`Remove \$\{email\} from the team\?`/, "removal asks first (custom modal)");
+  assert.match(app, /confirmAction\(`Make \$\{email\} an owner\?`/);
+  const sql = read("supabase/migrations/20261127000000_team_management.sql");
+  assert.match(sql, /and public\.has_tenant_role\(p_tenant, array\['owner', 'admin'\]\)/);
+  assert.match(sql, /raise exception 'last_owner'/);
+});
+
+test("invite links create a confirmed account (the email already proved the inbox)", () => {
+  const fn = read("supabase/functions/accept-invite/index.ts");
+  assert.match(fn, /admin\.auth\.admin\.createUser\(\{ email, password, email_confirm: true \}\)/);
+  assert.match(fn, /const email = String\(invite\.email\)\.toLowerCase\(\);/, "the account email is the invited one, never the browser's");
+  assert.match(fn, /if \(existing && existing\.confirmed\) \{\s+return json\(\{ error: "account_exists"/, "never takes over a real account");
+  assert.match(fn, /password\.length < 8 \|\| password\.length > 72/);
+  const auth = read("js/auth.js");
+  assert.match(auth, /inviteCall\(\{ action: "signup", password \}\)/);
+  assert.match(auth, /const user = await login\(data\.email, password\);\s+forgetInvite\(\);/);
+  assert.match(auth, /\$\("#suEmail"\)\.readOnly = true;/);
+  assert.doesNotMatch(auth, /check your email to confirm, then log in — we'll join you/, "no second email check for invitees");
+});
+
+test("support is for owners, admins and the front desk", () => {
+  const sql = read("supabase/migrations/20261128000100_support_front_desk.sql");
+  assert.match(sql, /using \(public\.is_system_admin\(\) or public\.has_tenant_role\(tenant_id, array\['owner', 'admin', 'staff'\]\)\);/);
+  assert.match(read("supabase/functions/support-ai/index.ts"), /\.in\("role", \["owner", "admin", "staff"\]\)/);
 });
