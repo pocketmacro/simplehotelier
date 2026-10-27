@@ -110,19 +110,47 @@
     return sessionUser();
   }
 
-  async function signup(email, password) {
-    // Send confirmation links back to this app (not the Site URL landing page,
-    // and never localhost). Must be covered by the auth redirect allowlist.
-    let redirect = "";
+  /* Emailed links (confirmation, password reset) come back to this app, not
+     the Site URL landing page. Must be covered by the auth redirect allowlist;
+     anywhere else (localhost) falls back to the Site URL. */
+  function redirectParam() {
     try {
-      if (location.protocol.startsWith("http")) redirect = "?redirect_to=" + encodeURIComponent(location.origin + location.pathname);
+      if (location.protocol.startsWith("http")) return "?redirect_to=" + encodeURIComponent(location.origin + location.pathname);
     } catch { /* file:// or tests: default Site URL applies */ }
-    const data = await authFetch("signup" + redirect, {
+    return "";
+  }
+
+  async function signup(email, password) {
+    const data = await authFetch("signup" + redirectParam(), {
       method: "POST", body: JSON.stringify({ email, password })
     });
     saveSession(data);
     return data;
   }
+
+  /* Password reset email. Auth answers the same whether or not the email has
+     an account, so this never reveals who uses SimpleHotelier. */
+  async function requestReset(email) {
+    await authFetch("recover" + redirectParam(), { method: "POST", body: JSON.stringify({ email }) });
+  }
+
+  /* Emailed links land back here with the session, or an error, in the URL
+     fragment: #access_token=…&refresh_token=…&type=recovery, or
+     #error=access_denied&error_code=otp_expired&error_description=…
+     Read once and strip it so tokens never sit in the address bar or history. */
+  function takeAuthReturn() {
+    const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+    const query = new URLSearchParams(location.search);
+    const error = hash.get("error_code") || hash.get("error") || query.get("error_code");
+    if (!hash.get("access_token") && !error) return null;
+    ["error", "error_code", "error_description"].forEach((k) => query.delete(k));
+    try { history.replaceState(null, "", location.pathname + (query.toString() ? "?" + query : "")); } catch { /* old browser */ }
+    if (error) return { error };
+    return { type: hash.get("type") || "", access_token: hash.get("access_token"), refresh_token: hash.get("refresh_token") || "" };
+  }
+  // A reset link's session, held until the new password is saved (the app
+  // never loads on it before then).
+  let recovery = null;
 
   async function logout() {
     try { await authFetch("logout", { method: "POST" }, true); } catch { /* token may be dead */ }
@@ -204,18 +232,31 @@
     return tenant;
   }
 
+  /* Green note (confirmations, "check your email"); errors stay red. */
+  function showNote(msg) {
+    const el = $("#authNote");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.hidden = !msg;
+  }
   function showError(msg) {
     const el = $("#authError");
     if (!el) return;
     el.textContent = msg || "";
     el.hidden = !msg;
   }
+  /* which: "login" | "signup" | "forgot" (request a reset link) | "reset" (set a new password) */
   function setTab(which) {
     $("#tabLogin").classList.toggle("active", which === "login");
     $("#tabSignup").classList.toggle("active", which === "signup");
     $("#loginForm").hidden = which !== "login";
     $("#signupForm").hidden = which !== "signup";
+    $("#forgotForm").hidden = which !== "forgot";
+    $("#resetForm").hidden = which !== "reset";
+    $(".auth-tabs").hidden = which === "forgot" || which === "reset";
+    $(".auth-demo").hidden = which === "reset";
     showError("");
+    showNote("");
   }
   /* Demo is an explicit, local-only opt-in. It sets a session flag and
      reloads so the dashboard boots straight into sample data without ever
@@ -236,6 +277,12 @@
     $("#tabSignup").addEventListener("click", () => setTab("signup"));
     $("#toSignup").addEventListener("click", () => setTab("signup"));
     $("#toLogin").addEventListener("click", () => setTab("login"));
+    $("#toForgot").addEventListener("click", () => {
+      setTab("forgot");
+      $("#fpEmail").value = $("#liEmail").value.trim();
+      $("#fpEmail").focus();
+    });
+    $("#fpBack").addEventListener("click", () => setTab("login"));
     if (location.hash === "#signup") setTab("signup");
     if (location.hash === "#login") setTab("login");
     if (invitePending()) {
@@ -251,6 +298,7 @@
       if (help) help.textContent = "You'll go straight in: the invite email already confirmed your address.";
       setTab("signup");
       inviteCall({ action: "peek" }).then(({ data }) => {
+        if (recovery) return; // a password reset link is on screen; the invite waits for sign-in
         if (!data.valid) {
           forgetInvite();
           if (banner) banner.textContent = "This invite link has expired or was already used. Ask the property for a new invite, or log in if you already joined.";
@@ -278,13 +326,60 @@
     $("#signOutBtn").addEventListener("click", async () => { clearDemo(); await logout(); location.reload(); });
 
     $("#loginForm").addEventListener("submit", async (e) => {
-      e.preventDefault(); showError("");
+      e.preventDefault(); showError(""); showNote("");
       const btn = $("#liSubmit"); btn.disabled = true; btn.textContent = "Logging in…";
       try {
         const user = await login($("#liEmail").value.trim(), $("#liPassword").value);
         enterApp(user);
-      } catch (err) { showError(err.message); }
+      } catch (err) {
+        showError(/invalid login credentials/i.test(err.message)
+          ? "That email and password don't match. Forgot your password? Use the link above the password box to reset it."
+          : err.message);
+      }
       btn.disabled = false; btn.textContent = "Log in";
+    });
+
+    $("#forgotForm").addEventListener("submit", async (e) => {
+      e.preventDefault(); showError("");
+      const email = $("#fpEmail").value.trim();
+      const btn = $("#fpSubmit"); btn.disabled = true; btn.textContent = "Sending…";
+      try {
+        await requestReset(email);
+        setTab("login");
+        $("#liEmail").value = email;
+        showNote(`If ${email} has a SimpleHotelier account, a reset link is on its way. It works for 1 hour. Nothing after a few minutes? Check your spam folder.`);
+      } catch (err) {
+        showError(/rate limit|security purposes|429/i.test(err.message)
+          ? "Too many reset emails were requested just now. Wait a few minutes, then try again."
+          : err.message);
+      }
+      btn.disabled = false; btn.textContent = "Email me a reset link";
+    });
+
+    $("#resetForm").addEventListener("submit", async (e) => {
+      e.preventDefault(); showError("");
+      const password = $("#rpPassword").value;
+      if (password.length < 8 || password.length > 72) { showError("Use a password of 8 to 72 characters."); return; }
+      if (password !== $("#rpConfirm").value) { showError("The two passwords don't match."); $("#rpConfirm").focus(); return; }
+      if (!recovery) { setTab("forgot"); showError("That reset link has expired. Request a new one."); return; }
+      const btn = $("#rpSubmit"); btn.disabled = true; btn.textContent = "Saving…";
+      try {
+        const user = await authFetch("user", {
+          method: "PUT", headers: { Authorization: "Bearer " + recovery.access_token }, body: JSON.stringify({ password })
+        });
+        saveSession({ access_token: recovery.access_token, refresh_token: recovery.refresh_token, user });
+        recovery = null;
+        $("#rpPassword").value = ""; $("#rpConfirm").value = "";
+        enterApp(sessionUser());
+        return;
+      } catch (err) {
+        if (/jwt|expired|401|403/i.test(err.message)) {
+          recovery = null;
+          setTab("forgot");
+          showError("That reset link has expired. Request a new one.");
+        } else showError(err.message);
+      }
+      btn.disabled = false; btn.textContent = "Save password & log in";
     });
 
     $("#signupForm").addEventListener("submit", async (e) => {
@@ -316,8 +411,10 @@
       try {
         const data = await signup($("#suEmail").value.trim(), $("#suPassword").value);
         if (!accessToken()) {
-          showError("Account created. Please check your email to confirm, then log in.");
           setTab("login");
+          $("#liEmail").value = $("#suEmail").value.trim();
+          showNote("Account created. Open the confirmation link we just emailed you, then log in here to set up your property.");
+          btn.disabled = false; btn.textContent = "Create property & log in";
           return;
         }
         const tenant = await createProperty($("#suProperty").value.trim());
@@ -326,6 +423,37 @@
       } catch (err) { showError(err.message); }
       btn.disabled = false; btn.textContent = "Create property & log in";
     });
+
+    const back = takeAuthReturn();
+    if (back && back.error) {
+      gate().hidden = false;
+      setTab("login");
+      showError(back.error === "otp_expired"
+        ? "That email link has expired or was already used. Log in, or use “Forgot password?” to get a new link."
+        : "That email link didn't work. Log in, or use “Forgot password?” to get a new link.");
+      return;
+    }
+    if (back && back.type === "recovery") {
+      // Reset link: set a new password before anything else. Any other
+      // account signed in on this browser is signed out first.
+      clearSession();
+      recovery = back;
+      gate().hidden = false;
+      setTab("reset");
+      authFetch("user", { headers: { Authorization: "Bearer " + back.access_token } }).then((user) => {
+        $("#rpFor").textContent = `For ${user.email}. You'll be logged in once it's saved.`;
+        $("#rpUser").value = user.email || "";
+        $("#rpSubmit").disabled = false;
+        $("#rpPassword").focus();
+      }).catch(() => {
+        recovery = null;
+        setTab("forgot");
+        showError("That reset link has expired or was already used. Request a new one.");
+      });
+      return;
+    }
+    // Email confirmation (and other emailed sign-in links): that's a session.
+    if (back && back.access_token) saveSession(back);
 
     // Demo was explicitly chosen: skip the gate (app.js renders sample data).
     if (demoChosen() && !accessToken()) { gate().hidden = true; return; }

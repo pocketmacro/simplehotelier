@@ -682,12 +682,13 @@
         <button class="active" id="tabLogin" type="button">Log in</button>
         <button id="tabSignup" type="button">Create account</button>
       </div>
-      <div class="auth-error" id="authError" hidden></div>
-      <div id="inviteBanner" hidden style="background:#e7f2ec;border:1px solid #bcd8c8;color:#14532d;border-radius:10px;padding:10px 14px;font-size:13.5px;margin-bottom:12px">You've been invited to join a property team. Create your free account with the invited email — no property, card, or trial needed.</div>
+      <div class="auth-error" id="authError" role="alert" hidden></div>
+      <div class="auth-note" id="authNote" role="status" hidden></div>
+      <div class="auth-note" id="inviteBanner" hidden>You've been invited to join a property team. Create your free account with the invited email — no property, card, or trial needed.</div>
 
       <form id="loginForm">
         <div class="field"><label for="liEmail">Email</label><input class="input" id="liEmail" type="email" autocomplete="email" required placeholder="you@yourproperty.com"></div>
-        <div class="field"><label for="liPassword">Password</label><input class="input" id="liPassword" type="password" autocomplete="current-password" required placeholder="Your password"></div>
+        <div class="field"><div class="label-row"><label for="liPassword">Password</label><button class="drawer-link" id="toForgot" type="button">Forgot password?</button></div><input class="input" id="liPassword" type="password" autocomplete="current-password" required placeholder="Your password"></div>
         <button class="btn btn-primary" id="liSubmit" type="submit" style="width:100%;justify-content:center">Log in</button>
         <p class="auth-alt">New to SimpleHotelier? <button class="drawer-link" id="toSignup" type="button">Create your property →</button></p>
       </form>
@@ -698,6 +699,23 @@
         <div class="field"><label for="suPassword">Password</label><input class="input" id="suPassword" type="password" autocomplete="new-password" required minlength="6" placeholder="6+ characters"><span class="help">Creates your account and your property in one step.</span></div>
         <button class="btn btn-primary" id="suSubmit" type="submit" style="width:100%;justify-content:center">Create property &amp; log in</button>
         <p class="auth-alt">Already have an account? <button class="drawer-link" id="toLogin" type="button">Log in →</button></p>
+      </form>
+
+      <form id="forgotForm" hidden>
+        <h3 class="auth-step">Reset your password</h3>
+        <p class="auth-hint">Enter the email you log in with and we'll send a link to set a new password. The link works for 1 hour.</p>
+        <div class="field"><label for="fpEmail">Email</label><input class="input" id="fpEmail" type="email" autocomplete="email" required placeholder="you@yourproperty.com"></div>
+        <button class="btn btn-primary" id="fpSubmit" type="submit" style="width:100%;justify-content:center">Email me a reset link</button>
+        <p class="auth-alt">Remembered it? <button class="drawer-link" id="fpBack" type="button">Back to log in →</button></p>
+      </form>
+
+      <form id="resetForm" hidden>
+        <h3 class="auth-step">Set a new password</h3>
+        <p class="auth-hint" id="rpFor">Checking your reset link…</p>
+        <input id="rpUser" type="email" autocomplete="username" hidden readonly>
+        <div class="field"><label for="rpPassword">New password</label><input class="input" id="rpPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="72" placeholder="8+ characters"></div>
+        <div class="field"><label for="rpConfirm">Type it again</label><input class="input" id="rpConfirm" type="password" autocomplete="new-password" required minlength="8" maxlength="72" placeholder="Same password"></div>
+        <button class="btn btn-primary" id="rpSubmit" type="submit" style="width:100%;justify-content:center" disabled>Save password &amp; log in</button>
       </form>
 
       <div class="auth-demo"><span>Just looking?</span><button class="btn btn-ghost btn-sm" id="demoBtn" type="button">Explore the demo first</button></div>
