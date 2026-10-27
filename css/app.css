@@ -599,3 +599,18 @@ table.data .guest span { color: var(--muted); font-size: 12.3px; }
 
 /* Reservations: older history loads on request. */
 .older-row { display: flex; justify-content: center; margin-top: 14px; }
+
+/* Team roles: owner/admin-only controls stay hidden for everyone else (the
+   database refuses them anyway; see 20261122000000_role_scoped_access). */
+body[data-role] :is([data-action="add-room"], [data-action="edit-room"], [data-action="room-photos"], [data-action="room-rates"],
+  [data-action="room-types"], [data-action="add-feed"], [data-action="del-feed"], [data-action="regen-ical"], [data-action="goto-rates"],
+  [data-action="invite"], [data-action="connect-bank"], [data-action="billing-checkout"], [data-action="add-addon"], [data-action="add-tax"]) {
+  display: none !important;
+}
+body[data-role="cleaner"] [data-action="del-ticket"] { display: none !important; }
+#hkTurnovers { margin-top: 22px; }
+/* Housekeeping and maintenance roles: no booking tools or guest search. */
+body:is([data-role="cleaner"], [data-role="maintenance"]) :is(.search:has(#globalSearch), [data-action="new-reservation"], [data-action="record-cash"],
+  [data-action="export"], [data-action="charge"], [data-action="bulk-open"]) {
+  display: none !important;
+}

@@ -192,6 +192,7 @@ document.addEventListener("click", (e) => { if (e.target.closest("[data-close]")
 
 /* ---------------- Navigation ---------------- */
 function goto(view) {
+  if (!canSee(view)) view = ROLE_VIEWS[liveRole][0];
   $$("#mainNav .nav-btn, .nav .nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + view));
   if (view === "rates") renderRates();
@@ -242,8 +243,11 @@ const balance = (r) => Math.max(0, r.total - r.paid);
 function renderDateCtx() {
   const el = $(".date-ctx");
   if (!el) return;
-  const arr = reservations.filter((r) => r.inN === 0 && r.status !== "cancelled").length;
-  const dep = reservations.filter((r) => r.outN === 0 && r.status !== "cancelled").length;
+  // Housekeeping roles count from the turnover list (they don't load reservations); maintenance doesn't need it.
+  const src = liveRole === "cleaner" ? turnovers : reservations;
+  const arr = src.filter((r) => r.inN === 0 && r.status !== "cancelled").length;
+  const dep = src.filter((r) => r.outN === 0 && r.status !== "cancelled").length;
+  if (liveRole === "maintenance") { el.innerHTML = esc(TODAY.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })); return; }
   el.innerHTML = `${esc(TODAY.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" }))}<small>${arr} arrival${arr === 1 ? "" : "s"} · ${dep} departure${dep === 1 ? "" : "s"} today</small>`;
 }
 function renderToday() {
@@ -261,6 +265,17 @@ function renderToday() {
 
 let tenantDisplayName = "";
 let liveTenant = null, liveMembersCount = 1, setupRouted = false;
+/* Team roles (20261122000000_role_scoped_access): which screens each sees.
+   The database enforces the same limits; this keeps the UI honest. */
+let liveRole = "owner";
+const ROLE_VIEWS = {
+  staff: ["overview", "reservations", "calendar", "rooms", "housekeeping", "maintenance", "payments", "reports", "support"],
+  cleaner: ["housekeeping", "maintenance", "support"],
+  maintenance: ["maintenance", "support"]
+};
+const ROLE_LABELS = { owner: "Owner", admin: "Admin", staff: "Front desk", cleaner: "Housekeeping", maintenance: "Maintenance" };
+const canSee = (view) => !ROLE_VIEWS[liveRole] || ROLE_VIEWS[liveRole].includes(view) || view === "admin";
+let turnovers = [];
 /* One source of truth for setup progress — sidebar, Settings checklist and
    the Setup screen all read from here, so the % is always accurate. */
 function computeSetup() {
@@ -506,7 +521,25 @@ function renderRooms() {
       </div>
     </div>`).join("");
 }
+/* Turnover list: today's and tomorrow's departures and arrivals by room. */
+function renderTurnovers() {
+  const box = $("#hkTurnovers"); if (!box) return;
+  const day = (n) => (n === 0 ? "Today" : n === 1 ? "Tomorrow" : dstr(addDays(n)));
+  const rows = [];
+  turnovers.forEach((t) => {
+    if (t.outN === 0 || t.outN === 1) rows.push({ n: t.outN, code: t.roomCode, what: "Check-out", guests: t.guests, done: t.status === "checked-out" });
+    if (t.inN === 0 || t.inN === 1) rows.push({ n: t.inN, code: t.roomCode, what: "Arrival", guests: t.guests, done: t.status === "checked-in" });
+  });
+  rows.sort((a, b) => a.n - b.n || String(a.code).localeCompare(String(b.code)) || (a.what === "Check-out" ? -1 : 1));
+  box.innerHTML = `<div class="section-title"><h2>Turnovers</h2><div class="line"></div></div>` + (rows.length
+    ? `<div class="table-wrap"><table class="data"><thead><tr><th>When</th><th>Room</th><th>What</th><th style="text-align:right">Guests</th></tr></thead><tbody>` +
+      rows.map((r) => `<tr style="cursor:default"><td>${day(r.n)}</td><td><span class="room-code">${esc(r.code)}</span>${roomByCode(r.code) ? " " + esc(roomByCode(r.code).name) : ""}</td>
+        <td>${r.what}${r.done ? ` <span class="pill clean"><i></i>${r.what === "Arrival" ? "checked in" : "checked out"}</span>` : ""}</td><td class="num">${r.guests || "-"}</td></tr>`).join("") +
+      `</tbody></table></div>`
+    : `<p class="hint">No check-outs or arrivals today or tomorrow.</p>`);
+}
 function renderHK() {
+  renderTurnovers();
   const cols = [["dirty", "Dirty · needs cleaning"], ["progress", "In progress"], ["clean", "Clean · ready"]];
   $("#hkBoard").innerHTML = cols.map(([key, label]) => {
     const list = rooms.filter((r) => r.hk === key);
@@ -1932,8 +1965,9 @@ document.addEventListener("click", (e) => {
       title: "Invite your team", sub: "They get an email, create a free account, and land in this property — no card or trial",
       body: `<div class="field"><label>Email</label><input class="input" id="invEmail" type="email" placeholder="teammate@email.com"></div>
         <div class="field"><label>Role</label><select class="select" id="invRole">
-          <option value="cleaner">Cleaner — housekeeping and turnover lists</option>
-          <option value="staff">Staff — day-to-day front desk</option>
+          <option value="cleaner">Cleaner — housekeeping board, turnover list and maintenance tickets</option>
+          <option value="maintenance">Maintenance — maintenance tickets only</option>
+          <option value="staff">Staff — front desk: reservations, guests and payments</option>
           <option value="admin">Admin — everything except billing ownership</option>
         </select><span class="help">The invite is stored for this property and matched to their account email when they sign up.</span></div>
         <div class="section-title" style="margin:16px 0 8px"><h2 style="font-size:14px">Pending invites</h2><div class="line"></div></div>
@@ -2216,6 +2250,25 @@ function setCurrency(code, { locked } = {}) {
   }
 }
 
+/* Hide screens and owner/admin-only controls the signed-in role can't use. */
+function applyRole() {
+  const limited = !!ROLE_VIEWS[liveRole];
+  if (limited) document.body.dataset.role = liveRole; else delete document.body.dataset.role;
+  $$(".nav-btn[data-view]").forEach((b) => {
+    if (b.id === "navAdmin") return; // System Admin has its own check
+    b.hidden = !canSee(b.dataset.view);
+  });
+  // Section headings with nothing left under them, and owner setup progress.
+  $$(".nav-label").forEach((label) => {
+    const nav = label.nextElementSibling;
+    if (nav && nav.classList.contains("nav")) label.hidden = !$$(".nav-btn", nav).some((b) => !b.hidden);
+  });
+  const setupMini = $(".onboard-mini");
+  if (setupMini) setupMini.hidden = limited;
+  const active = ($(".view.active") || {}).id;
+  if (limited && active && !canSee(active.replace("view-", ""))) goto(ROLE_VIEWS[liveRole][0]);
+}
+
 /* Older reservations: the dashboard loads recent and upcoming stays plus any
    with a balance; history before that loads a page at a time. */
 let olderOffset = 0, olderMore = false;
@@ -2386,6 +2439,9 @@ function loadLiveIntoUI() {
     tenantDisplayName = live.tenant.name || "";
     liveTenant = live.tenant;
     window.SH_TENANT_ID = live.tenant.id; // error reports name the property
+    liveRole = ROLE_LABELS[live.role] ? live.role : "staff";
+    turnovers = live.turnovers || [];
+    applyRole();
     olderOffset = 0;
     olderMore = !!live.olderReservations;
     renderOlderButton();
@@ -2397,7 +2453,7 @@ function loadLiveIntoUI() {
     syncStripeStatus();
     if (live.user) {
       $("#userName").textContent = live.user.email;
-      $("#userRole").textContent = "Owner · " + live.tenant.name;
+      $("#userRole").textContent = ROLE_LABELS[liveRole] + " · " + live.tenant.name;
       $("#userAvatar").textContent = (live.user.email || "U").slice(0, 2).toUpperCase();
     }
     if ($("#bkGa")) $("#bkGa").value = live.tenant.ga_measurement_id || "";
@@ -2461,7 +2517,8 @@ function loadLiveIntoUI() {
     toast("Connected to Supabase", live.tenant.name + " loaded live", "ok");
     if (!setupRouted) {
       setupRouted = true;
-      if (computeSetup().pct < 100) goto("setup");
+      if (!ROLE_VIEWS[liveRole] && computeSetup().pct < 100) goto("setup");
+      else if (ROLE_VIEWS[liveRole] && !canSee(($(".view.active") || {}).id?.replace("view-", ""))) goto(ROLE_VIEWS[liveRole][0]);
     }
     if (!checkoutToastShown) {
       checkoutToastShown = true;

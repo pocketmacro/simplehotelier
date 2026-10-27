@@ -187,10 +187,10 @@
       });
       if (!ures.ok) return null;
       const user = await ures.json();
-      const mem = await rest("tenant_members?user_id=eq." + user.id + "&select=tenant_id&limit=1");
+      const mem = await rest("tenant_members?user_id=eq." + user.id + "&select=tenant_id,role&limit=1");
       if (!mem || !mem.length) return { user, tenant: null };
       const tenants = await rest("tenants?id=eq." + mem[0].tenant_id + "&select=*");
-      return { user, tenant: (tenants && tenants[0]) || null };
+      return { user, role: mem[0].role, tenant: (tenants && tenants[0]) || null };
     } catch { return null; }
   }
 
@@ -212,15 +212,22 @@
       const tid = "tenant_id=eq." + tenant.id;
       ctx.tenantId = tenant.id;
       const cutoff = historyCutoff();
-      const [rooms, reservations, addons, taxes, roomTypesRaw, overridesRaw, olderRows] = await Promise.all([
+      /* Each role loads only what it may see (20261122000000_role_scoped_access):
+         the front desk everything; cleaners rooms, tickets and the turnover
+         list; maintenance rooms and tickets. */
+      const role = mt.role || "staff";
+      const desk = role === "owner" || role === "admin" || role === "staff";
+      const none = () => Promise.resolve([]);
+      const [rooms, reservations, addons, taxes, roomTypesRaw, overridesRaw, olderRows, turnoverRows] = await Promise.all([
         restAll("rooms?" + tid + "&select=*&order=sort_order.asc,id.asc"),
-        restAll("reservations?" + tid + "&or=(check_out.gte." + cutoff + ",and(balance_cents.gt.0,status.neq.cancelled))&select=*&order=check_in.asc,id.asc"),
-        restAll("addons?" + tid + "&select=*&order=name.asc,id.asc"),
-        restAll("tax_rules?" + tid + "&select=*&order=sort_order.asc,id.asc"),
-        restAll("room_types?" + tid + "&select=*&order=name.asc,id.asc").catch(() => []),
+        desk ? restAll("reservations?" + tid + "&or=(check_out.gte." + cutoff + ",and(balance_cents.gt.0,status.neq.cancelled))&select=*&order=check_in.asc,id.asc") : none(),
+        desk ? restAll("addons?" + tid + "&select=*&order=name.asc,id.asc") : none(),
+        desk ? restAll("tax_rules?" + tid + "&select=*&order=sort_order.asc,id.asc") : none(),
+        desk ? restAll("room_types?" + tid + "&select=*&order=name.asc,id.asc").catch(() => []) : none(),
         // Past nights can't be booked or re-priced; keep a month for context.
-        restAll("room_rate_overrides?" + tid + "&date=gte." + isoDay(ANCHOR.getTime() - 31 * DAY) + "&select=*&order=date.asc,room_type_id.asc").catch(() => []),
-        rest("reservations?" + tid + "&check_out=lt." + cutoff + "&select=id&limit=1").catch(() => [])
+        desk ? restAll("room_rate_overrides?" + tid + "&date=gte." + isoDay(ANCHOR.getTime() - 31 * DAY) + "&select=*&order=date.asc,room_type_id.asc").catch(() => []) : none(),
+        desk ? rest("reservations?" + tid + "&check_out=lt." + cutoff + "&select=id&limit=1").catch(() => []) : none(),
+        role !== "maintenance" ? rpc("housekeeping_turnovers", { p_tenant: tenant.id, p_from: isoDay(ANCHOR.getTime()), p_days: 2 }).catch(() => []) : none()
       ]);
       const typeNameById = {};
       const typePhotosById = {};
@@ -231,14 +238,20 @@
       // Open tickets, plus ones closed in the last 90 days.
       const recent = new Date(ANCHOR.getTime() - 90 * DAY).toISOString();
       const ticketRows = await rest("maintenance_tickets?" + tid + "&or=(status.neq.done,resolved_at.gte." + recent + ",created_at.gte." + recent + ")&select=*&order=created_at.desc,id.desc&limit=500").catch(() => []);
-      const feedRows = await rest("ical_feeds?" + tid + "&select=*&order=created_at.asc&limit=500").catch(() => []);
+      const feedRows = desk ? await rest("ical_feeds?" + tid + "&select=*&order=created_at.asc&limit=500").catch(() => []) : [];
       // Payments view: the last 30 days ("Collected" is that window's total).
-      const txnRows = await restAll("transactions?" + tid + "&created_at=gte." + new Date(ANCHOR.getTime() - 30 * DAY).toISOString() + "&select=*&order=created_at.desc,id.desc").catch(() => []);
-      const anyTxn = await rest("transactions?" + tid + "&select=id&limit=1").catch(() => []);
+      const txnRows = desk ? await restAll("transactions?" + tid + "&created_at=gte." + new Date(ANCHOR.getTime() - 30 * DAY).toISOString() + "&select=*&order=created_at.desc,id.desc").catch(() => []) : [];
+      const anyTxn = desk ? await rest("transactions?" + tid + "&select=id&limit=1").catch(() => []) : [];
       const memberRows = await rest("tenant_members?" + tid + "&select=user_id").catch(() => []);
       const roomCode = (id) => ctx.roomCodeById[id] || "—";
       return {
-        tenant, user, membersCount: (memberRows || []).length,
+        tenant, user, role, membersCount: (memberRows || []).length,
+        // Housekeeping's turnover list: rooms and dates, no guest details.
+        turnovers: (turnoverRows || []).map((t) => ({
+          roomId: t.room_id, roomCode: roomCode(t.room_id),
+          inN: dayOff(t.check_in), outN: dayOff(t.check_out), status: mapStatus(t.status),
+          guests: (t.adults || 0) + (t.children || 0) + (t.infants || 0)
+        })),
         olderReservations: !!(olderRows && olderRows.length),
         hasPayments: !!(anyTxn && anyTxn.length),
         rooms: rooms.map((r) => ({

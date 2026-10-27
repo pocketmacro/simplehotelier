@@ -4,7 +4,8 @@
 -- bypass on tenants, anonymous writes and promo-code leaks on the public
 -- booking page, browsers calling internal (service-only) functions,
 -- client-priced or unthrottled bookings, front-desk functions reachable by
--- cleaners or other tenants, storage writes outside the tenant's folder,
+-- cleaners or other tenants, team roles reaching data outside their job
+-- (20261122000000_role_scoped_access), storage writes outside the tenant's folder,
 -- support/invite impersonation, and new tables or SECURITY DEFINER functions
 -- exposed by default.
 --
@@ -28,7 +29,7 @@ create temp table rls_meta as select txid_current() as txid;
 
 create temp table fx (key text primary key, id uuid not null default gen_random_uuid());
 insert into fx (key) values
-  ('a_owner'), ('a_admin'), ('a_staff'), ('a_cleaner'), ('b_owner'), ('outsider'), ('claimer'),
+  ('a_owner'), ('a_admin'), ('a_staff'), ('a_cleaner'), ('a_maint'), ('b_owner'), ('outsider'), ('claimer'),
   ('tenant_a'), ('tenant_b'), ('tenant_c'),
   ('type_a'), ('type_b'), ('room_a1'), ('room_a2'), ('room_b1'),
   ('addon_a'), ('tax_a'), ('override_a'), ('guest_a'), ('res_a'), ('res_b'), ('resaddon_a'),
@@ -46,7 +47,7 @@ select f.id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authentic
        replace(f.key, '_', '-') || '@rls-check.invalid', '', now(),
        '{"provider":"email","providers":["email"]}', '{}', now(), now()
 from pg_temp.fx f
-where f.key in ('a_owner', 'a_admin', 'a_staff', 'a_cleaner', 'b_owner', 'outsider', 'claimer');
+where f.key in ('a_owner', 'a_admin', 'a_staff', 'a_cleaner', 'a_maint', 'b_owner', 'outsider', 'claimer');
 
 insert into public.tenants (id, name, slug, created_by, contact_email, booking_email, tax_number,
                             stripe_customer_id, ical_token)
@@ -64,6 +65,7 @@ insert into public.tenant_members (tenant_id, user_id, role) values
   (pg_temp.id('tenant_a'), pg_temp.id('a_admin'), 'admin'),
   (pg_temp.id('tenant_a'), pg_temp.id('a_staff'), 'staff'),
   (pg_temp.id('tenant_a'), pg_temp.id('a_cleaner'), 'cleaner'),
+  (pg_temp.id('tenant_a'), pg_temp.id('a_maint'), 'maintenance'),
   (pg_temp.id('tenant_b'), pg_temp.id('b_owner'), 'owner');
 
 insert into public.room_types (id, tenant_id, name, rack_rate_cents, rate_plans) values
@@ -605,7 +607,8 @@ with exposed as (
   select * from exposed
   where not (proname = any (array['member_tenant_ids', 'is_tenant_member', 'has_tenant_role', 'can_claim_tenant',
                                   'is_system_admin', 'get_available_room_ids', 'get_rate_plans', 'log_client_error']))
-    and not (rolname = 'authenticated' and proname = any (array['staff_quote', 'save_reservation', 'record_manual_payment']))
+    and not (rolname = 'authenticated' and proname = any (array['staff_quote', 'save_reservation', 'record_manual_payment',
+                                                                'housekeeping_turnovers']))
 )
 select pg_temp.rec('R47 only allowlisted SECURITY DEFINER functions are browser-callable',
   (select count(*) from unexpected) = 0,
@@ -854,26 +857,132 @@ select pg_temp.expect('R92 data guards: safe confirmation codes, https-only iCal
   ],
   'error:23514');
 
--- ============================================================ R95 known gaps (assert CURRENT behavior)
--- KNOWN GAP, reported 2026-10-27, awaiting a decision. EXPECTED (secure)
--- outcome: 'denied'. 20261116000000_reservation_editor.sql says "Cleaners
--- only see housekeeping data", and save_reservation / record_manual_payment /
--- staff_quote refuse cleaners (R61, R64, R65), but every *_member_all policy
--- uses is_tenant_member(), so a cleaner reads guest PII and invite tokens and
--- writes reservations, payments and prices straight through PostgREST.
--- When the policies are tightened this check fails: change 'rows=1' to
--- 'denied' and drop "KNOWN GAP" from the name.
-select pg_temp.expect('R95 KNOWN GAP (current behavior): cleaners read guest data and change payments directly',
-  array['a_cleaner'],
+-- ============================================================ R95-R99 team roles (20261122000000)
+-- owner/admin manage everything; staff = front desk; cleaner = housekeeping;
+-- maintenance = tickets. Payments only move through the logged functions.
+select pg_temp.expect('R95 cleaners and maintenance see no guest data, payments, prices or invites',
+  array['a_cleaner', 'a_maint'],
   array[
-    $q$select guest_email from public.reservations where id = '{res_a}'$q$,
-    $q$select token from public.invites where id = '{invite_a}'$q$,
+    $q$select guest_email as v from public.reservations where id = '{res_a}'$q$,
+    $q$select name as v from public.guests where id = '{guest_a}'$q$,
+    $q$select amount_cents as v from public.transactions where id = '{txn_a}'$q$,
+    $q$select id as v from public.folio_entries where id = '{folio_a}'$q$,
+    $q$select rate_plans::text as v from public.room_types where id = '{type_a}'$q$,
+    $q$select url as v from public.ical_feeds where id = '{feed_a}'$q$,
+    $q$select token as v from public.invites where id = '{invite_a}'$q$,
+    $q$update public.reservations set paid_cents = total_cents where id = '{res_a}'$q$,
+    $q$delete from public.reservations where id = '{res_a}'$q$,
+    $q$insert into public.transactions (tenant_id, reservation_id, description, method, status, amount_cents)
+       values ('{tenant_a}', '{res_a}', 'Cash', 'Cash', 'paid', 36000)$q$,
+    $q$update public.room_types set rack_rate_cents = 1 where id = '{type_a}'$q$,
+    $q$delete from public.tax_rules where id = '{tax_a}'$q$
+  ],
+  'denied');
+
+select pg_temp.expect('R96 staff read pricing and feeds but only owners/admins change them; staff never see invite links',
+  array['a_staff'],
+  array[
+    $q$update public.room_types set rack_rate_cents = 1 where id = '{type_a}'$q$,
+    $q$update public.addons set price_cents = 1 where id = '{addon_a}'$q$,
+    $q$delete from public.tax_rules where id = '{tax_a}'$q$,
+    $q$update public.room_rate_overrides set rate_cents = 1 where id = '{override_a}'$q$,
+    $q$insert into public.tax_rules (tenant_id, name, kind, rate) values ('{tenant_a}', 'Sneaky', 'percent', 0)$q$,
+    $q$delete from public.ical_feeds where id = '{feed_a}'$q$,
+    $q$delete from public.reservations where id = '{res_a}'$q$,
+    $q$select token as v from public.invites where id = '{invite_a}'$q$
+  ],
+  'denied');
+select pg_temp.expect('R96b staff read reservations, guests, payments and pricing (control)',
+  array['a_staff'],
+  array[
+    $q$select guest_email as v from public.reservations where id = '{res_a}'$q$,
+    $q$select amount_cents as v from public.transactions where id = '{txn_a}'$q$,
+    $q$select rack_rate_cents as v from public.room_types where id = '{type_a}'$q$,
+    $q$select url as v from public.ical_feeds where id = '{feed_a}'$q$
+  ],
+  'rows=1');
+select pg_temp.expect('R96c owners and admins still change pricing (control)',
+  array['a_owner', 'a_admin'],
+  array[
+    $q$update public.room_types set rack_rate_cents = 13000 where id = '{type_a}'$q$,
+    $q$update public.tax_rules set rate = 11 where id = '{tax_a}'$q$,
+    $q$select token as v from public.invites where id = '{invite_a}'$q$
+  ],
+  'rows=1');
+
+select pg_temp.expect('R97 no browser role changes paid amounts or writes payments directly',
+  array['a_owner', 'a_admin', 'a_staff'],
+  array[
     $q$update public.reservations set paid_cents = total_cents where id = '{res_a}'$q$,
     $q$insert into public.transactions (tenant_id, reservation_id, description, method, status, amount_cents)
        values ('{tenant_a}', '{res_a}', 'Cash', 'Cash', 'paid', 36000)$q$,
-    $q$update public.room_types set rack_rate_cents = 1 where id = '{type_a}'$q$
+    $q$update public.transactions set amount_cents = 1 where id = '{txn_a}'$q$,
+    $q$delete from public.transactions where id = '{txn_a}'$q$
+  ],
+  'denied');
+select pg_temp.expect('R97b paid amounts are refused with a clear reason',
+  array['a_owner', 'a_staff'],
+  array[$q$update public.reservations set paid_cents = total_cents where id = '{res_a}'$q$],
+  'error:42501', 'payments_locked');
+select pg_temp.expect('R97c the front desk still edits other booking fields (control)',
+  array['a_owner', 'a_staff'],
+  array[$q$update public.reservations set notes = 'Late arrival' where id = '{res_a}'$q$],
+  'rows=1');
+
+select pg_temp.expect('R98 staff and cleaners update housekeeping; everyone reads the room list (control)',
+  array['a_staff', 'a_cleaner'],
+  array[$q$update public.rooms set housekeeping_status = 'dirty', notes = 'Spill' where id = '{room_a1}'$q$],
+  'rows=1');
+select pg_temp.expect('R98b every team role reads the room list (control)',
+  array['a_owner', 'a_staff', 'a_cleaner', 'a_maint'],
+  array[$q$select code as v from public.rooms where tenant_id = '{tenant_a}'$q$],
+  'rows=2');
+select pg_temp.expect('R98c only owners/admins change room details; cleaners not room status',
+  array['a_staff', 'a_cleaner'],
+  array[
+    $q$update public.rooms set rate_cents = 1 where id = '{room_a1}'$q$,
+    $q$update public.rooms set name = 'Renamed' where id = '{room_a1}'$q$
+  ],
+  'error:42501', 'rooms_locked');
+select pg_temp.expect('R98d cleaners cannot change occupancy status; maintenance cannot edit rooms',
+  array['a_cleaner', 'a_maint'],
+  array[
+    $q$update public.rooms set status = 'occupied' where id = '{room_a1}'$q$,
+    $q$insert into public.rooms (tenant_id, code, name) values ('{tenant_a}', 'ZZ', 'Sneaky room')$q$,
+    $q$delete from public.rooms where id = '{room_a2}'$q$
+  ],
+  'denied');
+select pg_temp.expect('R98e maintenance cannot change housekeeping status',
+  array['a_maint'],
+  array[$q$update public.rooms set housekeeping_status = 'clean' where id = '{room_a1}'$q$],
+  'denied');
+
+select pg_temp.expect('R99 maintenance works tickets end to end (control)',
+  array['a_maint'],
+  array[
+    $q$select title as v from public.maintenance_tickets where id = '{ticket_a}'$q$,
+    $q$update public.maintenance_tickets set status = 'in_progress' where id = '{ticket_a}'$q$,
+    $q$insert into public.maintenance_tickets (tenant_id, room_id, title) values ('{tenant_a}', '{room_a1}', 'Broken lamp')$q$,
+    $q$delete from public.maintenance_tickets where id = '{ticket_a}'$q$
   ],
   'rows=1');
+select pg_temp.expect('R99b cleaners report and update tickets but cannot delete them',
+  array['a_cleaner'],
+  array[$q$delete from public.maintenance_tickets where id = '{ticket_a}'$q$],
+  'denied');
+select pg_temp.expect('R99c turnover list: housekeeping sees stays without guest details',
+  array['a_owner', 'a_staff', 'a_cleaner'],
+  array[$q$select (to_jsonb(t) - array['room_id', 'check_in', 'check_out', 'status', 'adults', 'children', 'infants'])::text as v
+          from public.housekeeping_turnovers('{tenant_a}', current_date + 100, 2) t$q$],
+  'value~^\{\}$');
+select pg_temp.expect('R99d turnover list is empty for maintenance and other properties',
+  array['a_maint', 'b_owner'],
+  array[$q$select room_id as v from public.housekeeping_turnovers('{tenant_a}', current_date + 100, 14)$q$],
+  'rows=0');
+select pg_temp.expect('R99e the role list accepts maintenance and nothing unknown',
+  array['service'],
+  array[$q$insert into public.tenant_members (tenant_id, user_id, role) values ('{tenant_b}', '{a_maint}', 'janitor')$q$],
+  'error:23514');
 
 -- ============================================================ R00 run integrity (recorded last, sorted first)
 select pg_temp.rec('R00 one transaction, fixtures in place (the final raise rolls all of it back)',

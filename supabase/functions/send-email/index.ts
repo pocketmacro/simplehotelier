@@ -152,7 +152,7 @@ async function teamInvite(req: Request, body: any) {
   if (!user) return json({ error: "Sign in first" }, 401);
   const tenantId = String(body.tenant_id || "");
   const email = String(body.email || "").trim().toLowerCase();
-  const role = ["admin", "staff", "cleaner"].includes(body.role) ? body.role : "cleaner";
+  const role = ["admin", "staff", "cleaner", "maintenance"].includes(body.role) ? body.role : "cleaner";
   if (!tenantId || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "tenant_id and a valid email are required" }, 400);
   const myRole = await memberRole(admin, tenantId, user.id);
   if (myRole !== "owner" && myRole !== "admin") return json({ error: "Only the property owner or an admin can send invites" }, 403);
@@ -169,7 +169,7 @@ async function teamInvite(req: Request, body: any) {
   if (error || !invite) return json({ error: "could not store the invite" }, 500);
 
   const link = `${appOrigin(req.headers.get("origin"))}/app.html?invite=${encodeURIComponent(invite.token)}`;
-  const roleLabel = role === "cleaner" ? "housekeeping" : role;
+  const roleLabel = ({ cleaner: "housekeeping", staff: "front desk", maintenance: "maintenance", admin: "an admin" } as Record<string, string>)[role] || role;
   const res = await sendMail({
     to: email,
     subject: `You're invited to join ${tenant.name} on SimpleHotelier`,

@@ -6,6 +6,9 @@
 // what each role can actually do against the LIVE database.
 //
 // Usage: node scripts/rls-check.mjs
+//        node scripts/rls-check.mjs --with supabase/migrations/<pending>.sql
+//          (runs a migration that isn't applied yet first, in the same
+//          rolled-back transaction, to check it before applying it)
 //
 // Safe on live: the whole file plus a final DO block that raises
 // "RLS_RESULTS <json>" is sent as ONE Management API query, which Postgres
@@ -219,7 +222,15 @@ export async function runRolledBack(sql, { root } = {}) {
    assertion on Windows, so the caller sets process.exitCode instead). */
 async function main() {
   const root = new URL("../", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
-  const sql = readFileSync(root + "tests/rls/checks.sql", "utf8");
+  const args = process.argv.slice(2);
+  const pending = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--with" && args[i + 1]) pending.push(args[++i]);
+    else { console.error(`unknown argument: ${args[i]}`); return 1; }
+  }
+  const sql = pending.map((f) => readFileSync(root + f.replaceAll("\\", "/"), "utf8") + "\n;\n").join("") +
+    readFileSync(root + "tests/rls/checks.sql", "utf8");
+  if (pending.length) console.log(`Including pending migration(s): ${pending.join(", ")}\n`);
   let out;
   try {
     out = await runRolledBack(sql, { root });
