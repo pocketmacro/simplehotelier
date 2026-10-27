@@ -179,14 +179,15 @@ test("deposits are destination charges (Stripe refuses direct charges on Express
   const src = fn("charge-guest");
   assert.doesNotMatch(src, /stripeAccount/, "no Stripe-Account header: the intent lives on the platform");
   assert.equal((src.match(/transfer_data: \{ destination: tenant\.stripe_account_id \}/g) || []).length, 3, "deposit, card charge and payment link");
-  assert.equal((src.match(/on_behalf_of: tenant\.stripe_account_id/g) || []).length, 3);
+  assert.equal((src.match(/on_behalf_of: tenant\.stripe_account_id/g) || []).length, 4, "plus the card-guarantee SetupIntent");
   assert.match(src, /intent\.transfer_data\?\.destination !== tenant\.stripe_account_id/);
   assert.match(book, /window\.Stripe\(cfg\.STRIPE_PUBLISHABLE_KEY\);/, "Stripe.js must not target the connected account");
 });
 
-test("a deposit setup failure after the booking is saved never re-offers Request booking", () => {
-  const block = book.slice(book.indexOf('fnPost("charge-guest", { tenant_id'), book.indexOf("await mountCard();"));
-  assert.match(block, /catch \{\s*showSuccess\(code, total,/);
+test("a card-step failure after the booking is saved retries the same booking, never books again", () => {
+  const step = book.slice(book.indexOf("async function startCardStep()"), book.indexOf("async function payDeposit()"));
+  assert.match(step, /catch \{[\s\S]*Try the card form again/);
+  assert.match(book, /if \(state\.booked\) \{ await startCardStep\(\); return; \}/, "the button reopens the card form, not create_booking");
 });
 
 test("emails escape guest/owner text and invite links never trust the Origin header", () => {

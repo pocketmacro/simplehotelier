@@ -22,10 +22,13 @@ const CORS = {
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
+// Preset wording must match what owners pick in Settings and guests read on
+// the booking page (js/book.js cancellationText); custom policies are used
+// word-for-word. tests/policy-text.test.mjs keeps the three in sync.
 const POLICY_TEXT: Record<string, string> = {
-  flexible: "Free cancellation up to 7 days before check-in. After that, the first night is non-refundable.",
-  moderate: "Free cancellation up to 14 days before check-in. After that, 50% of the stay is non-refundable.",
-  strict: "You can cancel your reservation up to 30 days before your stay, but you won't receive a refund if you cancel after that."
+  flexible: "Flexible cancellation: full refund if you cancel at least 48 hours before check-in.",
+  moderate: "Moderate cancellation: full refund if you cancel at least 7 days before check-in.",
+  strict: "Strict cancellation: 50% refund if you cancel at least 14 days before check-in."
 };
 
 const firstName = (name: unknown) => String(name || "").trim().split(/\s+/)[0] || "there";

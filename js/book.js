@@ -99,7 +99,7 @@
   const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  const state = { tenant: null, rooms: [], types: {}, addons: [], taxes: [], selected: null, selectedTypeId: null, available: null, gaId: "", overrides: {}, dep: null, paying: null, stripe: null, cardEl: null };
+  const state = { tenant: null, rooms: [], types: {}, addons: [], taxes: [], selected: null, selectedTypeId: null, available: null, gaId: "", overrides: {}, dep: null, booked: null, paying: null, stripe: null, cardEl: null };
   /* Properties choose: guests book a room type (we auto-assign a unit) or the exact room.
      Safety net: by-type only engages when at least one room actually has a type —
      otherwise fall back to specific rooms so the page never comes up empty. */
@@ -330,6 +330,12 @@
      Collected by card when the property finished Stripe Connect and a
      publishable key is configured; otherwise the guest acknowledges it and
      the property collects it (flagged on the reservation). */
+  /* Properties with Stripe connected require a card to book online: the
+     deposit is charged, or (no deposit) the card is saved, not charged. */
+  function cardRequired() {
+    const t = state.tenant || {};
+    return !!(t.stripe_onboarding_complete && t.stripe_account_id && cfg.STRIPE_PUBLISHABLE_KEY);
+  }
   function depositInfo(total) {
     const t = state.tenant || {};
     if (!t.deposit_enabled) return null;
@@ -387,26 +393,69 @@
     $("#successPanel").hidden = false;
     postHeight();
   }
+  /* After the booking is saved: open the secure card form for the deposit,
+     or (no deposit) to save the card. Runs again on retry, on the same
+     booking, so a failure here can never book a second room. */
+  async function startCardStep() {
+    const b = state.booked;
+    const btn = $("#bookBtn"), pErr = $("#payError");
+    const deposit = b.depositCents > 0;
+    pErr.hidden = true;
+    btn.disabled = true; btn.textContent = "Opening secure card form…";
+    try {
+      const r = await fnPost("charge-guest", deposit
+        ? { tenant_id: state.tenant.id, reservation_id: b.resId }
+        : { action: "setup", tenant_id: state.tenant.id, reservation_id: b.resId });
+      if (!r.client_secret) throw new Error("no client secret");
+      const due = deposit ? (r.amount_cents || b.depositCents) / 100 : 0;
+      state.paying = { mode: deposit ? "deposit" : "setup", clientSecret: r.client_secret, due };
+      $("#payTitle").textContent = deposit ? "Deposit payment" : "Card to hold your booking";
+      $("#payText").textContent = deposit
+        ? `A deposit of ${money(due)} (${b.depositPct}% of ${money(b.total)}) is due today to confirm ${state.selected.name}. The balance is due at the property.`
+        : `${state.tenant.name} requires a card to hold your ${state.selected.name} booking. Nothing is charged now — Stripe keeps the card securely for your balance and the cancellation policy.`;
+      $("#payPanel").hidden = false;
+      await mountCard();
+      btn.disabled = false;
+      btn.textContent = deposit ? "Pay " + money(due) + " deposit" : "Save card & confirm booking";
+      $("#payPanel").scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch {
+      pErr.textContent = "We couldn't open the secure card form. Please try again — your room is held for 30 minutes.";
+      pErr.hidden = false;
+      $("#payPanel").hidden = false;
+      btn.disabled = false;
+      btn.textContent = "Try the card form again";
+    }
+    postHeight();
+  }
   async function payDeposit() {
     const btn = $("#bookBtn");
     const pErr = $("#payError");
+    const b = state.booked, pay = state.paying;
+    const billing = { name: $("#gName").value.trim(), email: $("#gEmail").value.trim() };
     pErr.hidden = true;
     btn.disabled = true; btn.textContent = "Processing…";
     try {
-      const { paymentIntent, error } = await state.stripe.confirmCardPayment(state.paying.clientSecret, {
-        payment_method: { card: state.cardEl, billing_details: { name: $("#gName").value.trim(), email: $("#gEmail").value.trim() } }
-      });
+      if (pay.mode === "setup") {
+        const { setupIntent, error } = await state.stripe.confirmCardSetup(pay.clientSecret, { payment_method: { card: state.cardEl, billing_details: billing } });
+        if (error) throw new Error(error.message || "Card declined");
+        if (!setupIntent || setupIntent.status !== "succeeded") throw new Error("The card could not be saved. Please try another card.");
+        await fnPost("charge-guest", { action: "confirm_setup", tenant_id: state.tenant.id, setup_intent_id: setupIntent.id }).catch(() => {});
+        fnPost("send-email", { action: "booking_confirmation", reservation_id: b.resId }).catch(() => {});
+        showSuccess(b.code, b.total, " Your card is saved to hold the booking — nothing has been charged.");
+        return;
+      }
+      const { paymentIntent, error } = await state.stripe.confirmCardPayment(pay.clientSecret, { payment_method: { card: state.cardEl, billing_details: billing } });
       if (error) throw new Error(error.message || "Card declined");
       if (!paymentIntent || paymentIntent.status !== "succeeded") throw new Error("Payment did not complete. Please try another card.");
       await fnPost("charge-guest", { action: "confirm", tenant_id: state.tenant.id, payment_intent_id: paymentIntent.id }).catch(() => {});
-      fnPost("send-email", { action: "charge_receipt", reservation_id: state.paying.resId, payment_intent_id: paymentIntent.id }).catch(() => {});
-      const { code, total, due } = state.paying;
-      showSuccess(code, total, ` Your ${money(due)} deposit is paid — the remaining balance is due at the property.`);
+      fnPost("send-email", { action: "booking_confirmation", reservation_id: b.resId }).catch(() => {});
+      fnPost("send-email", { action: "charge_receipt", reservation_id: b.resId, payment_intent_id: paymentIntent.id }).catch(() => {});
+      showSuccess(b.code, b.total, ` Your ${money(pay.due)} deposit is paid — the remaining balance is due at the property.`);
     } catch (e) {
       pErr.textContent = e.message || "Payment failed. Please check the card and try again.";
       pErr.hidden = false;
       btn.disabled = false;
-      btn.textContent = "Pay " + money(state.paying.due) + " deposit";
+      btn.textContent = pay.mode === "setup" ? "Save card & confirm booking" : "Pay " + money(pay.due) + " deposit";
       postHeight();
     }
   }
@@ -508,13 +557,16 @@
       q.addonLines.map((l) => `<div class="bk-line"><span>${esc(l.name)}</span><b>${money(l.amount)}</b></div>`).join("") +
       q.taxLines.map((l) => `<div class="bk-line"><span>${esc(l.name)}</span><b>${money(l.amount)}</b></div>`).join("") +
       `<div class="bk-line total"><span>Total</span><b>${money(q.total)}</b></div>` +
-      (dep ? `<div class="bk-line"><span>Deposit due today (${dep.pct}%)</span><b>${money(dep.due)}</b></div><div class="bk-line"><span>Balance at the property</span><b>${money(round2(q.total - dep.due))}</b></div>` : "");
-    if (state.paying) { btn.disabled = false; btn.textContent = "Pay " + money(state.paying.due) + " deposit"; }
+      (dep ? `<div class="bk-line"><span>Deposit due today (${dep.pct}%)</span><b>${money(dep.due)}</b></div><div class="bk-line"><span>Balance at the property</span><b>${money(round2(q.total - dep.due))}</b></div>`
+        : cardRequired() ? `<div class="bk-line"><span>Due today · card required to hold</span><b>${money(0)}</b></div>` : "");
+    if (state.paying) { btn.disabled = false; btn.textContent = state.paying.mode === "setup" ? "Save card & confirm booking" : "Pay " + money(state.paying.due) + " deposit"; }
+    else if (state.booked) { btn.disabled = false; btn.textContent = "Try the card form again"; }
     else if (termsRequired() && !$("#gTermsAck").checked) { btn.disabled = true; btn.textContent = "Agree to the property terms to continue"; }
     else if (needsAck && !$("#depAck").checked) { btn.disabled = true; btn.textContent = "Tick the deposit box to continue"; }
     else {
       btn.disabled = false;
-      btn.textContent = dep && dep.collectible ? "Book & pay " + money(dep.due) + " deposit" : "Request booking · " + money(q.total);
+      btn.textContent = dep && dep.collectible ? "Book & pay " + money(dep.due) + " deposit"
+        : cardRequired() && !dep ? "Book · add card to hold" : "Request booking · " + money(q.total);
     }
     postHeight();
     return q;
@@ -708,6 +760,7 @@
   $("#gTermsAck").addEventListener("change", () => renderSummary());
   $("#bookBtn").addEventListener("click", async () => {
     if (state.paying) { await payDeposit(); return; }
+    if (state.booked) { await startCardStep(); return; }
     showError("");
     const name = $("#gName").value.trim();
     const email = $("#gEmail").value.trim();
@@ -744,32 +797,15 @@
       const resId = booked.reservation_id, code = booked.confirmation_code;
       const total = (booked.total_cents || 0) / 100;
       state.selected = state.rooms.find((r) => r.id === booked.room_id) || state.selected;
-      // Guest confirmation email (+ property notification). Best effort: the booking already succeeded.
-      fnPost("send-email", { action: "booking_confirmation", reservation_id: resId }).catch(() => {});
-      if (state.dep && state.dep.collectible && booked.deposit_cents > 0) {
-        // Deposit required: the server works out the amount; switch the button to Pay.
-        // The booking is already saved, so a payment-setup failure must never
-        // re-offer "Request booking" (a retry would book a second room).
-        btn.textContent = "Preparing secure payment…";
-        let pi;
-        try {
-          pi = await fnPost("charge-guest", { tenant_id: state.tenant.id, reservation_id: resId });
-          if (!pi.client_secret) throw new Error("no client secret");
-        } catch {
-          showSuccess(code, total, ` We couldn't start the card payment for your ${money(booked.deposit_cents / 100)} deposit right now — the property will contact you to collect it.`);
-          return;
-        }
-        const due = (pi.amount_cents || booked.deposit_cents) / 100;
-        state.paying = { resId, code, total, due, clientSecret: pi.client_secret };
-        $("#payText").textContent = `A deposit of ${money(due)} (${booked.deposit_percent}% of ${money(total)}) is due today to confirm ${state.selected.name}. The balance is due at the property.`;
-        $("#payPanel").hidden = false;
-        await mountCard();
-        btn.disabled = false;
-        btn.textContent = "Pay " + money(due) + " deposit";
-        $("#payPanel").scrollIntoView({ behavior: "smooth", block: "center" });
-        postHeight();
+      state.booked = { resId, code, total, depositCents: booked.deposit_cents || 0, depositPct: booked.deposit_percent };
+      if (booked.card_required && cfg.STRIPE_PUBLISHABLE_KEY) {
+        // Card required (deposit or guarantee): the confirmation email goes out
+        // once the card is in; bookings without one are released after 30 minutes.
+        await startCardStep();
         return;
       }
+      // Guest confirmation email (+ property notification). Best effort: the booking already succeeded.
+      fnPost("send-email", { action: "booking_confirmation", reservation_id: resId }).catch(() => {});
       showSuccess(code, total, booked.deposit_cents > 0 ? ` A deposit of ${money(booked.deposit_cents / 100)} (${booked.deposit_percent}%) is required to confirm — the property will arrange collection.` : "");
     } catch (e) {
       btn.disabled = false; btn.textContent = "Request booking";

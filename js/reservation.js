@@ -172,7 +172,7 @@ function rxRender() {
           ${field("country", "Country")}
           <div class="field"><label for="rx-arrival">Arrival time</label><select class="select" id="rx-arrival" data-rx-field="arrival"${dis}>${rxOptions(RX_ARRIVALS.map((a) => [a, a || "Not set"]), f.arrival)}</select></div>
           <div class="field"><label for="rx-source">Source of reservation</label><select class="select" id="rx-source" data-rx-field="source"${dis}>${rxOptions(RX_SOURCES, f.source)}</select></div>
-          <div class="field rx-span2"><label>Card on file</label><div class="rx-card${card ? "" : " none"}">${card ? `<span class="rx-card-brand">${esc(String(card.brand || "card").toUpperCase())}</span>${esc(rxCardLabel(card))}${rx.row.cardholder_name ? ` <small>· ${esc(rx.row.cardholder_name)}</small>` : ""}` : "No card saved — cards are saved when a guest pays a deposit or a payment request"}</div></div>
+          <div class="field rx-span2"><label>Card on file</label><div class="rx-card${card ? "" : " none"}">${card ? `<span class="rx-card-brand">${esc(String(card.brand || "card").toUpperCase())}</span>${esc(rxCardLabel(card))}${rx.row.cardholder_name ? ` <small>· ${esc(rx.row.cardholder_name)}</small>` : ""}` : "No card saved — cards are saved when a guest books online, pays a deposit or pays a payment request"}</div></div>
         </div>
         <div class="field"><label for="rx-notes">Guest comments</label><textarea class="textarea" id="rx-notes" data-rx-field="notes" placeholder="Requests and details from the guest"${dis}>${esc(f.notes)}</textarea></div>
       </section>
@@ -407,7 +407,7 @@ function rxShowPanel(kind, extra = {}) {
           ${amount("rxChargeAmt", due)}
           <button class="btn rx-btn-pay" type="button" data-rx="charge-go"${due <= 0 ? " disabled" : ""}>Charge card</button>
           <p class="rx-fine">Charged now through Stripe and paid out to your bank. The guest gets an email receipt.</p></div>`
-      : `<div class="rx-panel"><p class="rx-panel-h">No card on file</p><p class="rx-panel-sub">${live ? "Cards are saved when a guest pays a deposit or a payment request. Send a payment request instead — the guest pays online, and their card is saved for later charges." : "Demo property — sign in to your own property to take real card payments."}</p>
+      : `<div class="rx-panel"><p class="rx-panel-h">No card on file</p><p class="rx-panel-sub">${live ? "Cards are saved when a guest books online or pays a payment request. Send a payment request instead — the guest pays online, and their card is saved for later charges." : "Demo property — sign in to your own property to take real card payments."}</p>
           ${live ? `<button class="btn rx-btn-dark" type="button" data-rx="panel" data-panel="request">Send payment request</button>` : ""}</div>`;
   } else if (kind === "request") {
     box.innerHTML = live

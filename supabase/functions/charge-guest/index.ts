@@ -4,6 +4,9 @@
 //   POST { tenant_id, reservation_id }
 //     -> { client_secret, payment_intent_id, amount_cents }   booking deposit
 //   POST { action: "confirm", tenant_id, payment_intent_id } -> { paid, status }
+//   POST { action: "setup", tenant_id, reservation_id } -> { client_secret }
+//     no deposit: save the card to guarantee the booking (nothing charged)
+//   POST { action: "confirm_setup", tenant_id, setup_intent_id } -> { saved }
 // Front desk (dashboard, user JWT; owner/admin/staff):
 //   POST { action: "charge_card", tenant_id, reservation_id, amount_cents }
 //     charges the card saved on the booking (off-session)
@@ -141,6 +144,40 @@ async function confirm(tenant: any, body: any) {
   return { paid, status: intent.status };
 }
 
+/* A card is required to book online even without a deposit: save it with a
+   SetupIntent (nothing is charged) so the front desk can charge it later. */
+async function setup(tenant: any, body: any) {
+  if (!tenant.stripe_onboarding_complete) throw new Refusal("property Stripe onboarding incomplete");
+  const resv = await loadReservation(tenant.id, String(body.reservation_id || ""));
+  if (resv.status !== "pending" || resv.source !== "direct" || !resv.card_required) {
+    throw new Refusal("this booking does not need a card", 409);
+  }
+  if (resv.stripe_payment_method_id) throw new Refusal("a card is already saved for this booking", 409);
+  if (Date.now() - new Date(resv.created_at).getTime() > REQUEST_TTL_MS) {
+    throw new Refusal("this booking request has expired; please book again", 410);
+  }
+  const customer = await ensureCustomer(stripe, admin, resv, tenant.id);
+  const si = await stripe.setupIntents.create({
+    customer,
+    usage: "off_session",
+    on_behalf_of: tenant.stripe_account_id,
+    description: `Card guarantee · ${resv.confirmation_code}`,
+    metadata: { tenant_id: tenant.id, reservation_id: resv.id, kind: "guarantee" },
+  });
+  return { client_secret: si.client_secret, setup_intent_id: si.id };
+}
+
+async function confirmSetup(tenant: any, body: any) {
+  if (!body.setup_intent_id) throw new Refusal("setup_intent_id required");
+  const si = await stripe.setupIntents.retrieve(String(body.setup_intent_id));
+  if (si.metadata?.tenant_id !== tenant.id || !si.metadata?.reservation_id) {
+    throw new Refusal("card does not belong to this property", 403);
+  }
+  if (si.status !== "succeeded") return { saved: false, status: si.status };
+  const saved = await saveCardFromIntent(stripe, admin, si.metadata.reservation_id, si);
+  return { saved, status: si.status };
+}
+
 /* ---------------------------------------------------------------- front desk */
 async function chargeCard(req: Request, tenant: any, body: any) {
   const user = await frontDesk(req, tenant.id);
@@ -270,6 +307,8 @@ Deno.serve(async (req) => {
 
     switch (body.action) {
       case "confirm": return json(await confirm(tenant, body));
+      case "setup": return json(await setup(tenant, body));
+      case "confirm_setup": return json(await confirmSetup(tenant, body));
       case "charge_card": return json(await chargeCard(req, tenant, body));
       case "payment_request": return json(await paymentRequest(req, tenant, body));
       case "refund": return json(await refund(req, tenant, body));

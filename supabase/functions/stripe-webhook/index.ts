@@ -2,7 +2,8 @@
 // Events: checkout.session.completed (subscriptions and guest payment links),
 // customer.subscription.updated/deleted, invoice.payment_failed,
 // payment_intent.succeeded (deposits, front-desk charges, payment links) and
-// charge.refunded (refunds issued in the Stripe Dashboard).
+// charge.refunded (refunds issued in the Stripe Dashboard) and
+// setup_intent.succeeded (cards saved to guarantee bookings).
 // Secrets: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET.
 // Deploy: supabase functions deploy stripe-webhook --no-verify-jwt
 // deno-lint-ignore-file no-explicit-any
@@ -77,6 +78,11 @@ Deno.serve(async (req) => {
       // Destination charges live on the platform, so these arrive as normal
       // platform events. Idempotent: each intent moves paid_cents once.
       await guestPaymentSucceeded(event.data.object);
+    } else if (event.type === "setup_intent.succeeded") {
+      const si: any = event.data.object;
+      if (si.metadata?.kind === "guarantee" && si.metadata?.reservation_id) {
+        await saveCardFromIntent(stripe, admin, si.metadata.reservation_id, si);
+      }
     } else if (event.type === "charge.refunded") {
       const charge: any = event.data.object;
       if (charge.payment_intent) {
