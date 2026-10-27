@@ -66,6 +66,17 @@
   if (!document.querySelector || !document.querySelector("#chatLog")) return;
   const $ = (s) => document.querySelector(s);
   const cfg = window.SH_CONFIG || {};
+  /* Demo sessions (explicit opt-in, see js/app.js) get no Support access:
+     no paid Spark AI calls and no cases — both are spam/cost vectors.
+     The support-ai function also rejects anonymous callers server-side;
+     this gate means the demo never even tries. */
+  const isDemo = () => { try { return sessionStorage.getItem("sh_demo") === "1"; } catch { return false; } };
+  const hasUserToken = () => {
+    try {
+      const t = localStorage.getItem("sh_access_token");
+      return !!t && t !== cfg.SUPABASE_ANON_KEY;
+    } catch { return false; }
+  };
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const myEmail = () => { try { return (JSON.parse(localStorage.getItem("sh_user") || "null") || {}).email || ""; } catch { return ""; } };
   let lastQuestion = "";
@@ -105,13 +116,19 @@
   async function askSpark(text) {
     const q = (text || "").trim();
     if (!q) return;
+    if (isDemo()) {
+      bubble("ai", "Support is for accounts", "You're exploring the demo, so Spark and support cases are switched off here. Exit the demo from the sidebar and sign in — then ask me anything.");
+      return;
+    }
     lastQuestion = q;
     bubble("me", "", q);
     $("#chatInput").value = "";
     const thinking = bubble("ai", "", "Thinking…");
     let answered = null;
     try {
-      const token = localStorage.getItem("sh_access_token") || cfg.SUPABASE_ANON_KEY;
+      // Paid API: only call it with a real user token, never the anon key.
+      if (!hasUserToken()) throw new Error("not signed in");
+      const token = localStorage.getItem("sh_access_token");
       const ctl = new AbortController();
       const timer = setTimeout(() => ctl.abort(), 9000);
       const res = await fetch((cfg.SUPABASE_URL || "").replace(/\/$/, "") + "/functions/v1/support-ai", {
@@ -131,6 +148,7 @@
   const statusPill = (s) => ({ open: "pending", pending: "progress", resolved: "clean", closed: "neutral" }[s] || "neutral");
   async function loadMyCases() {
     const box = $("#myCases");
+    if (isDemo()) { box.innerHTML = `<p class="hint">Support cases need an account — the demo can't open or view cases.</p>`; return; }
     if (!window.SHDB || !SHDB.hasLive()) { box.innerHTML = `<p class="hint">Sign in to see your cases, or create one above.</p>`; return; }
     try {
       const all = await SHDB.listSupportCases();
@@ -230,6 +248,17 @@
   }
 
   /* Wire */
+  function applySupportGate() {
+    if (!isDemo()) return;
+    ["#chatInput", "#chatAsk", "#caseFromChat", "#suggestBtn", "#caseSubject", "#caseCategory", "#casePriority", "#caseBody", "#createCaseBtn"]
+      .forEach((s) => { const el = $(s); if (el) el.disabled = true; });
+    document.querySelectorAll("[data-prompt]").forEach((b) => { b.disabled = true; });
+    const notice = $("#supportDemoNotice");
+    if (notice) notice.hidden = false;
+    const input = $("#chatInput");
+    if (input) input.placeholder = "Sign in to ask Spark";
+  }
+  applySupportGate();
   bubble("ai", "Hi, I am Spark", "Ask me how to do anything in SimpleHotelier, like adding a cabin, charging a guest, or embedding booking on your website. If I cannot solve it, I will help you open a case for our team.");
   $("#chatAsk").addEventListener("click", () => askSpark($("#chatInput").value));
   $("#chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") askSpark(e.target.value); });
@@ -246,6 +275,7 @@
     toast("Love it", "Tell us what would make SimpleHotelier better", "");
   });
   $("#createCaseBtn").addEventListener("click", async () => {
+    if (isDemo()) { toast("Support needs an account", "Exit the demo and sign in to open a case", "warn"); return; }
     const subject = $("#caseSubject").value.trim();
     const body = $("#caseBody").value.trim();
     if (!subject || !body) { toast("Add a subject and a few details", "So the team can help fast", "warn"); return; }
