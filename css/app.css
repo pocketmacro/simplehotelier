@@ -614,3 +614,17 @@ body:is([data-role="cleaner"], [data-role="maintenance"]) :is(.search:has(#globa
   [data-action="export"], [data-action="charge"], [data-action="bulk-open"]) {
   display: none !important;
 }
+
+/* Booking studio font pickers: each font shown in its own face. */
+.font-pick { position: relative; }
+.font-pick-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; text-align: left; min-height: 42px; }
+.font-pick-btn span { font-size: 17px; line-height: 1.2; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.font-pick-btn svg { flex: none; color: var(--muted); }
+.font-pick-list { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; min-width: max(100%, 220px); max-height: 320px; overflow-y: auto;
+  margin: 0; padding: 6px; list-style: none; background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 14px 34px rgb(16 31 30 / 14%); }
+.font-pick-list:focus { outline: none; }
+.font-pick-list [role="option"] { padding: 8px 12px; border-radius: 8px; font-size: 19px; line-height: 1.25; color: var(--ink); cursor: pointer; white-space: nowrap; }
+.font-pick-list [role="option"]:hover, .font-pick-list [role="option"].active { background: var(--surface-3); }
+.font-pick-list [role="option"][aria-selected="true"] { box-shadow: inset 3px 0 0 var(--brand); }
+.color-grid { row-gap: 10px; }

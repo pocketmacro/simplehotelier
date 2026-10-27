@@ -198,6 +198,7 @@ function goto(view) {
   if (view === "rates") renderRates();
   if (view === "ratemgmt") renderRateMgmt();
   if (view === "setup") renderSetupUI();
+  if (view === "booking") loadFontPreviews(); // theme cards and font pickers show each face
   document.body.classList.remove("nav-open");
   window.scrollTo({ top: 0 });
 }
@@ -1283,11 +1284,9 @@ function renderStudioDesign() {
   if (presets) presets.innerHTML = Object.entries(SHTheme.PRESETS).map(([k, p]) => `
     <button type="button" class="theme-card${t.preset === k ? " sel" : ""}" data-preset="${k}" aria-pressed="${t.preset === k}">
       <span class="theme-swatch" style="background:${p.colors.bg}"><i style="background:${p.colors.brand}"></i><i style="background:${p.colors.accent}"></i><i style="background:${p.colors.ink}"></i></span>
-      <span class="theme-name">${esc(p.label)}</span><span class="theme-font">${esc(SHTheme.FONTS[p.headingFont].label)}</span></button>`).join("");
-  const fontOpts = (kind, current) => Object.entries(SHTheme.FONTS).filter(([, f]) => f[kind])
-    .map(([k, f]) => `<option value="${k}"${k === current ? " selected" : ""}>${esc(f.label)}</option>`).join("");
-  if ($("#bkHeadFont")) $("#bkHeadFont").innerHTML = fontOpts("heading", t.headingFont);
-  if ($("#bkBodyFont")) $("#bkBodyFont").innerHTML = fontOpts("body", t.bodyFont);
+      <span class="theme-name">${esc(p.label)}</span><span class="theme-font" style="font-family:${esc(SHTheme.FONTS[p.headingFont].stack)}">${esc(SHTheme.FONTS[p.headingFont].label)}</span></button>`).join("");
+  renderFontPicker("heading", t.headingFont);
+  renderFontPicker("body", t.bodyFont);
   const grid = $("#bkColorGrid");
   if (grid && !grid.children.length) {
     grid.innerHTML = SHTheme.COLOR_KEYS.map(([k, label]) => `
@@ -1311,13 +1310,83 @@ function renderStudioDesign() {
   if (helpEl) helpEl.textContent = `Your page will say “Choose your ${words.one}” and “${words.many.replace(/^./, (c) => c.toUpperCase())}” in the menu.`;
   const eb = $("#bkEyebrow"); if (eb && document.activeElement !== eb) eb.value = t.eyebrow;
   const num = $("#bkNumbered"); if (num) num.checked = t.numberedSteps;
-  // Readability: WCAG 4.5:1 for text, 3:1 for buttons against the page.
-  const warn = [];
-  if (SHTheme.contrast(t.colors.ink, t.colors.bg) < 4.5) warn.push("Text is hard to read on this background.");
-  if (SHTheme.contrast(t.colors.ink, t.colors.surface) < 4.5) warn.push("Text is hard to read on the card color.");
-  if (SHTheme.contrast(t.colors.brand, t.colors.bg) < 3) warn.push("Buttons blend into the background.");
+  // Readability: WCAG 4.5:1 for text, 3:1 for large headings and buttons.
+  // Buttons sit on cards (search bar, rooms, summary); links sit on the page.
+  const cc = t.colors, ratio = SHTheme.contrast, warn = [];
+  if (ratio(cc.ink, cc.bg) < 4.5) warn.push("Page text is hard to read on the page background.");
+  if (ratio(cc.heading, cc.bg) < 3) warn.push("Headings are hard to read on the page background.");
+  if (ratio(cc.surfaceInk, cc.surface) < 4.5) warn.push("Card text is hard to read on the card color.");
+  if (ratio(cc.brand, cc.surface) < 3) warn.push("Buttons blend into the cards.");
   const c = $("#bkContrast");
   if (c) { c.textContent = warn.length ? "⚠ " + warn.join(" ") : "Text and buttons pass readability contrast checks."; c.classList.toggle("warn", warn.length > 0); }
+}
+/* Font pickers: a listbox that shows every font in its own face (native
+   <select> menus can't show fonts on every platform). The preview faces are
+   subset to the letters of the names, so they load in one small request. */
+let fontPreviewsLoaded = false;
+function loadFontPreviews() {
+  if (fontPreviewsLoaded) return;
+  fontPreviewsLoaded = true;
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = SHTheme.previewFontsHref();
+  document.head.appendChild(link);
+}
+function renderFontPicker(kind, current) {
+  const wrap = $(`.font-pick[data-kind="${kind}"]`); if (!wrap) return;
+  const weight = (k) => (kind === "heading" ? SHTheme.HEAD_WEIGHT[k] || 600 : 400);
+  const f = SHTheme.FONTS[current];
+  const btn = $(".font-pick-btn", wrap);
+  btn.innerHTML = `<span>${esc(f.label)}</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
+  btn.firstElementChild.style.fontFamily = f.stack;
+  btn.firstElementChild.style.fontWeight = weight(current);
+  $(".font-pick-list", wrap).innerHTML = Object.entries(SHTheme.FONTS).filter(([, x]) => x[kind]).map(([k, x]) =>
+    `<li role="option" id="fp-${kind}-${k}" data-font="${k}" aria-selected="${k === current}" style="font-family:${esc(x.stack)};font-weight:${weight(k)}">${esc(x.label)}</li>`).join("");
+}
+function showFontOption(list, li) {
+  if (!li) return;
+  $$('[role="option"]', list).forEach((o) => o.classList.toggle("active", o === li));
+  list.setAttribute("aria-activedescendant", li.id);
+  li.scrollIntoView({ block: "nearest" });
+}
+function openFontPicker(wrap) {
+  closeFontPickers();
+  loadFontPreviews();
+  const list = $(".font-pick-list", wrap);
+  list.hidden = false;
+  $(".font-pick-btn", wrap).setAttribute("aria-expanded", "true");
+  list.focus({ preventScroll: true });
+  showFontOption(list, $('[aria-selected="true"]', list) || list.firstElementChild);
+}
+function closeFontPickers(refocus) {
+  $$(".font-pick").forEach((wrap) => {
+    const list = $(".font-pick-list", wrap);
+    if (list.hidden) return;
+    list.hidden = true;
+    $(".font-pick-btn", wrap).setAttribute("aria-expanded", "false");
+    if (refocus === wrap) $(".font-pick-btn", wrap).focus();
+  });
+}
+function chooseFont(wrap, key) {
+  closeFontPickers(wrap);
+  setStudioTheme(wrap.dataset.kind === "heading" ? { headingFont: key } : { bodyFont: key });
+}
+function bindFontPickers() {
+  $$(".font-pick").forEach((wrap) => {
+    const btn = $(".font-pick-btn", wrap), list = $(".font-pick-list", wrap);
+    btn.addEventListener("click", () => (list.hidden ? openFontPicker(wrap) : closeFontPickers(wrap)));
+    btn.addEventListener("keydown", (e) => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); openFontPicker(wrap); } });
+    list.addEventListener("click", (e) => { const li = e.target.closest('[role="option"]'); if (li) chooseFont(wrap, li.dataset.font); });
+    list.addEventListener("keydown", (e) => {
+      const opts = $$('[role="option"]', list), i = opts.indexOf($(".active", list));
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); showFontOption(list, opts[Math.min(opts.length - 1, Math.max(0, i + (e.key === "ArrowDown" ? 1 : -1)))]); }
+      else if (e.key === "Home" || e.key === "End") { e.preventDefault(); showFontOption(list, opts[e.key === "Home" ? 0 : opts.length - 1]); }
+      else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (opts[i]) chooseFont(wrap, opts[i].dataset.font); }
+      else if (e.key === "Escape") { e.preventDefault(); closeFontPickers(wrap); }
+      else if (e.key === "Tab") closeFontPickers();
+    });
+  });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".font-pick")) closeFontPickers(); });
 }
 function studioSlug() {
   const v = ($("#bkUrl") ? $("#bkUrl").value : "").trim().split(".")[0].toLowerCase().replace(/[^a-z0-9-]/g, "");
@@ -1382,8 +1451,7 @@ function bindStudio() {
     // A preset swaps fonts, colors and corners; the property's wording stays.
     setStudioTheme({ ...p, colors: { ...p.colors }, preset: b.dataset.preset });
   });
-  $("#bkHeadFont").addEventListener("change", (e) => setStudioTheme({ headingFont: e.target.value }));
-  $("#bkBodyFont").addEventListener("change", (e) => setStudioTheme({ bodyFont: e.target.value }));
+  bindFontPickers();
   $("#bkColorGrid").addEventListener("input", (e) => { const k = e.target.dataset.color; if (k) setStudioTheme({ colors: { [k]: e.target.value } }); });
   $("#bkRadius").addEventListener("click", (e) => { const b = e.target.closest("[data-r]"); if (b) setStudioTheme({ radius: b.dataset.r }); });
   $("#bkUnit").addEventListener("change", (e) => {

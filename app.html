@@ -294,8 +294,8 @@
             <div class="section-title" style="margin:6px 0 10px"><h2 style="font-size:14px">Design</h2><div class="line"></div></div>
             <div class="field"><label>Theme</label><div class="theme-grid" id="bkPresets"></div><span class="help">Start from a theme, then fine-tune fonts and colors. The preview updates as you go; nothing is public until Publish changes.</span></div>
             <div class="form-2">
-              <div class="field"><label for="bkHeadFont">Heading font</label><select class="select" id="bkHeadFont"></select></div>
-              <div class="field"><label for="bkBodyFont">Body font</label><select class="select" id="bkBodyFont"></select></div>
+              <div class="field"><label id="bkHeadFontLabel">Heading font</label><div class="font-pick" data-kind="heading"><button type="button" class="select font-pick-btn" id="bkHeadFont" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="bkHeadFontLabel bkHeadFont"></button><ul class="font-pick-list" role="listbox" aria-labelledby="bkHeadFontLabel" tabindex="-1" hidden></ul></div></div>
+              <div class="field"><label id="bkBodyFontLabel">Body font</label><div class="font-pick" data-kind="body"><button type="button" class="select font-pick-btn" id="bkBodyFont" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="bkBodyFontLabel bkBodyFont"></button><ul class="font-pick-list" role="listbox" aria-labelledby="bkBodyFontLabel" tabindex="-1" hidden></ul></div></div>
             </div>
             <div class="field"><label>Colors</label><div class="color-grid" id="bkColorGrid"></div><span class="help" id="bkContrast" role="status"></span></div>
             <div class="form-2">

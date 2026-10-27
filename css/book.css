@@ -5,10 +5,11 @@
 [hidden] { display: none !important; }
 :root {
   --bg: #f3f4ef; --surface: #ffffff; --ink: #1c2620; --brand: #2f5d46; --accent: #8a6a2e; --footer: #1c2620;
+  --heading: #1c2620; --card-ink: #1c2620; --page-ink: #1c2620; --link: #2f5d46; --card-link: #2f5d46; --card-ink-2: #3f4a43; --card-muted: #5b655e; --card-line: #e2e4dc; --card-field-line: #c9cec4;
   --brand-ink: #ffffff; --footer-ink: #ffffff;
   --ink-2: #3f4a43; --muted: #5b655e; --line: #e2e4dc; --field-line: #c9cec4;
   --brand-soft: #eef3ec; --brand-hover: #1e3f2f; --chip: #e4ebe4; --placeholder: #dde3d8; --eyebrow: #f2e3bf; --footer-muted: #b9c2b8;
-  --font-head: 'Instrument Serif', Georgia, serif; --font-body: 'Inter', system-ui, sans-serif; --head-weight: 400;
+  --font-head: 'Instrument Serif', Georgia, serif; --font-body: 'Inter', system-ui, sans-serif; --head-weight: 400; --head-track: 0em;
   --r-input: 10px; --r-card: 16px; --r-panel: 20px; --r-hero: 24px; --r-btn: 999px;
   --warn: #8a3b12; --danger: #a8261d; --danger-soft: #fbe7e4; --success: #23704a;
   --shadow-float: 0 18px 40px rgb(28 38 32 / 14%), 0 2px 6px rgb(28 38 32 / 6%);
@@ -18,11 +19,18 @@
 html { scroll-behavior: smooth; }
 body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 body > * { flex-shrink: 0; width: 100%; }
-h1, h2, h3 { font-family: var(--font-head); font-weight: var(--head-weight); color: var(--ink); margin: 0; }
-a { color: var(--brand); }
+h1, h2, h3 { font-family: var(--font-head); font-weight: var(--head-weight); letter-spacing: var(--head-track); color: var(--heading); margin: 0; }
+/* Cards and panels carry their own text color (Card text), so a dark page
+   can have light cards: everything inside reads the card versions. */
+.bk-search, .bk-card, .bk-room, .bk-addon, .bk-tile, .bk-summary, .bk-success, .bk-skip, .bk-cardel {
+  --ink: var(--card-ink); --heading: var(--card-ink); --ink-2: var(--card-ink-2); --muted: var(--card-muted);
+  --line: var(--card-line); --field-line: var(--card-field-line); --link: var(--card-link);
+  color: var(--ink);
+}
+a { color: var(--link); }
 a:hover { color: var(--brand-hover); }
 input, textarea, button, select { font-family: inherit; }
-:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .bk-skip { position: absolute; width: auto; left: -999px; top: 8px; background: var(--surface); padding: 8px 14px; border-radius: var(--r-input); z-index: 10; }
 .bk-skip:focus { left: 8px; }
 
@@ -36,7 +44,7 @@ input, textarea, button, select { font-family: inherit; }
 .bk-nav { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; font-size: 14px; }
 .bk-nav a { text-decoration: none; color: var(--ink-2); }
 .bk-nav a:hover { color: var(--ink); }
-.bk-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--chip); color: var(--brand); font-weight: 600; font-size: 13px; }
+.bk-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--chip); color: var(--link); font-weight: 600; font-size: 13px; }
 
 /* Hero + search */
 .bk-hero-wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
@@ -49,7 +57,7 @@ input, textarea, button, select { font-family: inherit; }
 .bk-hero:not(.has-img) .bk-sub { color: color-mix(in srgb, var(--brand-ink) 86%, var(--brand)); }
 .bk-hero:not(.has-img) .bk-eyebrow { color: color-mix(in srgb, var(--brand-ink) 72%, var(--brand)); }
 .bk-eyebrow { margin: 0 0 12px; font-size: 13px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--eyebrow); }
-.bk-hero h1 { color: #fff; font-size: 64px; line-height: 1.02; letter-spacing: -.01em; text-wrap: balance; }
+.bk-hero h1 { color: #fff; font-size: 64px; line-height: 1.02; letter-spacing: calc(var(--head-track) - .01em); text-wrap: balance; }
 .bk-sub { margin: 16px 0 0; font-size: 18px; line-height: 1.55; color: rgb(255 255 255 / 90%); max-width: 560px; }
 .bk-search { position: relative; margin: -76px 24px 0; background: var(--surface); border-radius: calc(var(--r-panel) - 2px); box-shadow: var(--shadow-float);
   padding: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 4px; align-items: stretch; }
@@ -88,7 +96,7 @@ label.bk-sf { cursor: pointer; }
 .bk-room.booked { opacity: .6; }
 .bk-room-media { flex: 1 1 260px; min-height: 220px; position: relative; background: var(--placeholder); }
 .bk-room-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.bk-room-ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: color-mix(in srgb, var(--ink) 60%, var(--placeholder)); font-size: 13px; font-weight: 500; text-align: center; padding: 16px; }
+.bk-room-ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: color-mix(in srgb, var(--page-ink) 60%, var(--placeholder)); /* the placeholder is page-colored, not card-colored */ font-size: 13px; font-weight: 500; text-align: center; padding: 16px; }
 .bk-tag { position: absolute; top: 14px; left: 14px; padding: 4px 10px; border-radius: 999px; background: var(--surface); font-size: 12px; font-weight: 600; color: var(--ink); box-shadow: 0 1px 3px rgb(0 0 0 / 10%); }
 .bk-tag.low { color: var(--warn); }
 .bk-photos { position: absolute; bottom: 12px; right: 12px; padding: 3px 9px; border-radius: 999px; background: rgb(0 0 0 / 55%); color: #fff; font-size: 12px; font-weight: 600; }

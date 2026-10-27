@@ -25,11 +25,11 @@ globalThis.document = {
 eval(read("js/booking-theme.js"));
 const T = window.SHTheme;
 
-test("studio offers themes, fonts, six colors, corners, unit name, eyebrow", () => {
+test("studio offers themes, fonts, eight colors, corners, unit name, eyebrow", () => {
   for (const id of ["bkPresets", "bkHeadFont", "bkBodyFont", "bkColorGrid", "bkRadius", "bkUnit", "bkEyebrow", "bkNumbered", "bkPreview", "bkDevice"]) {
     assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
   }
-  assert.equal(T.COLOR_KEYS.length, 6);
+  assert.deepEqual(T.COLOR_KEYS.map(([k]) => k), ["bg", "ink", "surface", "surfaceInk", "heading", "accent", "brand", "footer"]);
   assert.ok(Object.keys(T.PRESETS).length >= 6);
   assert.ok(html.indexOf("js/booking-theme.js") < html.indexOf("js/app.js"), "theme module loads before app.js");
   assert.ok(bookHtml.indexOf("js/booking-theme.js") < bookHtml.indexOf("js/book.js"));
@@ -124,4 +124,72 @@ test("migration keeps the theme small, an object, and anon-readable", () => {
   assert.match(sql, /jsonb_typeof\(booking_theme\) = 'object' and pg_column_size\(booking_theme\) < 4096/);
   assert.match(sql, /grant select \(booking_theme\) on public\.tenants to anon/);
   assert.ok(!/ical_token|stripe_customer_id/.test(sql), "migration must not widen secret access");
+});
+
+// ---------------------------------------------------------------- dark themes + fonts
+test("card text has its own color, so a dark page can have light cards", () => {
+  // A theme saved before card text existed: dark page, light cards, light text.
+  const old = T.normalize({ preset: "modern", colors: { bg: "#0e0e10", surface: "#f4f2eb", ink: "#f4f2eb", brand: "#111111", accent: "#e9b949", footer: "#111111" } });
+  assert.equal(old.colors.ink, "#f4f2eb", "page text kept");
+  assert.equal(old.colors.surfaceInk, "#111111", "unreadable card text is replaced by a readable one");
+  assert.equal(old.colors.heading, "#f4f2eb", "headings follow page text");
+  const fine = T.normalize({ colors: { bg: "#ffffff", surface: "#f5f5f2", ink: "#222222" } });
+  assert.equal(fine.colors.surfaceInk, "#222222", "readable page text carries over to cards");
+  const chosen = T.normalize({ colors: { surfaceInk: "#334455", heading: "#AA0000" } });
+  assert.equal(chosen.colors.surfaceInk, "#334455");
+  assert.equal(chosen.colors.heading, "#aa0000");
+  assert.equal(T.normalize({ colors: { surfaceInk: "red" } }).colors.surfaceInk, T.PRESETS.meadow.colors.ink, "bad values fall back");
+  for (const p of Object.values(T.PRESETS)) {
+    const n = T.normalize({ preset: Object.keys(T.PRESETS).find((k) => T.PRESETS[k] === p) });
+    assert.ok(T.contrast(n.colors.surfaceInk, n.colors.surface) >= 4.5, `${p.label}: card text`);
+    assert.ok(T.contrast(n.colors.heading, n.colors.bg) >= 3, `${p.label}: headings`);
+  }
+});
+
+test("apply sets page and card text separately, and cards re-scope them", () => {
+  T.apply({ colors: { bg: "#0e0e10", surface: "#f4f2eb", ink: "#f4f2eb", surfaceInk: "#1a1a1a", heading: "#e9b949" } });
+  assert.equal(styles["--ink"], "#f4f2eb");
+  assert.equal(styles["--card-ink"], "#1a1a1a");
+  assert.equal(styles["--heading"], "#e9b949");
+  assert.match(styles["--muted"], /#f4f2eb 64%, #0e0e10/);
+  assert.match(styles["--card-muted"], /#1a1a1a 64%, #f4f2eb/);
+  assert.match(bookCss, /h1, h2, h3 \{[^}]*color: var\(--heading\)/);
+  const scope = bookCss.match(/\.bk-search, \.bk-card, \.bk-room, \.bk-addon, \.bk-tile, \.bk-summary, \.bk-success, \.bk-skip, \.bk-cardel \{([^}]*)\}/);
+  assert.ok(scope, "cards re-scope their text colors");
+  for (const v of ["--ink: var(--card-ink)", "--heading: var(--card-ink)", "--muted: var(--card-muted)", "--line: var(--card-line)"]) assert.ok(scope[1].includes(v), v);
+});
+
+test("Bebas Neue is a heading font (not body) and gets letter spacing", () => {
+  assert.equal(T.normalize({ headingFont: "bebas-neue" }).headingFont, "bebas-neue");
+  assert.equal(T.normalize({ bodyFont: "bebas-neue" }).bodyFont, "inter", "all-caps display face is not offered for body text");
+  T.apply({ headingFont: "bebas-neue", bodyFont: "inter" });
+  assert.match(globalThis.__fontLink.href, /family=Bebas\+Neue:wght@400&family=Inter:/);
+  assert.equal(styles["--head-weight"], "400");
+  assert.equal(styles["--head-track"], "0.03em");
+  T.apply({ headingFont: "sora" });
+  assert.equal(styles["--head-track"], "0em");
+});
+
+test("studio font pickers show each font in its own face", () => {
+  for (const id of ["bkHeadFont", "bkBodyFont"]) {
+    assert.match(html, new RegExp(`<button type="button" class="select font-pick-btn" id="${id}" aria-haspopup="listbox"`), id);
+  }
+  assert.match(html, /<ul class="font-pick-list" role="listbox"/);
+  assert.match(app, /style="font-family:\$\{esc\(x\.stack\)\};font-weight:\$\{weight\(k\)\}"/);
+  const href = T.previewFontsHref();
+  assert.match(href, /^https:\/\/fonts\.googleapis\.com\/css2\?family=/);
+  for (const f of Object.values(T.FONTS)) assert.ok(href.includes("family=" + f.family.replace(/ /g, "+") + ":"), f.label);
+  assert.match(href, /&text=[^&]+&display=swap$/, "subset to the letters of the names");
+  assert.match(app, /if \(e\.key === "Escape"\) \{ e\.preventDefault\(\); closeFontPickers\(wrap\); \}/, "keyboard: Escape closes");
+  assert.match(app, /ratio\(cc\.surfaceInk, cc\.surface\) < 4\.5/, "studio warns about unreadable card text");
+});
+
+test("links and badges stay readable when the button color matches the page", () => {
+  T.apply({ colors: { bg: "#0e0e10", surface: "#f4f2eb", ink: "#f4f2eb", brand: "#111111" } });
+  assert.equal(styles["--link"], "#f4f2eb", "dark buttons on a dark page: page links use the page text color");
+  assert.equal(styles["--card-link"], "#111111", "inside light cards the button color still reads");
+  T.apply({ preset: "meadow" });
+  assert.equal(styles["--link"], T.PRESETS.meadow.colors.brand);
+  assert.match(bookCss, /^a \{ color: var\(--link\); \}/m);
+  assert.match(bookCss, /--link: var\(--card-link\);/);
 });

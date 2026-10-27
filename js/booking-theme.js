@@ -17,6 +17,7 @@
     "lora": { label: "Lora", family: "Lora", stack: "'Lora', Georgia, serif", spec: "wght@400;500;600;700", heading: true, body: true },
     "sora": { label: "Sora", family: "Sora", stack: "'Sora', system-ui, sans-serif", spec: "wght@600;700;800", heading: true },
     "space-grotesk": { label: "Space Grotesk", family: "Space Grotesk", stack: "'Space Grotesk', system-ui, sans-serif", spec: "wght@500;600;700", heading: true },
+    "bebas-neue": { label: "Bebas Neue", family: "Bebas Neue", stack: "'Bebas Neue', Impact, 'Arial Narrow', sans-serif", spec: "wght@400", heading: true },
     "outfit": { label: "Outfit", family: "Outfit", stack: "'Outfit', system-ui, sans-serif", spec: "wght@400;500;600;700", heading: true, body: true },
     "montserrat": { label: "Montserrat", family: "Montserrat", stack: "'Montserrat', system-ui, sans-serif", spec: "wght@400;500;600;700", heading: true, body: true },
     "poppins": { label: "Poppins", family: "Poppins", stack: "'Poppins', system-ui, sans-serif", spec: "wght@400;500;600;700", heading: true, body: true },
@@ -31,12 +32,20 @@
 
   /* Heading weight that suits each face (display serifs read best light). */
   const HEAD_WEIGHT = { "instrument-serif": 400, "dm-serif": 400, "cormorant": 600, "playfair": 600, "fraunces": 600,
-    "libre-baskerville": 700, "lora": 600, "sora": 700, "space-grotesk": 600, "outfit": 600, "montserrat": 700, "poppins": 600, "inter": 700 };
+    "libre-baskerville": 700, "lora": 600, "sora": 700, "space-grotesk": 600, "bebas-neue": 400, "outfit": 600, "montserrat": 700, "poppins": 600, "inter": 700 };
+  /* Letter spacing for headings: condensed all-caps faces need air. */
+  const HEAD_TRACK = { "bebas-neue": "0.03em" };
 
+  /* Text has its own color on the page and on cards, so a dark page can have
+     light cards (and the reverse). Headings default to the page text color. */
   const COLOR_KEYS = [
-    ["bg", "Page background"], ["surface", "Cards & panels"], ["ink", "Text"],
-    ["brand", "Buttons & links"], ["accent", "Accent"], ["footer", "Footer"]
+    ["bg", "Page background"], ["ink", "Page text"],
+    ["surface", "Cards & panels"], ["surfaceInk", "Card text"],
+    ["heading", "Headings"], ["accent", "Accent"],
+    ["brand", "Buttons & links"], ["footer", "Footer"]
   ];
+  /* Colors a theme may leave out: worked out from the theme's own colors. */
+  const DERIVED = ["surfaceInk", "heading"];
   const RADII = { square: [4, 6, 8, 10, 6], soft: [10, 16, 20, 24, 999], rounded: [14, 22, 28, 32, 999] }; // input, card, panel, hero, button
   /* What a property's guests book: key -> singular / plural as shown, plus a
      name pattern for the "Automatic" guess (first match wins, so specific
@@ -92,7 +101,14 @@
     const presetKey = PRESETS[t.preset] ? t.preset : DEFAULT_PRESET;
     const base = PRESETS[presetKey];
     const colors = {};
-    COLOR_KEYS.forEach(([k]) => { colors[k] = isHex(t.colors && t.colors[k]) ? t.colors[k].toLowerCase() : base.colors[k]; });
+    COLOR_KEYS.forEach(([k]) => {
+      if (isHex(t.colors && t.colors[k])) colors[k] = t.colors[k].toLowerCase();
+      else if (!DERIVED.includes(k)) colors[k] = base.colors[k];
+    });
+    // Themes saved before card text existed: keep the page text if it reads
+    // well on the cards, otherwise use whichever of near-black/white does.
+    if (!colors.surfaceInk) colors.surfaceInk = contrast(colors.ink, colors.surface) >= 4.5 ? colors.ink : onColor(colors.surface);
+    if (!colors.heading) colors.heading = colors.ink;
     const font = (key, kind, fallback) => (FONTS[key] && FONTS[key][kind] ? key : fallback);
     return {
       preset: presetKey,
@@ -130,21 +146,33 @@
     const t = normalize(raw);
     const c = t.colors;
     const [rIn, rCard, rPanel, rHero, rBtn] = RADII[t.radius];
+    // Links and badges use the button color unless it would vanish on the
+    // page (or card) behind them; then they use that area's text color.
+    const pageLink = contrast(c.brand, c.bg) >= 3 ? c.brand : c.ink;
+    const cardLink = contrast(c.brand, c.surface) >= 3 ? c.brand : c.surfaceInk;
     const vars = {
       "--bg": c.bg, "--surface": c.surface, "--ink": c.ink, "--brand": c.brand, "--accent": c.accent, "--footer": c.footer,
+      "--heading": c.heading, "--card-ink": c.surfaceInk, "--page-ink": c.ink,
+      "--link": pageLink, "--card-link": cardLink,
       "--brand-ink": onColor(c.brand), "--footer-ink": onColor(c.footer),
-      "--ink-2": `color-mix(in srgb, ${c.ink} 82%, ${c.surface})`,
+      // Secondary text and lines, on the page and (book.css re-scopes these) on cards.
+      "--ink-2": `color-mix(in srgb, ${c.ink} 82%, ${c.bg})`,
       "--muted": `color-mix(in srgb, ${c.ink} 64%, ${c.bg})`,
       "--line": `color-mix(in srgb, ${c.ink} 12%, ${c.bg})`,
-      "--field-line": `color-mix(in srgb, ${c.ink} 24%, ${c.surface})`,
+      "--field-line": `color-mix(in srgb, ${c.ink} 24%, ${c.bg})`,
+      "--card-ink-2": `color-mix(in srgb, ${c.surfaceInk} 82%, ${c.surface})`,
+      "--card-muted": `color-mix(in srgb, ${c.surfaceInk} 64%, ${c.surface})`,
+      "--card-line": `color-mix(in srgb, ${c.surfaceInk} 12%, ${c.surface})`,
+      "--card-field-line": `color-mix(in srgb, ${c.surfaceInk} 24%, ${c.surface})`,
       "--brand-soft": `color-mix(in srgb, ${c.brand} 10%, ${c.surface})`,
       "--brand-hover": `color-mix(in srgb, ${c.brand} 82%, #000)`,
-      "--chip": `color-mix(in srgb, ${c.brand} 13%, ${c.bg})`,
+      "--chip": `color-mix(in srgb, ${pageLink} 13%, ${c.bg})`,
       "--placeholder": `color-mix(in srgb, ${c.brand} 14%, ${c.bg})`,
       "--eyebrow": `color-mix(in srgb, ${c.accent} 35%, #ffffff)`,
       "--footer-muted": `color-mix(in srgb, ${onColor(c.footer)} 68%, ${c.footer})`,
       "--font-head": FONTS[t.headingFont].stack, "--font-body": FONTS[t.bodyFont].stack,
       "--head-weight": String(HEAD_WEIGHT[t.headingFont] || 600),
+      "--head-track": HEAD_TRACK[t.headingFont] || "0em",
       "--r-input": rIn + "px", "--r-card": rCard + "px", "--r-panel": rPanel + "px", "--r-hero": rHero + "px", "--r-btn": rBtn + "px"
     };
     Object.entries(vars).forEach(([k, v]) => d.documentElement.style.setProperty(k, v));
@@ -186,5 +214,14 @@
   // (no inline script needed, so the CSP can forbid inline scripts).
   if (typeof document !== "undefined" && document.currentScript && document.currentScript.hasAttribute("data-apply")) apply({});
 
-  window.SHTheme = { FONTS, PRESETS, COLOR_KEYS, RADII, UNITS, UNIT_NOUNS, DEFAULT_PRESET, normalize, apply, contrast, onColor, fontsHref, unitWords, withArticle, isHex };
+  /* Studio font pickers: every allowlisted face, subset to just the letters
+     of the font names, so each option can be shown in its own typeface. */
+  function previewFontsHref() {
+    const keys = Object.keys(FONTS);
+    const text = [...new Set(keys.map((k) => FONTS[k].label).join("").concat("Aa"))].sort().join("");
+    return "https://fonts.googleapis.com/css2?" + keys.map((k) => "family=" + FONTS[k].family.replace(/ /g, "+") + ":" + FONTS[k].spec).join("&") +
+      "&text=" + encodeURIComponent(text) + "&display=swap";
+  }
+
+  window.SHTheme = { FONTS, HEAD_WEIGHT, PRESETS, COLOR_KEYS, RADII, UNITS, UNIT_NOUNS, DEFAULT_PRESET, normalize, apply, contrast, onColor, fontsHref, previewFontsHref, unitWords, withArticle, isHex };
 })();
