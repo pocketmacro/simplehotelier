@@ -726,6 +726,7 @@
     const heroUrl = safeUrl(pick("heroUrl", t.hero_image_url), { httpsOnly: true });
     const focus = pick("heroFocus", { x: t.hero_focus_x, y: t.hero_focus_y }) || {};
     const pct = (v, dflt) => (v == null || isNaN(Number(v)) ? dflt : Math.min(100, Math.max(0, Number(v))));
+    heroEl.classList.toggle("has-img", !!heroUrl);
     if (heroUrl) {
       heroEl.style.backgroundImage = `linear-gradient(180deg, rgb(14 22 17 / 0%) 30%, rgb(14 22 17 / 72%) 100%), url("${heroUrl.replace(/["\\]/g, encodeURIComponent)}")`;
       heroEl.style.backgroundPosition = `${pct(focus.x, 50)}% ${pct(focus.y, 35)}%`;

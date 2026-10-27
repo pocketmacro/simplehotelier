@@ -44,6 +44,10 @@ input, textarea, button, select { font-family: inherit; }
   background-color: var(--brand); background-size: cover; background-position: 50% 35%;
   background-image: radial-gradient(120% 90% at 85% 10%, color-mix(in srgb, var(--accent) 45%, transparent), transparent 60%), linear-gradient(135deg, color-mix(in srgb, var(--brand) 88%, #fff), var(--brand)); }
 .bk-hero-text { position: relative; padding: 48px 48px 120px; max-width: 700px; color: #fff; }
+/* No photo: the hero sits on the brand color, so text uses its readable ink. */
+.bk-hero:not(.has-img) .bk-hero-text, .bk-hero:not(.has-img) h1 { color: var(--brand-ink); }
+.bk-hero:not(.has-img) .bk-sub { color: color-mix(in srgb, var(--brand-ink) 86%, var(--brand)); }
+.bk-hero:not(.has-img) .bk-eyebrow { color: color-mix(in srgb, var(--brand-ink) 72%, var(--brand)); }
 .bk-eyebrow { margin: 0 0 12px; font-size: 13px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--eyebrow); }
 .bk-hero h1 { color: #fff; font-size: 64px; line-height: 1.02; letter-spacing: -.01em; text-wrap: balance; }
 .bk-sub { margin: 16px 0 0; font-size: 18px; line-height: 1.55; color: rgb(255 255 255 / 90%); max-width: 560px; }
