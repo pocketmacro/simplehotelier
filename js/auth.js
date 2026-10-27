@@ -46,7 +46,22 @@
     const data = await res.json().catch(() => ({}));
     return { ok: res.ok, status: res.status, data };
   }
-  let invite = null; // { email, property, role } once peeked
+  let invite = null; // { email, property, role, account, member } once peeked
+  /* The green note above the forms: plain text plus the property name in bold. */
+  function inviteNote(before, property, after) {
+    const banner = $("#inviteBanner");
+    if (!banner) return;
+    banner.hidden = false;
+    banner.textContent = "";
+    banner.append(before, Object.assign(document.createElement("strong"), { textContent: property }), after);
+  }
+  /* The invited email already has an account: log in to accept. app.js claims
+     the invite once they're signed in and opens that property. */
+  function inviteLogin(email) {
+    setTab("login");
+    $("#liEmail").value = email || "";
+    $("#liPassword").focus();
+  }
   function accessToken() { return localStorage.getItem("sh_access_token") || ""; }
 
   /* Exchange the stored refresh token for a fresh session (tokens expire hourly). */
@@ -245,10 +260,14 @@
         invite = data;
         $("#suEmail").value = data.email;
         $("#suEmail").readOnly = true;
-        if (banner) {
-          banner.textContent = "";
-          banner.append("You're joining ", Object.assign(document.createElement("strong"), { textContent: data.property }),
-            ` as ${data.role}. Set a password to finish.`);
+        if (data.member) {
+          inviteNote("You're already on the team at ", data.property, ". Log in to open it.");
+          inviteLogin(data.email);
+        } else if (data.account) {
+          inviteNote("You're joining ", data.property, ` as ${data.role}. You already have a SimpleHotelier account with this email, so log in to accept.`);
+          inviteLogin(data.email);
+        } else {
+          inviteNote("You're joining ", data.property, ` as ${data.role}. Set a password to finish.`);
         }
       }).catch(() => { /* keep the generic banner */ });
     }
@@ -279,10 +298,9 @@
           const password = $("#suPassword").value;
           const { ok, data } = await inviteCall({ action: "signup", password });
           if (data.error === "account_exists") {
-            setTab("login");
-            $("#liEmail").value = data.email || "";
-            showError(data.message);
-            $("#liPassword").focus();
+            // Not an error: they already use SimpleHotelier. Log in to accept.
+            inviteNote("You already have an account with this email. Log in to join ", (invite && invite.property) || "the property", ".");
+            inviteLogin(data.email);
           } else if (!ok) {
             showError(data.message || "We couldn't finish joining. Please try again.");
           } else {

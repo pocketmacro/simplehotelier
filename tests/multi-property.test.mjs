@@ -107,3 +107,25 @@ test("accept-invite joins every pending invite for the email, never changing a r
 test("the invite email speaks to people who already have an account", () => {
   assert.match(sendEmail, /Already have an account with this email\? Log in and \$\{esc\(tenant\.name\)\} is added to it\./);
 });
+
+// An invite to someone who already uses SimpleHotelier: the page knew only
+// after they had typed a new password, then showed "you already have an
+// account" as an error. Now the peek says so up front.
+const authJs = read("js/auth.js");
+
+test("the invite page sends existing accounts straight to the login form", () => {
+  assert.match(accept, /account: !!\(acct && acct\.confirmed\), member,/);
+  assert.match(authJs, /if \(data\.member\) \{\s+inviteNote\("You're already on the team at ", data\.property, "\. Log in to open it\."\);\s+inviteLogin\(data\.email\);/);
+  assert.match(authJs, /\} else if \(data\.account\) \{\s+inviteNote\("You're joining ", data\.property, ` as \$\{data\.role\}\. You already have a SimpleHotelier account with this email, so log in to accept\.`\);\s+inviteLogin\(data\.email\);/);
+  // The late fallback is a note, not an error.
+  const fallback = authJs.slice(authJs.indexOf('if (data.error === "account_exists")'), authJs.indexOf("} else if (!ok) {"));
+  assert.doesNotMatch(fallback, /showError/);
+  assert.match(fallback, /inviteLogin\(data\.email\);/);
+});
+
+test("owners can't invite someone who is already on the team", () => {
+  const body = sendEmail.slice(sendEmail.indexOf("async function teamInvite"), sendEmail.indexOf("const { data: tenant }", sendEmail.indexOf("async function teamInvite")));
+  assert.match(body, /admin\.rpc\("auth_user_by_email", \{ p_email: email \}\)/);
+  assert.match(body, /if \(existing && await memberRole\(admin, tenantId, existing\.id\)\) \{\s+return json\(\{ error: `\$\{email\} is already on your team\./);
+  assert.match(body, /already_member: true \}, 409\);/);
+});

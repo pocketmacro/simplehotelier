@@ -170,6 +170,12 @@ async function teamInvite(req: Request, body: any) {
   const myRole = await memberRole(admin, tenantId, user.id);
   if (myRole !== "owner" && myRole !== "admin") return json({ error: "Only the property owner or an admin can send invites" }, 403);
   if (role === "admin" && myRole !== "owner") return json({ error: "Only the property owner can invite admins" }, 403);
+  // Already on this property: there's nothing to join (change their role instead).
+  const { data: found } = await admin.rpc("auth_user_by_email", { p_email: email });
+  const existing = Array.isArray(found) ? found[0] : null;
+  if (existing && await memberRole(admin, tenantId, existing.id)) {
+    return json({ error: `${email} is already on your team. Change their role under Settings → Team & invites.`, already_member: true }, 409);
+  }
   const { data: tenant } = await admin.from("tenants").select("name").eq("id", tenantId).maybeSingle();
   if (!tenant) return json({ error: "property not found" }, 404);
   if (!emailConfigured()) return json({ sent: false, reason: "email not configured" }, 503);

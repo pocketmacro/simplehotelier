@@ -1,5 +1,7 @@
 // SimpleHotelier — team invites.
-// POST { action: "peek", token }      (no sign-in) -> who the invite is for
+// POST { action: "peek", token }      (no sign-in) -> who the invite is for,
+//   whether that email already has an account (log in instead of signing up)
+//   and whether it is already on the team
 // POST { action: "signup", token, password }  (no sign-in) -> creates the
 //   invited person's account already confirmed (the emailed link proves the
 //   inbox), joins them to the property and marks the invite accepted; the
@@ -77,7 +79,18 @@ Deno.serve(withCors(async (req) => {
       const invite = await pendingInvite(body.token);
       if (!invite) return json({ valid: false });
       const { data: tenant } = await admin.from("tenants").select("name").eq("id", invite.tenant_id).maybeSingle();
-      return json({ valid: true, email: invite.email, property: tenant?.name || "the property", role: ROLE_LABELS[invite.role] || invite.role });
+      const { data: found } = await admin.rpc("auth_user_by_email", { p_email: String(invite.email).toLowerCase() });
+      const acct = Array.isArray(found) ? found[0] : null;
+      let member = false;
+      if (acct) {
+        const { data: m } = await admin.from("tenant_members").select("user_id")
+          .eq("tenant_id", invite.tenant_id).eq("user_id", acct.id).maybeSingle();
+        member = !!m;
+      }
+      return json({
+        valid: true, email: invite.email, property: tenant?.name || "the property", role: ROLE_LABELS[invite.role] || invite.role,
+        account: !!(acct && acct.confirmed), member,
+      });
     }
     if (body.action === "signup") return await inviteSignup(body);
 

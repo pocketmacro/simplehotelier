@@ -2057,7 +2057,7 @@ document.addEventListener("click", (e) => {
     (async () => {
       try {
         const d = await fnInvoke("send-email", { action: "team_invite", tenant_id: SHDB.tenantId(), email, role });
-        toast("Invite sent", `${email} · ${role}`, d.sent ? "ok" : "warn");
+        toast("Invite sent", `${email} · ${ROLE_LABELS[role] || role}`, d.sent ? "ok" : "warn");
         $("#invEmail").value = "";
         renderInvPending(); renderTeamInvites();
       } catch (e) { toast("Could not send invite", e.message, "warn"); }
