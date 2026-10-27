@@ -1232,8 +1232,11 @@ function updateEmbed(tenant) {
    previews the real booking page in an iframe: unsaved edits are posted to
    it on this origin only; Publish changes saves tenants.booking_theme. */
 let studioTheme = SHTheme.normalize({});
-let studioDevice = "desktop", studioPreviewTimer = null;
-const STUDIO_UNITS = [["", "Automatic (from your room types)"], ["cabin", "Cabins"], ["room", "Rooms"], ["suite", "Suites"], ["home", "Homes"], ["cottage", "Cottages"], ["villa", "Villas"], ["lodge", "Lodges"], ["site", "Sites"], ["tent", "Tents"], ["unit", "Units"]];
+let studioDevice = "desktop", studioPreviewTimer = null, studioUnitDraft = "";
+const studioRoomNames = () => roomTypes.map((t) => t.name).concat(rooms.map((r) => r.name)).join(" ");
+const STUDIO_UNITS = [["", "Automatic (from your room names)"]]
+  .concat(SHTheme.UNITS.map(([k, one]) => [k, one.replace(/^./, (c) => c.toUpperCase())]))
+  .concat([["custom", "Something else…"]]);
 function setStudioTheme(patch) {
   studioTheme = SHTheme.normalize({ ...studioTheme, ...patch, colors: { ...studioTheme.colors, ...((patch && patch.colors) || {}) } });
   renderStudioDesign();
@@ -1262,6 +1265,15 @@ function renderStudioDesign() {
   $$("#bkRadius [data-r]").forEach((b) => b.classList.toggle("active", b.dataset.r === t.radius));
   const unit = $("#bkUnit");
   if (unit) unit.innerHTML = STUDIO_UNITS.map(([v, l]) => `<option value="${v}"${v === t.unitNoun ? " selected" : ""}>${esc(l)}</option>`).join("");
+  const custom = $("#bkUnitCustom");
+  if (custom) {
+    custom.hidden = t.unitNoun !== "custom" && studioUnitDraft !== "custom";
+    if (document.activeElement !== $("#bkUnitOne")) $("#bkUnitOne").value = t.unitOne || "";
+    if (document.activeElement !== $("#bkUnitMany")) $("#bkUnitMany").value = t.unitMany || "";
+  }
+  const words = SHTheme.unitWords(t, studioRoomNames());
+  const helpEl = $("#bkUnitHelp");
+  if (helpEl) helpEl.textContent = `Your page will say “Choose your ${words.one}” and “${words.many.replace(/^./, (c) => c.toUpperCase())}” in the menu.`;
   const eb = $("#bkEyebrow"); if (eb && document.activeElement !== eb) eb.value = t.eyebrow;
   const num = $("#bkNumbered"); if (num) num.checked = t.numberedSteps;
   // Readability: WCAG 4.5:1 for text, 3:1 for buttons against the page.
@@ -1339,7 +1351,13 @@ function bindStudio() {
   $("#bkBodyFont").addEventListener("change", (e) => setStudioTheme({ bodyFont: e.target.value }));
   $("#bkColorGrid").addEventListener("input", (e) => { const k = e.target.dataset.color; if (k) setStudioTheme({ colors: { [k]: e.target.value } }); });
   $("#bkRadius").addEventListener("click", (e) => { const b = e.target.closest("[data-r]"); if (b) setStudioTheme({ radius: b.dataset.r }); });
-  $("#bkUnit").addEventListener("change", (e) => setStudioTheme({ unitNoun: e.target.value }));
+  $("#bkUnit").addEventListener("change", (e) => {
+    studioUnitDraft = e.target.value;
+    if (e.target.value === "custom") { renderStudioDesign(); $("#bkUnitOne").focus(); return; } // saved once a word is typed
+    setStudioTheme({ unitNoun: e.target.value, unitOne: "", unitMany: "" });
+  });
+  ["bkUnitOne", "bkUnitMany"].forEach((id) => $("#" + id).addEventListener("input", () =>
+    setStudioTheme({ unitNoun: "custom", unitOne: $("#bkUnitOne").value, unitMany: $("#bkUnitMany").value })));
   $("#bkEyebrow").addEventListener("input", (e) => setStudioTheme({ eyebrow: e.target.value }));
   $("#bkNumbered").addEventListener("change", (e) => setStudioTheme({ numberedSteps: e.target.checked }));
   $("#bkDevice").addEventListener("click", (e) => {

@@ -24,8 +24,8 @@
 // receives every cent; SimpleHotelier covers Stripe's processing fee.
 // Deploy: supabase functions deploy charge-guest
 // deno-lint-ignore-file no-explicit-any
-import Stripe from "https://esm.sh/stripe@14?target=deno";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, Stripe } from "../_shared/deps.ts";
+import { withCors } from "../_shared/cors.ts";
 import { appOrigin, callerUser, memberRole } from "../_shared/guard.ts";
 import { ensureCustomer, saveCardFromIntent } from "../_shared/cards.ts";
 import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured } from "../_shared/email.ts";
@@ -38,7 +38,6 @@ const FRONT_DESK = ["owner", "admin", "staff"];
 const MIN_CARD_CENTS = 50; // Stripe's minimum charge in USD
 
 const CORS = {
-  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
@@ -295,7 +294,7 @@ async function refund(req: Request, tenant: any, body: any) {
   return { refunded: true, amount_cents: amount, status: r.status };
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
     const body = await req.json().catch(() => ({}));
@@ -320,7 +319,7 @@ Deno.serve(async (req) => {
     console.error("charge-guest", e);
     return json({ error: "payment service error" }, 500);
   }
-});
+}));
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });

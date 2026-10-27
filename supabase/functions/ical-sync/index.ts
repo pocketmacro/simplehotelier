@@ -3,12 +3,12 @@
 // POST { action: "sync_all" }       (x-cron-secret header; from daily-jobs)
 // Deploy: supabase functions deploy ical-sync
 // deno-lint-ignore-file no-explicit-any
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "../_shared/deps.ts";
+import { withCors } from "../_shared/cors.ts";
 import { syncFeed } from "../_shared/sync.js";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const CORS = {
-  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
@@ -31,7 +31,7 @@ async function memberOf(req: Request, tenantId: string) {
   return !!mem;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
     const body = await req.json().catch(() => ({}));
@@ -52,4 +52,4 @@ Deno.serve(async (req) => {
     console.error("ical-sync", e);
     return json({ error: "ical-sync failed" }, 500);
   }
-});
+}));

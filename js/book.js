@@ -317,10 +317,8 @@
   /* What the property calls its units ("cabin", "suite"…): the theme's choice,
      else a guess from the room type names. */
   function unitWords() {
-    if (state.theme && state.theme.unitNoun) return SHTheme.unitWords(state.theme);
-    const names = Object.values(state.types).map((t) => t.name).concat(state.rooms.map((r) => r.name)).join(" ").toLowerCase();
-    const guess = Object.keys(SHTheme.UNIT_NOUNS).find((w) => w !== "room" && w !== "unit" && new RegExp("\\b" + w).test(names));
-    return SHTheme.unitWords({ unitNoun: guess || "room" });
+    const names = Object.values(state.types).map((t) => t.name).concat(state.rooms.map((r) => r.name)).join(" ");
+    return SHTheme.unitWords(state.theme, names);
   }
   function typeFor(room) { return state.types[room.room_type_id] || null; }
   /* Pricing lives on the room type (hotels price King/Queen/Suite, not units):
@@ -583,10 +581,10 @@
     if (!state.selected || !n || n < 1) {
       const unit = unitWords().one;
       $("#summaryBody").innerHTML = !state.selected
-        ? `<div class="bk-empty">${HOUSE_SVG}<p>Pick a ${esc(unit)} to see your total.</p></div>`
+        ? `<div class="bk-empty">${HOUSE_SVG}<p>Pick ${esc(SHTheme.withArticle(unit))} to see your total.</p></div>`
         : `<p class="bk-muted">Check-out must be after check-in.</p>`;
       btn.disabled = true;
-      btn.textContent = state.selected ? "Fix your dates" : `Choose a ${unit} to continue`;
+      btn.textContent = state.selected ? "Fix your dates" : `Choose ${SHTheme.withArticle(unit)} to continue`;
       return null;
     }
     const type = typeFor(state.selected);

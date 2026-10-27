@@ -7,8 +7,7 @@
 // Secrets: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET.
 // Deploy: supabase functions deploy stripe-webhook --no-verify-jwt
 // deno-lint-ignore-file no-explicit-any
-import Stripe from "https://esm.sh/stripe@14?target=deno";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, Stripe } from "../_shared/deps.ts";
 import { saveCardFromIntent } from "../_shared/cards.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2024-06-20" });

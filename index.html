@@ -9,21 +9,7 @@
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://simplehotelier.com/">
 <meta name="theme-color" content="#0a2a2b">
-<script>
-/* Property subdomains ({slug}.simplehotelier.com) are booking pages, not the
-   marketing site: bounce straight to that property's booking page. */
-(function () {
-  var h = location.hostname.toLowerCase(), suffix = ".simplehotelier.com";
-  if (h.endsWith(suffix)) {
-    var label = h.slice(0, -suffix.length);
-    if (label && label.indexOf(".") === -1 && label !== "www" && /^[a-z0-9-]+$/.test(label)) {
-      var q = new URLSearchParams(location.search);
-      q.set("property", label);
-      location.replace("/book.html?" + q.toString());
-    }
-  }
-})();
-</script>
+<script src="js/subdomain-redirect.js"></script>
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SimpleHotelier">
 <meta property="og:url" content="https://simplehotelier.com/">

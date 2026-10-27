@@ -6,7 +6,7 @@
 //   4. Monday weekly owner report (occupancy, revenue, upcoming arrivals)
 // Deploy: supabase functions deploy daily-jobs  (verify_jwt off: secret-gated)
 // deno-lint-ignore-file no-explicit-any
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "../_shared/deps.ts";
 import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured } from "../_shared/email.ts";
 import { syncFeed } from "../_shared/sync.js";
 import { computeWeeklyStats } from "../_shared/report.js";

@@ -10,13 +10,13 @@
 //   -> emails the guest a receipt for their latest paid transaction.
 // Deploy: supabase functions deploy send-email
 // deno-lint-ignore-file no-explicit-any
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "../_shared/deps.ts";
+import { withCors } from "../_shared/cors.ts";
 import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured } from "../_shared/email.ts";
 import { appOrigin, callerUser, memberRole } from "../_shared/guard.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const CORS = {
-  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
@@ -183,7 +183,7 @@ async function teamInvite(req: Request, body: any) {
   return json({ sent: res.sent, email, role });
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
     const body = await req.json();
@@ -202,4 +202,4 @@ Deno.serve(async (req) => {
     console.error("send-email", e);
     return json({ error: "send-email failed" }, 500);
   }
-});
+}));

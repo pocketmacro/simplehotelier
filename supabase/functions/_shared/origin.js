@@ -22,6 +22,20 @@ export function safeOrigin(candidate, { site = "https://simplehotelier.com", ext
 }
 
 /**
+ * Browser origins allowed to call our functions (CORS): the site, property
+ * subdomains, the workers.dev deployment, localhost/127.0.0.1, and `extra`.
+ */
+export function isOwnOrigin(origin, extra = []) {
+  let u;
+  try { u = new URL(String(origin)); } catch { return false; }
+  const host = u.hostname.toLowerCase();
+  if (extra.map((s) => String(s).trim().replace(/\/$/, "")).filter(Boolean).includes(u.origin)) return true;
+  if (u.protocol === "https:" && (host === "simplehotelier.com" || host.endsWith(".simplehotelier.com"))) return true;
+  if (u.protocol === "https:" && host === "simplehotelier.pocketmacro.workers.dev") return true;
+  return u.protocol === "http:" && (host === "localhost" || host === "127.0.0.1");
+}
+
+/**
  * Feed URLs the server is willing to fetch (iCal sync): https only, a DNS
  * name (no IP literals), and nothing that names a local/internal host.
  * Returns an error sentence, or "" when the URL is acceptable.

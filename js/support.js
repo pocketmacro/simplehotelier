@@ -138,6 +138,10 @@
       });
       clearTimeout(timer);
       if (res.ok) { const d = await res.json(); if (d.answer) answered = { title: "Spark", body: d.answer }; }
+      else if (res.status === 429) {
+        const local = answer(q);
+        answered = { title: "Spark's daily limit is reached", body: "You've used today's Spark questions — it resets tomorrow. Here's the closest help article, or open a support case and our team will reply.\n\n" + local.body };
+      }
     } catch { /* offline or function not deployed: local articles below */ }
     if (!answered) answered = answer(q);
     thinking.innerHTML = `<strong class="who">Spark</strong>` + answerHTML(answered.title, answered.body);

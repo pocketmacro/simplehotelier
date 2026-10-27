@@ -38,7 +38,33 @@
     ["brand", "Buttons & links"], ["accent", "Accent"], ["footer", "Footer"]
   ];
   const RADII = { square: [4, 6, 8, 10, 6], soft: [10, 16, 20, 24, 999], rounded: [14, 22, 28, 32, 999] }; // input, card, panel, hero, button
-  const UNIT_NOUNS = { cabin: "cabins", room: "rooms", suite: "suites", home: "homes", cottage: "cottages", villa: "villas", lodge: "lodges", site: "sites", tent: "tents", unit: "units" };
+  /* What a property's guests book: key -> singular / plural as shown, plus a
+     name pattern for the "Automatic" guess (first match wins, so specific
+     words come before general ones). Owners can also type their own words. */
+  const UNITS = [
+    ["cabin", "cabin", "cabins", /\bcabins?\b/],
+    ["yurt", "yurt", "yurts", /\byurts?\b/],
+    ["treehouse", "treehouse", "treehouses", /\btree ?houses?\b/],
+    ["glamping-tent", "glamping tent", "glamping tents", /\bglamping\b/],
+    ["tent", "tent", "tents", /\btents?\b|\bteepees?\b|\btipis?\b/],
+    ["rv-site", "RV site", "RV sites", /\brv\b|\bcampers?\b|\bhook-?ups?\b/],
+    ["campsite", "campsite", "campsites", /\bcamp ?sites?\b|\bpitch(es)?\b/],
+    ["chalet", "chalet", "chalets", /\bchalets?\b/],
+    ["cottage", "cottage", "cottages", /\bcottages?\b/],
+    ["bungalow", "bungalow", "bungalows", /\bbungalows?\b/],
+    ["villa", "villa", "villas", /\bvillas?\b/],
+    ["lodge", "lodge", "lodges", /\blodges?\b/],
+    ["suite", "suite", "suites", /\bsuites?\b/],
+    ["apartment", "apartment", "apartments", /\bapartments?\b|\bapts?\b|\bflats?\b/],
+    ["condo", "condo", "condos", /\bcondos?\b/],
+    ["house", "house", "houses", /\bhouses?\b/],
+    ["home", "home", "homes", /\bhomes?\b/],
+    ["room", "room", "rooms", /\brooms?\b|\bking\b|\bqueen\b|\bdouble\b|\btwin\b/],
+    ["unit", "unit", "units", null]
+  ];
+  const UNIT_NOUNS = Object.fromEntries(UNITS.map(([k, one, many]) => [k, { one, many }]));
+  const GENERIC_UNIT = { one: "stay", many: "stays" };
+  const UNIT_WORD = /^[A-Za-z][A-Za-z0-9 '’&-]{0,23}$/;
 
   const PRESETS = {
     meadow: { label: "Meadow", headingFont: "instrument-serif", bodyFont: "inter", radius: "soft",
@@ -75,7 +101,7 @@
       radius: RADII[t.radius] ? t.radius : base.radius,
       colors,
       eyebrow: clean(t.eyebrow, 60),
-      unitNoun: UNIT_NOUNS[t.unitNoun] ? t.unitNoun : "",
+      ...unitFields(t),
       numberedSteps: t.numberedSteps !== false
     };
   }
@@ -135,10 +161,30 @@
     return t;
   }
 
-  const unitWords = (t) => {
-    const one = t.unitNoun || "room";
-    return { one, many: UNIT_NOUNS[one] || "rooms" };
-  };
+  /* unitNoun: a UNITS key, "custom" (owner-typed words) or "" (Automatic). */
+  function unitFields(t) {
+    if (t.unitNoun === "custom") {
+      const one = clean(t.unitOne, 24), many = clean(t.unitMany, 24);
+      if (UNIT_WORD.test(one)) return { unitNoun: "custom", unitOne: one, unitMany: UNIT_WORD.test(many) ? many : one + "s" };
+      return { unitNoun: "", unitOne: "", unitMany: "" };
+    }
+    return { unitNoun: UNIT_NOUNS[t.unitNoun] ? t.unitNoun : "", unitOne: "", unitMany: "" };
+  }
+  /* Words for the booking page: the owner's choice, else a guess from the
+     room type / room names, else the neutral "stay". */
+  function unitWords(t, names) {
+    if (t && t.unitNoun === "custom" && t.unitOne) return { one: t.unitOne, many: t.unitMany || t.unitOne + "s" };
+    if (t && UNIT_NOUNS[t.unitNoun]) return UNIT_NOUNS[t.unitNoun];
+    const text = String(names || "").toLowerCase();
+    const hit = UNITS.find(([, , , re]) => re && re.test(text));
+    return hit ? UNIT_NOUNS[hit[0]] : GENERIC_UNIT;
+  }
+  /* "a cabin" / "an RV site" / "an apartment" / "a unit". */
+  const withArticle = (word) => ((/^(rv\b|[aeio])/i.test(word) || /^u(?!ni|s[eu])/i.test(word) ? "an " : "a ") + word);
 
-  window.SHTheme = { FONTS, PRESETS, COLOR_KEYS, RADII, UNIT_NOUNS, DEFAULT_PRESET, normalize, apply, contrast, onColor, fontsHref, unitWords, isHex };
+  // book.html loads this with data-apply: paint the default theme right away
+  // (no inline script needed, so the CSP can forbid inline scripts).
+  if (typeof document !== "undefined" && document.currentScript && document.currentScript.hasAttribute("data-apply")) apply({});
+
+  window.SHTheme = { FONTS, PRESETS, COLOR_KEYS, RADII, UNITS, UNIT_NOUNS, DEFAULT_PRESET, normalize, apply, contrast, onColor, fontsHref, unitWords, withArticle, isHex };
 })();

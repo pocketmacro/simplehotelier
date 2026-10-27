@@ -3,20 +3,19 @@
 // Secrets: STRIPE_SECRET_KEY, STRIPE_PRICE_ID (recurring $30/mo price).
 // Deploy: supabase functions deploy create-checkout
 // deno-lint-ignore-file no-explicit-any
-import Stripe from "https://esm.sh/stripe@14?target=deno";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, Stripe } from "../_shared/deps.ts";
+import { withCors } from "../_shared/cors.ts";
 import { appOrigin } from "../_shared/guard.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2024-06-20" });
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
 const CORS = {
-  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
     const auth = req.headers.get("Authorization") || "";
@@ -69,7 +68,7 @@ Deno.serve(async (req) => {
     console.error("create-checkout", e);
     return json({ error: "create-checkout failed" }, 500);
   }
-});
+}));
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });

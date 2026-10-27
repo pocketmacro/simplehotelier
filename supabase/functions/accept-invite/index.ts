@@ -6,11 +6,11 @@
 // existing membership is never changed (no silent demotion of an owner).
 // Deploy: supabase functions deploy accept-invite
 // deno-lint-ignore-file no-explicit-any
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "../_shared/deps.ts";
+import { withCors } from "../_shared/cors.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const CORS = {
-  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
@@ -18,7 +18,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const INVITE_TTL_DAYS = 14;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
@@ -63,4 +63,4 @@ Deno.serve(async (req) => {
     console.error("accept-invite", e);
     return json({ error: "accept-invite failed" }, 500);
   }
-});
+}));

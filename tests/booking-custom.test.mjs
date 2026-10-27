@@ -96,6 +96,26 @@ test("apply: only allowlisted fonts load, text on buttons stays readable", () =>
   }
 });
 
+test("unit words: owner's choice, custom words, a guess from names, else a neutral word", () => {
+  const words = (theme, names) => T.unitWords(T.normalize(theme), names);
+  assert.deepEqual(words({}, "Luxury Cabin Tiny Home"), { one: "cabin", many: "cabins" });
+  assert.deepEqual(words({}, "Yurt A · Yurt B"), { one: "yurt", many: "yurts" });
+  assert.deepEqual(words({}, "Pull-through RV hookup 1"), { one: "RV site", many: "RV sites" });
+  assert.deepEqual(words({}, "King Deluxe"), { one: "room", many: "rooms" });
+  assert.deepEqual(words({}, "Bluebird · Wren"), { one: "stay", many: "stays" }, "no recognizable word -> neutral");
+  assert.deepEqual(words({ unitNoun: "house" }, "Luxury Cabin"), { one: "house", many: "houses" }, "owner's pick beats the guess");
+  assert.deepEqual(words({ unitNoun: "custom", unitOne: "lake house" }), { one: "lake house", many: "lake houses" });
+  assert.deepEqual(words({ unitNoun: "custom", unitOne: "geodome", unitMany: "geodomes" }), { one: "geodome", many: "geodomes" });
+  const bad = T.normalize({ unitNoun: "custom", unitOne: "<img src=x onerror=1>" });
+  assert.equal(bad.unitNoun, "", "custom words are letters/numbers/spaces only");
+  assert.equal(T.withArticle("cabin"), "a cabin");
+  assert.equal(T.withArticle("RV site"), "an RV site");
+  assert.equal(T.withArticle("apartment"), "an apartment");
+  assert.equal(T.withArticle("unit"), "a unit");
+  assert.equal(T.withArticle("yurt"), "a yurt");
+  assert.equal(T.withArticle("igloo"), "an igloo");
+});
+
 test("migration keeps the theme small, an object, and anon-readable", () => {
   const path = new URL("../supabase/migrations/20261118000000_booking_theme.sql", import.meta.url);
   assert.ok(existsSync(path));

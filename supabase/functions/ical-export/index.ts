@@ -3,8 +3,7 @@
 // The token is per property (Settings -> Booking page -> External calendars)
 // so the feed URL works in Airbnb/Vrbo without exposing an account login.
 // Deploy: supabase functions deploy ical-export  (verify_jwt off: token-gated)
-// deno-lint-ignore-file no-explicit-any
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "../_shared/deps.ts";
 import { buildICS } from "../_shared/ical.js";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);

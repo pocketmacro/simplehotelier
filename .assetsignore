@@ -1,0 +1,15 @@
+# Files in this repo that are NOT part of the public website.
+# Cloudflare Workers static assets skips them (gitignore syntax).
+.git
+.github
+.agents
+.assetsignore
+.gitignore
+.gitattributes
+.env*
+/README.md
+supabase
+scripts
+tests
+generated_images
+node_modules

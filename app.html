@@ -298,8 +298,13 @@
             <div class="field"><label>Colors</label><div class="color-grid" id="bkColorGrid"></div><span class="help" id="bkContrast" role="status"></span></div>
             <div class="form-2">
               <div class="field"><label>Corners</label><div class="seg" id="bkRadius" role="group" aria-label="Corner style"><button type="button" data-r="square">Square</button><button type="button" data-r="soft">Soft</button><button type="button" data-r="rounded">Round</button></div></div>
-              <div class="field"><label for="bkUnit">Your units are called</label><select class="select" id="bkUnit"></select></div>
+              <div class="field"><label for="bkUnit">Guests book a…</label><select class="select" id="bkUnit"></select></div>
             </div>
+            <div class="form-2" id="bkUnitCustom" hidden>
+              <div class="field"><label for="bkUnitOne">One (singular)</label><input class="input" id="bkUnitOne" maxlength="24" placeholder="e.g. lake house"></div>
+              <div class="field"><label for="bkUnitMany">Several (plural)</label><input class="input" id="bkUnitMany" maxlength="24" placeholder="e.g. lake houses"></div>
+            </div>
+            <p class="help" id="bkUnitHelp" style="margin:-6px 0 12px"></p>
             <div class="field"><label for="bkEyebrow">Line above the headline</label><input class="input" id="bkEyebrow" maxlength="60" placeholder="Your city, state"><span class="help">Leave blank to show your city and state.</span></div>
             <div class="toggle-row"><div>Number the booking steps<small>01 Choose · 02 Make it yours · 03 Your details</small></div><span class="switch"><input type="checkbox" id="bkNumbered" checked><span class="tr"></span></span></div>
             <div class="section-title" style="margin:20px 0 10px"><h2 style="font-size:14px">Hero</h2><div class="line"></div></div>
