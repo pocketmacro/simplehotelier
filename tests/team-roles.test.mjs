@@ -100,9 +100,9 @@ test("each role sees only its screens", () => {
 });
 
 test("navigation falls back to the role's home screen", () => {
-  assert.match(app, /function goto\(view\) \{\s+if \(!canSee\(view\)\) view = ROLE_VIEWS\[liveRole\]\[0\];/);
+  assert.match(app, /function goto\(view, history = "push"\) \{\s+if \(!canSee\(view\)\) \{ view = ROLE_VIEWS\[liveRole\]\[0\];/);
   assert.match(app, /b\.hidden = !canSee\(b\.dataset\.view\);/);
-  assert.match(app, /if \(!ROLE_VIEWS\[liveRole\] && computeSetup\(\)\.pct < 100\) goto\("setup"\);/, "only managers are sent to setup");
+  assert.match(app, /else if \(!ROLE_VIEWS\[liveRole\] && computeSetup\(\)\.pct < 100\) goto\("setup", "replace"\);/, "only managers are sent to setup");
   assert.match(app, /\$\("#userRole"\)\.textContent = ROLE_LABELS\[liveRole\] \+ " · "/);
   assert.match(css, /body\[data-role\] :is\(\[data-action="add-room"\]/);
   assert.match(appHtml, /<div id="hkTurnovers"><\/div>/);

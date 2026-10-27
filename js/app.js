@@ -191,8 +191,18 @@ function confirmAction(title, body, label, cb) {
 document.addEventListener("click", (e) => { if (e.target.closest("[data-close]")) closeModal(); });
 
 /* ---------------- Navigation ---------------- */
-function goto(view) {
-  if (!canSee(view)) view = ROLE_VIEWS[liveRole][0];
+/* The open screen lives in the URL (app.html#reservations), so a refresh or
+   bookmark lands on the same screen and Back/Forward move between screens.
+   history: "push" for the person's own navigation, "replace" for automatic
+   redirects (role limits, first-run setup), "none" when the URL already
+   says it (Back/Forward, page load). */
+const VIEWS = new Set($$(".view").map((v) => v.id.replace("view-", "")));
+function viewFromHash() {
+  const v = decodeURIComponent(location.hash.replace(/^#/, ""));
+  return VIEWS.has(v) ? v : "";
+}
+function goto(view, history = "push") {
+  if (!canSee(view)) { view = ROLE_VIEWS[liveRole][0]; if (history === "none") history = "replace"; }
   $$("#mainNav .nav-btn, .nav .nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + view));
   if (view === "rates") renderRates();
@@ -200,8 +210,16 @@ function goto(view) {
   if (view === "setup") renderSetupUI();
   if (view === "booking") loadFontPreviews(); // theme cards and font pickers show each face
   document.body.classList.remove("nav-open");
-  window.scrollTo({ top: 0 });
+  if (location.hash !== "#" + view && history !== "none") {
+    try { window.history[history === "replace" ? "replaceState" : "pushState"](null, "", "#" + view); } catch { /* sandboxed or file:// */ }
+  }
+  if (history !== "replace") window.scrollTo({ top: 0 });
+  window.dispatchEvent(new CustomEvent("sh-view", { detail: { view } })); // support.js loads its data
 }
+window.addEventListener("popstate", () => {
+  const v = viewFromHash();
+  if (v) goto(v, "none");
+});
 document.addEventListener("click", (e) => {
   const nav = e.target.closest("[data-view]");
   if (nav) { goto(nav.dataset.view); return; }
@@ -2356,7 +2374,7 @@ function applyRole() {
   const setupMini = $(".onboard-mini");
   if (setupMini) setupMini.hidden = limited;
   const active = ($(".view.active") || {}).id;
-  if (limited && active && !canSee(active.replace("view-", ""))) goto(ROLE_VIEWS[liveRole][0]);
+  if (limited && active && !canSee(active.replace("view-", ""))) goto(ROLE_VIEWS[liveRole][0], "replace");
 }
 
 /* Older reservations: the dashboard loads recent and upcoming stays plus any
@@ -2716,8 +2734,13 @@ function loadLiveIntoUI() {
     claimInviteAsMember();
     if (!setupRouted) {
       setupRouted = true;
-      if (!ROLE_VIEWS[liveRole] && computeSetup().pct < 100) goto("setup");
-      else if (ROLE_VIEWS[liveRole] && !canSee(($(".view.active") || {}).id?.replace("view-", ""))) goto(ROLE_VIEWS[liveRole][0]);
+      // The screen in the URL wins (refresh, bookmark); otherwise owners
+      // finishing setup start there, and limited roles on their first screen.
+      const wanted = viewFromHash();
+      if (wanted && wanted !== "admin") goto(wanted, "replace");
+      else if (wanted === "admin") { /* support.js opens it once System Admin is confirmed */ }
+      else if (!ROLE_VIEWS[liveRole] && computeSetup().pct < 100) goto("setup", "replace");
+      else if (ROLE_VIEWS[liveRole] && !canSee(($(".view.active") || {}).id?.replace("view-", ""))) goto(ROLE_VIEWS[liveRole][0], "replace");
     }
     if (!checkoutToastShown) {
       checkoutToastShown = true;
@@ -2730,6 +2753,12 @@ function loadLiveIntoUI() {
       }
     }
   });
+}
+/* Refresh / bookmark: show the screen named in the URL straight away; its
+   data fills in when it loads. System Admin waits for its own check. */
+{
+  const v = viewFromHash();
+  if (v && v !== "admin") goto(v, "none");
 }
 loadLiveIntoUI();
 window.addEventListener("sh-auth", (e) => {

@@ -236,7 +236,8 @@
       adminVerified = !!is;
       const nav = $("#navAdmin");
       if (nav) nav.hidden = !is;
-      if (is) loadAdmin();
+      if (is && location.hash === "#admin") goto("admin", "replace"); // refreshed on System Admin (loads it)
+      else if (is) loadAdmin();
     } catch { adminVerified = false; const nav = $("#navAdmin"); if (nav) nav.hidden = true; }
   }
 
@@ -309,11 +310,13 @@
   document.addEventListener("click", (e) => {
     const act = e.target.closest("[data-action]");
     if (act && act.dataset.action === "billing-checkout") { startCheckout(); return; }
-    if (act && act.dataset.action === "billing-help") { goto("support"); $("#caseCategory").value = "billing"; return; }
-    const v = e.target.closest("[data-view]");
-    if (!v) return;
-    if (v.dataset.view === "support") loadMyCases();
-    if (v.dataset.view === "admin") loadAdmin();
+    if (act && act.dataset.action === "billing-help") { goto("support"); $("#caseCategory").value = "billing"; }
+  });
+  // Any way onto these screens (nav, buttons, Back/Forward, a refresh) loads them.
+  window.addEventListener("sh-view", (e) => {
+    const view = e.detail && e.detail.view;
+    if (view === "support") loadMyCases();
+    if (view === "admin") loadAdmin();
   });
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-goto-view]");
