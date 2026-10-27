@@ -2038,6 +2038,18 @@ renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); re
 renderAddons(); renderTaxes(); renderMockRooms(); renderReports(); renderOverview(); renderRateMgmt();
 bindStudio(); updateEmbed(null);
 
+/* Stripe Connect sends owners back to /app.html?stripe=done|refresh. */
+(function () {
+  const s = new URLSearchParams(location.search).get("stripe");
+  if (s !== "done" && s !== "refresh") return;
+  history.replaceState(null, "", location.pathname);
+  setTimeout(() => {
+    goto("settings");
+    if (s === "done") toast("Stripe connected", "Payouts are on their way — check Plan & billing for status", "ok");
+    else toast("Stripe link expired", "Open Settings and click Connect Stripe again for a fresh link", "warn");
+  }, 700);
+})();
+
 /* ---------------- Onboarding: property first, then card + 30-day trial ---------------- */
 function clearAllData() {
   rooms.splice(0, rooms.length);
