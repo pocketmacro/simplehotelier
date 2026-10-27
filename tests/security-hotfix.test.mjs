@@ -47,7 +47,7 @@ test("front-desk reservation codes are random, not a per-device counter", () => 
 
 // ---------------------------------------------------------------- booking page
 test("booking page books only through create_booking and never posts money fields", () => {
-  assert.match(book, /rpc\/create_booking/);
+  assert.match(book, /fnPost\("create-booking"/, "through the Turnstile-gated function (tests/turnstile.test.mjs)");
   assert.doesNotMatch(book, /api\("reservations"/, "no direct reservation inserts");
   assert.doesNotMatch(book, /api\("reservation_addons"/, "no direct add-on inserts");
   assert.doesNotMatch(book, /total_cents:|paid_cents:|confirmation_code:/, "server prices and codes the booking");

@@ -185,6 +185,10 @@ textarea.bk-input { height: auto; padding: 12px 14px; resize: vertical; }
 .bk-cardel { border: 1px solid var(--field-line); border-radius: var(--r-input); padding: 14px; background: var(--surface); }
 .bk-cardel.StripeElement--focus { border-color: var(--brand); outline: 2px solid var(--brand); }
 .bk-cardel.StripeElement--invalid { border-color: var(--danger); }
+/* Bot check: invisible unless Cloudflare asks for a click (then it takes its own row). */
+.bk-turnstile { display: flex; justify-content: center; margin-bottom: -12px; }
+.bk-turnstile.is-visible { margin-bottom: 0; }
+.bk-turnstile:empty { display: none; }
 .bk-trust { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--ink-2); }
 .bk-trust li { display: flex; gap: 10px; align-items: flex-start; }
 .bk-trust svg { color: var(--brand); flex: none; margin-top: 2px; }

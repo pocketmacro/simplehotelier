@@ -404,8 +404,73 @@
       body: JSON.stringify(body)
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || ("Payment service failed (" + res.status + ")"));
+    if (!res.ok) {
+      const err = new Error(data.error || data.details || ("Request failed (" + res.status + ")"));
+      err.code = data.message || "";
+      err.details = data.details || "";
+      throw err;
+    }
     return data;
+  }
+
+  /* Bot check (Cloudflare Turnstile). The widget stays invisible unless
+     Cloudflare wants a click; its one-time token goes with the booking and
+     the create-booking function verifies it before anything is saved.
+     Tokens are single-use, so the widget resets after every failed try. */
+  const ts = { id: null, token: "", failed: false, waiting: [] };
+  const tsReady = isPreview || !cfg.TURNSTILE_SITE_KEY ? Promise.resolve(false) : new Promise((resolve) => {
+    const s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    s.async = true;
+    s.onload = () => resolve(!!window.turnstile); s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+  function tsError(details) {
+    return Object.assign(new Error("verification_failed"), { code: "verification_failed", details });
+  }
+  const TS_LOAD_FAILED = "Our security check couldn't load. Check your connection (or allow challenges.cloudflare.com) and reload the page.";
+  function tsSettle(err) {
+    const waiting = ts.waiting;
+    ts.waiting = [];
+    waiting.forEach((done) => done(err));
+  }
+  async function renderTurnstile() {
+    if (ts.id != null || isPreview) return;
+    if (!(await tsReady)) { ts.failed = true; tsSettle(tsError(TS_LOAD_FAILED)); return; }
+    const box = $("#tsWidget");
+    const surface = (state.theme && state.theme.colors.surface) || "#ffffff";
+    ts.id = window.turnstile.render(box, {
+      sitekey: cfg.TURNSTILE_SITE_KEY,
+      action: "booking",
+      appearance: "interaction-only",
+      size: "flexible",
+      theme: SHTheme.onColor(surface) === "#ffffff" ? "dark" : "light",
+      callback: (token) => { ts.token = token; box.classList.remove("is-visible"); tsSettle(); postHeight(); },
+      "expired-callback": () => { ts.token = ""; },
+      "error-callback": () => { ts.token = ""; },
+      "before-interactive-callback": () => { box.classList.add("is-visible"); postHeight(); }
+    });
+  }
+  /* One fresh token per booking attempt; waits while Cloudflare checks. */
+  async function takeToken() {
+    if (!ts.token) {
+      if (ts.failed) throw tsError(TS_LOAD_FAILED);
+      await new Promise((resolve, reject) => {
+        const done = (err) => { clearTimeout(timer); if (err) reject(err); else resolve(); };
+        const timer = setTimeout(() => {
+          ts.waiting = ts.waiting.filter((f) => f !== done);
+          reject(tsError("Please complete the security check above, then try again."));
+        }, 120000);
+        ts.waiting.push(done);
+      });
+    }
+    const token = ts.token;
+    ts.token = "";
+    return token;
+  }
+  function resetTurnstile() {
+    ts.token = "";
+    if (ts.id != null && window.turnstile) window.turnstile.reset(ts.id);
   }
   function loadStripeJs() {
     if (window.Stripe) return Promise.resolve();
@@ -797,6 +862,7 @@
       state.taxes = (taxes || []).map((x) => ({ name: x.name, kind: x.kind, value: Number(x.rate), applies: x.applies_to }));
       await loadRatePlans();
       presentTenant(); // unit words can now come from the room types
+      renderTurnstile();
       setGuests(guestsCount());
       renderTerms();
       renderRooms(); renderAddons(); renderSummary(); postHeight();
@@ -889,17 +955,21 @@
     const q = renderSummary();
     if (!q) { showError("Please fix your dates."); return; }
     const btn = $("#bookBtn");
-    btn.disabled = true; btn.textContent = "Sending…";
+    btn.disabled = true; btn.textContent = "Running a quick security check…";
     const selAddons = chosenAddons();
     const consentEl = $("#gConsent");
     try {
       /* The server prices the stay from the property's own rates, assigns a
          free unit (by type: first free one; two guests racing for the last
          unit can't both win), generates the confirmation code and stores
-         the request. The quote shown above is only a preview. */
-      const booked = await api("rpc/create_booking", {
-        method: "POST",
-        body: JSON.stringify({
+         the request. The quote shown above is only a preview. The
+         create-booking function checks the Turnstile token, then calls
+         create_booking() (no longer open to browsers directly). */
+      const turnstileToken = await takeToken();
+      btn.textContent = "Sending…";
+      const booked = await fnPost("create-booking", {
+        turnstile_token: turnstileToken,
+        booking: {
           p_tenant: state.tenant.id,
           p_room: byType() && state.selectedTypeId ? null : state.selected.id,
           p_room_type: byType() && state.selectedTypeId ? state.selectedTypeId : null,
@@ -911,7 +981,7 @@
           p_promo: ($("#promoCode").value || "").trim().toUpperCase() || null,
           p_marketing_consent: !!(consentEl && !$("#gConsentWrap").hidden && consentEl.checked),
           p_terms_accepted: termsRequired() && $("#gTermsAck").checked
-        })
+        }
       });
       const resId = booked.reservation_id, code = booked.confirmation_code;
       const total = (booked.total_cents || 0) / 100;
@@ -927,6 +997,7 @@
       fnPost("send-email", { action: "booking_confirmation", reservation_id: resId }).catch(() => {});
       showSuccess(code, total, booked.deposit_cents > 0 ? ` A deposit of ${money(booked.deposit_cents / 100)} (${booked.deposit_percent}%) is required to confirm — the property will arrange collection.` : "");
     } catch (e) {
+      resetTurnstile(); // the token is spent; get a fresh one for the retry
       btn.disabled = false; btn.textContent = "Request booking";
       showError(bookingErrorText(e));
       if (e && e.code === "unavailable" && state.tenant) checkAvailability().catch(() => {});

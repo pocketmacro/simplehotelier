@@ -103,7 +103,7 @@ test("Edge Function dependencies are pinned in one place", () => {
 });
 
 test("browser-called functions grant CORS only to our own origins", () => {
-  for (const name of ["accept-invite", "charge-guest", "create-checkout", "ical-sync", "send-email", "stripe-connect", "support-ai"]) {
+  for (const name of ["accept-invite", "charge-guest", "create-booking", "create-checkout", "ical-sync", "send-email", "stripe-connect", "support-ai"]) {
     const src = read(`supabase/functions/${name}/index.ts`);
     assert.match(src, /Deno\.serve\(withCors\(async \(req\) => \{/, name);
     assert.doesNotMatch(src, /"Access-Control-Allow-Origin": "\*"/, name);
