@@ -189,8 +189,12 @@
       const user = await ures.json();
       const mem = await rest("tenant_members?user_id=eq." + user.id + "&select=tenant_id,role&limit=1");
       if (!mem || !mem.length) return { user, tenant: null };
-      const tenants = await rest("tenants?id=eq." + mem[0].tenant_id + "&select=*");
-      return { user, role: mem[0].role, tenant: (tenants && tenants[0]) || null };
+      // member_tenant() adds the calendar token and billing ids for owners and
+      // admins only (20261123000000_security_cleanup); browsers can't read
+      // those columns directly. The plain read covers a not-yet-migrated db.
+      const tenant = await rpc("member_tenant", { p_tenant: mem[0].tenant_id })
+        .catch(() => rest("tenants?id=eq." + mem[0].tenant_id + "&select=*").then((rows) => rows && rows[0]).catch(() => null));
+      return { user, role: mem[0].role, tenant: tenant && tenant.id ? tenant : null };
     } catch { return null; }
   }
 
@@ -538,7 +542,7 @@
     await rest("support_cases?id=eq." + caseId, { method: "PATCH", body: JSON.stringify({ status }) });
   }
   async function adminSubscribers() {
-    return restAll("tenants?select=*&order=created_at.desc,id.asc");
+    return restAll("tenants?select=id,name,slug,contact_email,subscription_status,current_period_end,created_at&order=created_at.desc,id.asc");
   }
   /* Browser errors reported by js/error-report.js (system admins only, RLS). */
   async function adminErrors() {

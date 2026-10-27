@@ -430,6 +430,7 @@ select pg_temp.expect('R24 slug must be a lowercase DNS label and not reserved',
 do $$
 declare
   v public.tenants%rowtype;
+  v_id uuid;
   v_me uuid := pg_temp.id('outsider');
   v_other uuid := pg_temp.id('b_owner');
 begin
@@ -438,7 +439,9 @@ begin
                               stripe_onboarding_complete, stripe_customer_id, current_period_end, ical_token)
   values ('RLS Check New', 'rls-check-new', v_other, 'active', 0, 'acct_rls_fake', true, 'cus_rls_fake',
           now() + interval '10 years', 'short')
-  returning * into v;
+  returning id into v_id;  -- browsers can't read every column (R100); check as postgres
+  reset role;
+  select * into v from public.tenants where id = v_id;
   perform pg_temp.verdict(
     v.created_by = v_me and v.subscription_status = 'trialing' and v.plan_price_cents = 3000
       and v.stripe_account_id is null and not v.stripe_onboarding_complete and v.stripe_customer_id is null
@@ -608,7 +611,7 @@ with exposed as (
   where not (proname = any (array['member_tenant_ids', 'is_tenant_member', 'has_tenant_role', 'can_claim_tenant',
                                   'is_system_admin', 'get_available_room_ids', 'get_rate_plans', 'log_client_error']))
     and not (rolname = 'authenticated' and proname = any (array['staff_quote', 'save_reservation', 'record_manual_payment',
-                                                                'housekeeping_turnovers']))
+                                                                'housekeeping_turnovers', 'member_tenant', 'can_see_support_case']))
 )
 select pg_temp.rec('R47 only allowlisted SECURITY DEFINER functions are browser-callable',
   (select count(*) from unexpected) = 0,
@@ -790,7 +793,7 @@ select pg_temp.expect('R72 other tenants cannot overwrite, move or delete A''s f
 
 -- ============================================================ R80-R85 support + invites
 select pg_temp.expect('R80 members post support messages as the user (control)',
-  array['a_staff', 'a_cleaner'],
+  array['a_owner', 'a_staff'],
   array[$q$insert into public.support_messages (case_id, tenant_id, sender, body)
           values ('{case_a}', '{tenant_a}', 'user', 'Thanks')$q$],
   'rows=1');
@@ -983,6 +986,89 @@ select pg_temp.expect('R99e the role list accepts maintenance and nothing unknow
   array['service'],
   array[$q$insert into public.tenant_members (tenant_id, user_id, role) values ('{tenant_b}', '{a_maint}', 'janitor')$q$],
   'error:23514');
+
+-- ============================================================ R100-R103 cleanup (20261123000000)
+select pg_temp.expect('R100 no browser role reads the calendar token or billing ids directly',
+  array['a_owner', 'a_admin', 'a_staff', 'a_cleaner', 'a_maint', 'b_owner'],
+  array[
+    $q$select ical_token as v from public.tenants where id = '{tenant_a}'$q$,
+    $q$select stripe_customer_id as v from public.tenants where id = '{tenant_a}'$q$,
+    $q$select * from public.tenants where id = '{tenant_a}'$q$
+  ],
+  'error:42501');
+select pg_temp.expect('R100b member_tenant gives owners/admins the calendar token',
+  array['a_owner', 'a_admin'],
+  array[$q$select public.member_tenant('{tenant_a}') ->> 'ical_token' as v$q$],
+  'value~^[0-9a-f]{64}$');
+select pg_temp.expect('R100c member_tenant hides secrets from other roles and other properties',
+  array['a_staff', 'a_cleaner', 'a_maint', 'b_owner', 'outsider'],
+  array[
+    $q$select public.member_tenant('{tenant_a}') ->> 'ical_token' as v$q$,
+    $q$select public.member_tenant('{tenant_a}') ->> 'stripe_customer_id' as v$q$
+  ],
+  'value!~.');
+select pg_temp.expect('R100d members still read the rest of their property (control)',
+  array['a_staff', 'a_cleaner'],
+  array[
+    $q$select public.member_tenant('{tenant_a}') ->> 'name' as v$q$,
+    $q$select name as v from public.tenants where id = '{tenant_a}'$q$
+  ],
+  'value~^RLS Check A$');
+
+select pg_temp.expect('R101 after 20 wrong promo codes a connection sees no coded plans, even with the right code',
+  array['anon'],
+  array[$q$select e.p ->> 'name' as v from public.get_rate_plans('{tenant_a}', 'rlscode') g,
+          jsonb_array_elements(g.rate_plans) e(p) where e.p ->> 'promoCode' = 'RLSCODE'$q$],
+  'rows=0', null,
+  $s$insert into public.promo_attempts (ip_hash) select encode(sha256(convert_to('198.51.100.77', 'UTF8')), 'hex') from generate_series(1, 20);
+     select set_config('request.headers', '{"cf-connecting-ip":"198.51.100.77"}', true)$s$);
+select pg_temp.expect('R101b below the limit the right code still works (control)',
+  array['anon'],
+  array[$q$select e.p ->> 'name' as v from public.get_rate_plans('{tenant_a}', 'rlscode') g,
+          jsonb_array_elements(g.rate_plans) e(p) where e.p ->> 'promoCode' = 'RLSCODE'$q$],
+  'rows=1', null,
+  $s$select set_config('request.headers', '{"cf-connecting-ip":"198.51.100.78"}', true)$s$);
+
+select pg_temp.rec('R102 browsers hold no unused table privileges (anon writes, TRUNCATE/REFERENCES/TRIGGER)',
+  (select count(*) from information_schema.role_table_grants g
+   where g.table_schema = 'public' and (
+     (g.grantee = 'anon' and g.privilege_type in ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'))
+     or (g.grantee = 'authenticated' and g.privilege_type in ('TRUNCATE', 'REFERENCES', 'TRIGGER')))) = 0,
+  coalesce((select string_agg(g.grantee || ':' || g.privilege_type || ':' || g.table_name, ', ')
+            from information_schema.role_table_grants g
+            where g.table_schema = 'public' and (
+              (g.grantee = 'anon' and g.privilege_type in ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'))
+              or (g.grantee = 'authenticated' and g.privilege_type in ('TRUNCATE', 'REFERENCES', 'TRIGGER')))), 'none'));
+
+select pg_temp.expect('R103 cleaners and maintenance only see support cases they opened',
+  array['a_cleaner', 'a_maint'],
+  array[
+    $q$select subject as v from public.support_cases where id = '{case_a}'$q$,
+    $q$select body as v from public.support_messages where case_id = '{case_a}'$q$,
+    $q$insert into public.support_messages (case_id, tenant_id, sender, body) values ('{case_a}', '{tenant_a}', 'user', 'peek')$q$,
+    $q$update public.support_cases set status = 'closed' where id = '{case_a}'$q$
+  ],
+  'denied');
+select pg_temp.expect('R103b the front desk sees every case for the property (control)',
+  array['a_owner', 'a_admin', 'a_staff'],
+  array[
+    $q$select subject as v from public.support_cases where id = '{case_a}'$q$,
+    $q$select body as v from public.support_messages where case_id = '{case_a}'$q$
+  ],
+  'rows=1');
+select pg_temp.expect('R103c a cleaner opens and follows their own case (control)',
+  array['a_cleaner'],
+  array[
+    $q$insert into public.support_cases (tenant_id, user_id, subject) values ('{tenant_a}', '{a_cleaner}', 'Broken vacuum')$q$,
+    $q$update public.support_cases set status = 'pending' where tenant_id = '{tenant_a}' and user_id = '{a_cleaner}'$q$
+  ],
+  'rows=1',
+  null,
+  $s$insert into public.support_cases (tenant_id, user_id, subject) values (pg_temp.id('tenant_a'), pg_temp.id('a_cleaner'), 'Earlier issue')$s$);
+select pg_temp.expect('R103d members cannot open cases in someone else''s name',
+  array['a_cleaner', 'a_staff'],
+  array[$q$insert into public.support_cases (tenant_id, user_id, subject) values ('{tenant_a}', '{a_owner}', 'Spoofed')$q$],
+  'denied');
 
 -- ============================================================ R00 run integrity (recorded last, sorted first)
 select pg_temp.rec('R00 one transaction, fixtures in place (the final raise rolls all of it back)',

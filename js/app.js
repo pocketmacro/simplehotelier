@@ -2593,7 +2593,7 @@ function loadLiveIntoUI() {
       const co = new URLSearchParams(location.search).get("checkout");
       if (co === "success") setTimeout(() => toast("Your 30-day free trial is active", "$30/month after the trial · manage it in Settings", "ok"), 600);
       else if (co === "cancelled") setTimeout(() => toast("Checkout not finished", "Start your free trial anytime from Settings → Plan and billing", "warn"), 600);
-      else if (!live.tenant.stripe_customer_id && !billingReminderShown) {
+      else if (!ROLE_VIEWS[liveRole] && !live.tenant.stripe_customer_id && !billingReminderShown) {
         billingReminderShown = true;
         setTimeout(() => toast("One step left: start your free trial", "Add a card in Settings → Plan and billing · 30 days free, then $30/month", "warn"), 900);
       }

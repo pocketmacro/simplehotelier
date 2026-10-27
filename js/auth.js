@@ -163,7 +163,8 @@
     for (let i = 0; i < 4 && !tenant; i++) {
       const slug = i === 0 ? slugBase : slugBase + "-" + Math.random().toString(36).slice(2, 6);
       try {
-        const rows = await restInsert("tenants", { name, slug, created_by: user.id, contact_email: user.email });
+        // Name the columns: browsers can't read every tenants column (ical_token, billing ids).
+        const rows = await restInsert("tenants?select=id,name,slug,created_by,contact_email", { name, slug, created_by: user.id, contact_email: user.email });
         tenant = rows[0];
       } catch (e) {
         if (!/duplicate|unique|23505/i.test(e.message)) throw e;

@@ -23,6 +23,7 @@ globalThis.fetch = async (url, opts = {}) => {
   const json = (data, status = 200) => ({ ok: status < 300, status, json: async () => data });
   if (u.includes("/auth/v1/user")) return json({ id: "user-1", email: "owner@example.com" });
   if (u.includes("/rest/v1/tenant_members")) return json([{ tenant_id: tenantId }]);
+  if (u.includes("/rest/v1/rpc/member_tenant")) return json({ id: tenantId, name: "Pinecrest Cabins", slug: "pinecrest" });
   if (u.includes("/rest/v1/tenants?")) return json([{ id: tenantId, name: "Pinecrest Cabins", slug: "pinecrest" }]);
   if (u.includes("/rest/v1/rooms?")) return json([{ id: roomId, tenant_id: tenantId, code: "A1", name: "Aspen Loft", sleeps: 4, rate_cents: 18900, status: "vacant", housekeeping_status: "clean", notes: "" }]);
   if (u.includes("/rest/v1/reservations?")) return json([]);
