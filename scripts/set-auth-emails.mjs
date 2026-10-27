@@ -104,6 +104,10 @@ const body = {
   smtp_pass: SES_SMTP_PASS,
   smtp_admin_email: FROM,
   smtp_sender_name: "SimpleHotelier",
+  // Auth emails per hour, project-wide (sign-up confirmations + password
+  // resets share it). Supabase's default of 2 is meant for its own test
+  // mailer; with SES behind it, 100 leaves room for real traffic.
+  rate_limit_email_sent: 100,
   ...templates
 };
 
