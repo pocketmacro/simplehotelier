@@ -6,6 +6,7 @@
 import { createClient, Stripe } from "../_shared/deps.ts";
 import { withCors } from "../_shared/cors.ts";
 import { appOrigin } from "../_shared/guard.ts";
+import { logError } from "../_shared/errors.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2024-06-20" });
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -65,7 +66,7 @@ Deno.serve(withCors(async (req) => {
     });
     return json({ url: session.url });
   } catch (e: any) {
-    console.error("create-checkout", e);
+    console.error("create-checkout", e); await logError("create-checkout", e);
     return json({ error: "create-checkout failed" }, 500);
   }
 }));

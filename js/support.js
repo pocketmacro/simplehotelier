@@ -223,7 +223,7 @@
           <td>${new Date(c.updated_at).toLocaleDateString()}</td></tr>`).join("");
       $("#adminErrorsTable tbody").innerHTML = (errors || []).map((e) => `
         <tr style="cursor:default"><td class="guest"><strong>${esc(e.message)}</strong><span class="mono">${esc(e.source || e.url || "")}</span></td>
-          <td>${esc(e.page)}</td><td>${esc(tenantNames[e.tenant_id] || "-")}</td>
+          <td>${e.page === "server" ? "Server" : esc(e.page)}</td><td>${esc(tenantNames[e.tenant_id] || "-")}</td>
           <td class="num">${Number(e.count) || 1}</td><td>${new Date(e.last_seen).toLocaleString()}</td></tr>`).join("") ||
         `<tr><td colspan="5"><div class="empty">No browser errors reported in the last 30 days.</div></td></tr>`;
     } catch { toast("Admin data unavailable", "Apply the admin/support migration first", "warn"); }

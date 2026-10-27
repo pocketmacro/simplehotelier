@@ -1166,6 +1166,24 @@ select pg_temp.expect('R103d members cannot open cases in someone else''s name',
   array[$q$insert into public.support_cases (tenant_id, user_id, subject) values ('{tenant_a}', '{a_owner}', 'Spoofed')$q$],
   'denied');
 
+-- ============================================================ R104 server error log (20261126000000)
+select pg_temp.expect('R104 browsers cannot write server errors',
+  array['anon', 'a_owner'],
+  array[$q$select public.log_server_error('charge-guest', 'forged', null, null)$q$],
+  'denied');
+do $$
+declare n int;
+begin
+  perform pg_temp.act_as('service');
+  perform public.log_server_error('rls-check-fn', 'RLS check boom', 'stack', null);
+  perform public.log_server_error('rls-check-fn', 'RLS check boom', 'stack', null);
+  reset role;
+  select count into n from public.client_errors where source = 'rls-check-fn' and page = 'server' and day = current_date;
+  perform pg_temp.verdict(n = 2, 'count=' || coalesce(n::text, 'none'));
+exception when others then
+  perform pg_temp.caught('R104b the functions log server errors, one row per error per day', sqlstate, sqlerrm);
+end $$;
+
 -- ============================================================ R00 run integrity (recorded last, sorted first)
 select pg_temp.rec('R00 one transaction, fixtures in place (the final raise rolls all of it back)',
   (select txid from pg_temp.rls_meta) = txid_current()

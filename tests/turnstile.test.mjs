@@ -32,7 +32,7 @@ test("create-booking verifies the token with Siteverify before booking", () => {
 
 test("create-booking fails closed when Siteverify is unreachable or the secret is missing", () => {
   assert.match(fn, /if \(!secret \|\| typeof token !== "string"/);
-  assert.match(fn, /catch \(e\) \{\s*console\.error\("create-booking: siteverify unavailable", e\); \/\/ fail closed\s*return false;/);
+  assert.match(fn, /catch \(e\) \{\s*console\.error\("create-booking: siteverify unavailable", e\); await logError\("create-booking", e\); \/\/ fail closed\s*return false;/);
   assert.match(fn, /if \(!r\.ok\) throw new Error/);
 });
 

@@ -8,6 +8,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "../_shared/deps.ts";
 import { withCors } from "../_shared/cors.ts";
+import { logError } from "../_shared/errors.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const CORS = {
@@ -53,14 +54,14 @@ Deno.serve(withCors(async (req) => {
 
     const { error: memErr } = await admin.from("tenant_members")
       .upsert({ tenant_id: invite.tenant_id, user_id: user.id, role: invite.role }, { onConflict: "tenant_id,user_id", ignoreDuplicates: true }); // never change an existing member's role
-    if (memErr) { console.error("accept-invite", memErr); return json({ error: "could not join the property" }, 500); }
+    if (memErr) { console.error("accept-invite", memErr); await logError("accept-invite", memErr); return json({ error: "could not join the property" }, 500); }
     await admin.from("invites")
       .update({ accepted_at: new Date().toISOString(), accepted_by: user.id })
       .eq("id", invite.id);
     const { data: tenant } = await admin.from("tenants").select("id, name, slug").eq("id", invite.tenant_id).maybeSingle();
     return json({ joined: true, role: invite.role, tenant });
   } catch (e: any) {
-    console.error("accept-invite", e);
+    console.error("accept-invite", e); await logError("accept-invite", e);
     return json({ error: "accept-invite failed" }, 500);
   }
 }));

@@ -9,6 +9,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient, Stripe } from "../_shared/deps.ts";
 import { saveCardFromIntent } from "../_shared/cards.ts";
+import { logError } from "../_shared/errors.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2024-06-20" });
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -97,7 +98,7 @@ Deno.serve(async (req) => {
       await admin.from("tenants").update({ subscription_status: "past_due" }).eq("stripe_customer_id", String(inv.customer));
     }
   } catch (e: any) {
-    console.error("stripe-webhook", event.type, e);
+    console.error("stripe-webhook", event.type, e); await logError(`stripe-webhook (${event.type})`, e);
     return new Response("handler error", { status: 500 });
   }
   return new Response(JSON.stringify({ received: true }), { headers: { "Content-Type": "application/json" } });

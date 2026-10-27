@@ -10,6 +10,7 @@
 // Deploy: supabase functions deploy create-booking
 import { createClient } from "../_shared/deps.ts";
 import { withCors } from "../_shared/cors.ts";
+import { logError } from "../_shared/errors.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const ACTION = "booking";
@@ -47,7 +48,7 @@ async function verified(token: unknown, ip: string) {
     console.warn("create-booking: siteverify rejected", { codes: result["error-codes"], action: result.action, hostname: result.hostname });
     return false;
   } catch (e) {
-    console.error("create-booking: siteverify unavailable", e); // fail closed
+    console.error("create-booking: siteverify unavailable", e); await logError("create-booking", e); // fail closed
     return false;
   }
 }
@@ -66,11 +67,12 @@ Deno.serve(withCors(async (req) => {
     if (error) {
       // create_booking raises with message = code, details = a guest-facing sentence.
       const known = /^[a-z_]+$/.test(error.message || "");
+      if (!known) { console.error("create-booking rpc", error); await logError("create-booking", error, String(args.p_tenant || "")); }
       return json({ message: known ? error.message : "booking_failed", details: known ? error.details : "" }, 400);
     }
     return json(data);
   } catch (e) {
-    console.error("create-booking", e);
+    console.error("create-booking", e); await logError("create-booking", e);
     return json({ message: "booking_failed", details: "" }, 500);
   }
 }));

@@ -12,6 +12,7 @@ import { syncFeed } from "../_shared/sync.js";
 import { computeWeeklyStats } from "../_shared/report.js";
 import { addDaysISO } from "../_shared/ical.js";
 import { allRows } from "../_shared/paged.ts";
+import { logError } from "../_shared/errors.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -143,7 +144,7 @@ Deno.serve(async (req) => {
     await weeklyReports(out);
     return json({ ok: true, ...out });
   } catch (e: any) {
-    console.error("daily-jobs", e);
+    console.error("daily-jobs", e); await logError("daily-jobs", e);
     return json({ error: "daily-jobs failed" }, 500);
   }
 });

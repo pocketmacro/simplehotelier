@@ -3,6 +3,7 @@
 // deno-lint-ignore-file no-explicit-any
 import nodemailer from "npm:nodemailer@6.9.14";
 import { cleanEmail, senderName } from "./brand.js";
+import { logError } from "./errors.ts";
 export { propertyBrand } from "./brand.js";
 
 const FROM = Deno.env.get("EMAIL_FROM") || "noreply@simplehotelier.com";
@@ -78,14 +79,22 @@ export async function sendMail({ to, subject, html, text, fromName, replyTo }:
   const list = (Array.isArray(to) ? to : [to]).filter(Boolean);
   if (!list.length) return { sent: false, reason: "no recipient" };
   const reply = cleanEmail(replyTo);
-  const info = await transport().sendMail({
-    from: { name: senderName(fromName) || "SimpleHotelier", address: FROM },
-    ...(reply ? { replyTo: reply } : {}),
-    to: list.join(", "),
-    subject,
-    html,
-    text: text || html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
-  });
+  let info;
+  try {
+    info = await transport().sendMail({
+      from: { name: senderName(fromName) || "SimpleHotelier", address: FROM },
+      ...(reply ? { replyTo: reply } : {}),
+      to: list.join(", "),
+      subject,
+      html,
+      text: text || html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+    });
+  } catch (e) {
+    // Delivery problems (SES limits, bad credentials) show in Site errors.
+    console.error("email", e);
+    await logError("email", e);
+    throw e;
+  }
   return { sent: true, id: info.messageId };
 }
 

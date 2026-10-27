@@ -7,6 +7,7 @@ import { createClient } from "../_shared/deps.ts";
 import { withCors } from "../_shared/cors.ts";
 import { syncFeed } from "../_shared/sync.js";
 import { allRows } from "../_shared/paged.ts";
+import { logError } from "../_shared/errors.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const CORS = {
@@ -50,7 +51,7 @@ Deno.serve(withCors(async (req) => {
     const result = await syncFeed(admin, feed);
     return json(result, result.error ? 502 : 200);
   } catch (e: any) {
-    console.error("ical-sync", e);
+    console.error("ical-sync", e); await logError("ical-sync", e);
     return json({ error: "ical-sync failed" }, 500);
   }
 }));

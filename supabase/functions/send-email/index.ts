@@ -14,6 +14,7 @@ import { createClient } from "../_shared/deps.ts";
 import { withCors } from "../_shared/cors.ts";
 import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured, propertyBrand } from "../_shared/email.ts";
 import { appOrigin, callerUser, memberRole } from "../_shared/guard.ts";
+import { logError } from "../_shared/errors.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const CORS = {
@@ -198,7 +199,8 @@ async function teamInvite(req: Request, body: any) {
 Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
-    const body = await req.json();
+    // A malformed body is the caller's mistake (400 below), not a server error.
+    const body = await req.json().catch(() => ({}));
     if (body.action === "booking_confirmation" && body.reservation_id) {
       if (!body.force) return await bookingConfirmation(String(body.reservation_id));
       const user = await callerUser(admin, req);
@@ -211,7 +213,7 @@ Deno.serve(withCors(async (req) => {
     if (body.action === "team_invite") return await teamInvite(req, body);
     return json({ error: "action booking_confirmation, charge_receipt or team_invite required" }, 400);
   } catch (e: any) {
-    console.error("send-email", e);
+    console.error("send-email", e); await logError("send-email", e);
     return json({ error: "send-email failed" }, 500);
   }
 }));

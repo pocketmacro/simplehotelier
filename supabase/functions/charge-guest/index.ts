@@ -29,6 +29,7 @@ import { withCors } from "../_shared/cors.ts";
 import { appOrigin, callerUser, memberRole } from "../_shared/guard.ts";
 import { ensureCustomer, saveCardFromIntent } from "../_shared/cards.ts";
 import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured, propertyBrand, button } from "../_shared/email.ts";
+import { logError } from "../_shared/errors.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2024-06-20" });
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -319,7 +320,7 @@ Deno.serve(withCors(async (req) => {
     }
   } catch (e: any) {
     if (e instanceof Refusal) return json({ error: e.message }, e.status);
-    console.error("charge-guest", e);
+    console.error("charge-guest", e); await logError("charge-guest", e);
     return json({ error: "payment service error" }, 500);
   }
 }));

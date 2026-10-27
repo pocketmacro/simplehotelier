@@ -9,6 +9,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "../_shared/deps.ts";
 import { withCors } from "../_shared/cors.ts";
+import { logError } from "../_shared/errors.ts";
 
 const SYSTEM = `You are Spark, the friendly support assistant inside SimpleHotelier, a $30/month system for cabins and small hotels.
 Help owners do things in the app and explain features briefly with numbered steps.
@@ -41,7 +42,7 @@ Deno.serve(withCors(async (req) => {
     if (!question) return json({ error: "question required" }, 400);
     // Count the question before paying for it; refuse past today's limit.
     const { data: used, error: usageErr } = await admin.rpc("bump_ai_usage", { p_user: user.id });
-    if (usageErr) { console.error("support-ai usage", usageErr); return json({ error: "usage_check_failed" }, 503); }
+    if (usageErr) { console.error("support-ai usage", usageErr); await logError("support-ai", usageErr); return json({ error: "usage_check_failed" }, 503); }
     if (Number(used) > DAILY_LIMIT) return json({ error: "daily_limit", limit: DAILY_LIMIT }, 429);
     const model = Deno.env.get("META_MODEL") || "muse-spark-1.3";
     const messages = [
@@ -67,7 +68,7 @@ Deno.serve(withCors(async (req) => {
     }
     return json({ error: "empty_answer", status: lastStatus }, 502);
   } catch (e: any) {
-    console.error("support-ai", e);
+    console.error("support-ai", e); await logError("support-ai", e);
     return json({ error: "support-ai failed" }, 500);
   }
 }));

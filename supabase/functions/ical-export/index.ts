@@ -6,10 +6,21 @@
 import { createClient } from "../_shared/deps.ts";
 import { buildICS } from "../_shared/ical.js";
 import { allRows } from "../_shared/paged.ts";
+import { logError } from "../_shared/errors.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
 Deno.serve(async (req) => {
+  try {
+    return await exportFeed(req);
+  } catch (e) {
+    console.error("ical-export", e);
+    await logError("ical-export", e);
+    return text("Calendar temporarily unavailable", 500);
+  }
+});
+
+async function exportFeed(req: Request) {
   const url = new URL(req.url);
   const slug = url.searchParams.get("property") || "";
   const token = url.searchParams.get("token") || "";
@@ -53,7 +64,7 @@ Deno.serve(async (req) => {
       "Cache-Control": "public, max-age=900"
     }
   });
-});
+}
 
 function text(body: string, status: number) {
   return new Response(body, { status, headers: { "Content-Type": "text/plain; charset=utf-8" } });
