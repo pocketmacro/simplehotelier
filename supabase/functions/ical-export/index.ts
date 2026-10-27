@@ -5,6 +5,7 @@
 // Deploy: supabase functions deploy ical-export  (verify_jwt off: token-gated)
 import { createClient } from "../_shared/deps.ts";
 import { buildICS } from "../_shared/ical.js";
+import { allRows } from "../_shared/paged.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
@@ -25,15 +26,16 @@ Deno.serve(async (req) => {
   const roomById = new Map(rooms.map((r) => [r.id, r]));
 
   const since = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
-  const { data: reservations } = await admin.from("reservations")
-    .select("confirmation_code, check_in, check_out, room_id, status")
+  const reservations = await allRows(() => admin.from("reservations")
+    .select("id, confirmation_code, check_in, check_out, room_id, status")
     .eq("tenant_id", tenant.id)
     .in("room_id", rooms.map((r) => r.id))
     .in("status", ["pending", "confirmed", "checked_in"])
     .gte("check_out", since)
-    .order("check_in");
+    .order("check_in")
+    .order("id"));
 
-  const events = (reservations || []).map((r) => {
+  const events = reservations.map((r) => {
     const room = roomById.get(r.room_id);
     return {
       uid: `${r.confirmation_code}@simplehotelier.com`,

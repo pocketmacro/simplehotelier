@@ -67,9 +67,37 @@
         ...(opts.headers || {})
       }
     });
-    if (!res.ok) throw new Error("Supabase " + res.status + " on " + path);
+    if (!res.ok) {
+      // Keep PostgREST's code + sentence (e.g. currency_locked) for the UI.
+      const data = await res.json().catch(() => null);
+      const err = new Error("Supabase " + res.status + " on " + path);
+      err.status = res.status;
+      err.code = (data && data.message) || "";
+      err.details = (data && data.details) || "";
+      throw err;
+    }
     return res.status === 204 ? null : res.json();
   }
+
+  /* PostgREST answers at most 1000 rows per request (the project's max_rows)
+     and silently stops there, so longer lists are read page by page. `path`
+     must be ordered by something unique (end the order with id). */
+  const PAGE = 1000;
+  async function restAll(path, max = 20000) {
+    const out = [];
+    for (let offset = 0; offset < max; offset += PAGE) {
+      const rows = await rest(path + "&limit=" + PAGE + "&offset=" + offset);
+      out.push(...(rows || []));
+      if (!rows || rows.length < PAGE) break;
+    }
+    return out;
+  }
+
+  /* The dashboard loads stays from the last HISTORY_DAYS onward plus anything
+     still owing; older history loads on request (loadOlderReservations). */
+  const HISTORY_DAYS = 400;
+  const isoDay = (ms) => { const d = new Date(ms); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  const historyCutoff = () => isoDay(ANCHOR.getTime() - HISTORY_DAYS * DAY);
 
   /* Database functions raise with message = an error code and details = a
      sentence for people; keep both so the UI can show the sentence. */
@@ -183,13 +211,16 @@
       }
       const tid = "tenant_id=eq." + tenant.id;
       ctx.tenantId = tenant.id;
-      const [rooms, reservations, addons, taxes, roomTypesRaw, overridesRaw] = await Promise.all([
-        rest("rooms?" + tid + "&select=*&order=sort_order.asc"),
-        rest("reservations?" + tid + "&select=*&order=check_in.asc"),
-        rest("addons?" + tid + "&select=*&order=name.asc"),
-        rest("tax_rules?" + tid + "&select=*&order=sort_order.asc"),
-        rest("room_types?" + tid + "&select=*&order=name.asc").catch(() => []),
-        rest("room_rate_overrides?" + tid + "&select=*").catch(() => [])
+      const cutoff = historyCutoff();
+      const [rooms, reservations, addons, taxes, roomTypesRaw, overridesRaw, olderRows] = await Promise.all([
+        restAll("rooms?" + tid + "&select=*&order=sort_order.asc,id.asc"),
+        restAll("reservations?" + tid + "&or=(check_out.gte." + cutoff + ",and(balance_cents.gt.0,status.neq.cancelled))&select=*&order=check_in.asc,id.asc"),
+        restAll("addons?" + tid + "&select=*&order=name.asc,id.asc"),
+        restAll("tax_rules?" + tid + "&select=*&order=sort_order.asc,id.asc"),
+        restAll("room_types?" + tid + "&select=*&order=name.asc,id.asc").catch(() => []),
+        // Past nights can't be booked or re-priced; keep a month for context.
+        restAll("room_rate_overrides?" + tid + "&date=gte." + isoDay(ANCHOR.getTime() - 31 * DAY) + "&select=*&order=date.asc,room_type_id.asc").catch(() => []),
+        rest("reservations?" + tid + "&check_out=lt." + cutoff + "&select=id&limit=1").catch(() => [])
       ]);
       const typeNameById = {};
       const typePhotosById = {};
@@ -197,13 +228,19 @@
       ctx.roomIdByCode = {};
       ctx.roomCodeById = {};
       rooms.forEach((r) => { ctx.roomIdByCode[r.code] = r.id; ctx.roomCodeById[r.id] = r.code; });
-      const ticketRows = await rest("maintenance_tickets?" + tid + "&select=*&order=created_at.desc").catch(() => []);
-      const feedRows = await rest("ical_feeds?" + tid + "&select=*&order=created_at.asc").catch(() => []);
-      const txnRows = await rest("transactions?" + tid + "&select=*&order=created_at.desc&limit=20").catch(() => []);
+      // Open tickets, plus ones closed in the last 90 days.
+      const recent = new Date(ANCHOR.getTime() - 90 * DAY).toISOString();
+      const ticketRows = await rest("maintenance_tickets?" + tid + "&or=(status.neq.done,resolved_at.gte." + recent + ",created_at.gte." + recent + ")&select=*&order=created_at.desc,id.desc&limit=500").catch(() => []);
+      const feedRows = await rest("ical_feeds?" + tid + "&select=*&order=created_at.asc&limit=500").catch(() => []);
+      // Payments view: the last 30 days ("Collected" is that window's total).
+      const txnRows = await restAll("transactions?" + tid + "&created_at=gte." + new Date(ANCHOR.getTime() - 30 * DAY).toISOString() + "&select=*&order=created_at.desc,id.desc").catch(() => []);
+      const anyTxn = await rest("transactions?" + tid + "&select=id&limit=1").catch(() => []);
       const memberRows = await rest("tenant_members?" + tid + "&select=user_id").catch(() => []);
       const roomCode = (id) => ctx.roomCodeById[id] || "—";
       return {
         tenant, user, membersCount: (memberRows || []).length,
+        olderReservations: !!(olderRows && olderRows.length),
+        hasPayments: !!(anyTxn && anyTxn.length),
         rooms: rooms.map((r) => ({
           id: r.id, code: r.code, name: r.name,
           sleeps: r.sleeps || 2, typeId: r.room_type_id || null,
@@ -240,8 +277,19 @@
       };
     } catch (err) {
       console.warn("[SimpleHotelier] Live load failed:", err.message);
+      if (window.SHReportError) window.SHReportError(err, "dashboard load");
       return null;
     }
+  }
+
+  /* Older history, newest first, a page at a time (the dashboard already has
+     everything since historyCutoff() and anything still owing). */
+  const OLDER_PAGE = 200;
+  async function loadOlderReservations(offset) {
+    if (!ctx.tenantId) return { rows: [], more: false };
+    const rows = await rest("reservations?tenant_id=eq." + ctx.tenantId + "&check_out=lt." + historyCutoff() +
+      "&select=*&order=check_in.desc,id.desc&limit=" + OLDER_PAGE + "&offset=" + (offset | 0));
+    return { rows: (rows || []).map(mapReservation), more: (rows || []).length === OLDER_PAGE };
   }
 
   // Best-effort housekeeping sync (requires a signed-in member; RLS decides).
@@ -477,13 +525,18 @@
     await rest("support_cases?id=eq." + caseId, { method: "PATCH", body: JSON.stringify({ status }) });
   }
   async function adminSubscribers() {
-    return rest("tenants?select=*&order=created_at.desc&limit=200");
+    return restAll("tenants?select=*&order=created_at.desc,id.asc");
+  }
+  /* Browser errors reported by js/error-report.js (system admins only, RLS). */
+  async function adminErrors() {
+    return rest("client_errors?select=*&order=last_seen.desc&limit=100");
   }
   const tenantId = () => ctx.tenantId;
 
   window.SHDB = {
     configured, loadLiveData, updateHK, hasLive, updateTenantSettings, tenantId, freshToken,
-    isSystemAdmin, listSupportCases, createSupportCase, listSupportMessages, addSupportMessage, setSupportStatus, adminSubscribers,
+    isSystemAdmin, listSupportCases, createSupportCase, listSupportMessages, addSupportMessage, setSupportStatus, adminSubscribers, adminErrors,
+    loadOlderReservations,
     createReservation, setReservationStatus, updateReservationPaid, addTransaction,
     createAddon, setAddonActive, deleteAddon, createTax, deleteTax, createRoom, updateRoom,
     createRoomType, updateRoomType, deleteRoomType, upsertRateOverrides, deleteRateOverride, uploadPublic,

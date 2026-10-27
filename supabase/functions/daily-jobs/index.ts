@@ -11,6 +11,7 @@ import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured } fro
 import { syncFeed } from "../_shared/sync.js";
 import { computeWeeklyStats } from "../_shared/report.js";
 import { addDaysISO } from "../_shared/ical.js";
+import { allRows } from "../_shared/paged.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -28,15 +29,16 @@ async function reminders(kind: "checkin" | "checkout", out: Record<string, numbe
   const dateCol = kind === "checkin" ? "check_in" : "check_out";
   const flagCol = kind === "checkin" ? "checkin_reminder_sent_at" : "checkout_reminder_sent_at";
   const statuses = kind === "checkin" ? ["pending", "confirmed"] : ["confirmed", "checked_in"];
-  const { data: rows } = await admin.from("reservations")
+  // Collect every candidate first: sending flags rows, which would shift pages.
+  const rows = await allRows(() => admin.from("reservations")
     .select("*, tenants(name, contact_phone, contact_email, currency), rooms(code, name)")
     .eq(dateCol, tomorrow)
     .in("status", statuses)
     .not("guest_email", "is", null)
     .is(flagCol, null)
-    .limit(200);
+    .order("id"));
   let sent = 0;
-  for (const r of rows || []) {
+  for (const r of rows) {
     const tenant: any = (r as any).tenants || {};
     const room: any = (r as any).rooms || {};
     const property = tenant.name || "Your property";
@@ -68,16 +70,16 @@ async function weeklyReports(out: Record<string, number>) {
   const today = todayISO();
   if (new Date(today + "T12:00:00Z").getUTCDay() !== 1) return; // Mondays only (UTC)
   const weekStart = addDaysISO(lastMonday(today), -7); // the week that just ended
-  const { data: tenants } = await admin.from("tenants").select("*").limit(200);
+  const tenants = await allRows(() => admin.from("tenants").select("*").order("id"));
   let sent = 0;
-  for (const t of tenants || []) {
+  for (const t of tenants) {
     if (t.last_weekly_report_at && (Date.now() - new Date(t.last_weekly_report_at).getTime()) < 6 * 864e5) continue;
     const to = t.booking_email || t.contact_email;
     if (!to) continue;
-    const [{ data: rooms }, { data: reservations }, { data: txns }] = await Promise.all([
-      admin.from("rooms").select("id, code, name").eq("tenant_id", t.id),
-      admin.from("reservations").select("*").eq("tenant_id", t.id).gte("check_out", addDaysISO(weekStart, -1)).limit(500),
-      admin.from("transactions").select("*").eq("tenant_id", t.id).gte("created_at", weekStart).limit(500)
+    const [rooms, reservations, txns] = await Promise.all([
+      allRows(() => admin.from("rooms").select("id, code, name").eq("tenant_id", t.id).order("id")),
+      allRows(() => admin.from("reservations").select("*").eq("tenant_id", t.id).gte("check_out", addDaysISO(weekStart, -1)).order("id")),
+      allRows(() => admin.from("transactions").select("*").eq("tenant_id", t.id).gte("created_at", weekStart).order("id"))
     ]);
     const roomName = new Map((rooms || []).map((r) => [r.id, `${r.code} · ${r.name}`]));
     const stats = computeWeeklyStats({
@@ -123,13 +125,13 @@ Deno.serve(async (req) => {
     await reminders("checkin", out);
     await reminders("checkout", out);
 
-    const { data: feeds } = await admin.from("ical_feeds").select("*").limit(200);
+    const feeds = await allRows(() => admin.from("ical_feeds").select("*").order("id"));
     let imported = 0;
-    for (const feed of feeds || []) {
+    for (const feed of feeds) {
       const r = await syncFeed(admin, feed);
       imported += r.imported || 0;
     }
-    out.feedsSynced = (feeds || []).length;
+    out.feedsSynced = feeds.length;
     out.blocksImported = imported;
 
     await weeklyReports(out);

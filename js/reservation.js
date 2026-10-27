@@ -150,7 +150,7 @@ function rxRender() {
       <div class="field"><label for="rx-infants">Infants</label><input class="input" type="number" min="0" max="20" id="rx-infants" data-rx-field="infants" value="${esc(f.infants)}"${dis}></div>
       <div class="field rx-w2"><label>Room</label><output class="input rx-out" id="rxRoomOut">—</output></div>
       <div class="field rx-w2"><label>Extra person</label><output class="input rx-out" id="rxExtraOut">—</output></div>
-      <div class="field rx-w2"><label for="rx-discount">Discount ($)</label><input class="input mono" type="number" min="0" step="0.01" id="rx-discount" data-rx-field="discount" value="${esc(f.discount || 0)}"${dis}></div>
+      <div class="field rx-w2"><label for="rx-discount">Discount (${esc(moneyCurrency)})</label><input class="input mono" type="number" min="0" step="0.01" id="rx-discount" data-rx-field="discount" value="${esc(f.discount || 0)}"${dis}></div>
     </div>
     ${addons.length ? `<div class="rx-extras"><span class="rx-label">Extras</span>${addons.filter((a) => a.on || rx.addonIds.has(a.id)).map((a) => `<label class="rx-chip"><input type="checkbox" data-rx-field="addon" value="${esc(a.id || a.name)}"${rx.addonIds.has(a.id || a.name) ? " checked" : ""}${dis}><span>${esc(a.name)} · ${money(a.price)}<small> / ${esc(a.per)}</small></span></label>`).join("")}</div>` : ""}
   </div>
@@ -399,7 +399,7 @@ function rxShowPanel(kind, extra = {}) {
   const due = rxOutstanding();
   const row = rx.row || {};
   const card = row.card_last4 ? { brand: row.card_brand, last4: row.card_last4, expMonth: row.card_exp_month, expYear: row.card_exp_year } : null;
-  const amount = (id, value) => `<div class="field"><label for="${id}">Amount ($)</label><input class="input mono" type="number" min="0.01" step="0.01" id="${id}" value="${value.toFixed(2)}"></div>`;
+  const amount = (id, value) => `<div class="field"><label for="${id}">Amount (${esc(moneyCurrency)})</label><input class="input mono" type="number" min="0.01" step="0.01" id="${id}" value="${value.toFixed(2)}"></div>`;
   const live = rxLive();
   if (kind === "charge") {
     box.innerHTML = card && live

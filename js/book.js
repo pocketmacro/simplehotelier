@@ -99,9 +99,11 @@
   if (isEmbed) document.body.classList.add("embed");
 
   const $ = (s) => document.querySelector(s);
-  const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  /* Card prices drop ".00" ($295, $14.50); totals keep cents. */
-  const price = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(Math.round(n * 100) / 100) ? 0 : 2, maximumFractionDigits: 2 });
+  /* Money in the property's currency (js/money.js). Card prices drop ".00"
+     ($295, $14.50); totals keep cents. */
+  const currency = () => (state.tenant && state.tenant.currency) || "USD";
+  const money = (n) => SHMoney.format(n, currency());
+  const price = (n) => SHMoney.format(n, currency(), { short: true });
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   const state = { tenant: null, rooms: [], types: {}, addons: [], taxes: [], selected: null, selectedTypeId: null, available: null, gaId: "", overrides: {}, dep: null, booked: null, paying: null, stripe: null, cardEl: null };
@@ -157,7 +159,7 @@
   }
   function trackConversion(code, total) {
     if (state.gaId && window.gtag) {
-      const payload = { transaction_id: code, value: total, currency: (state.tenant && state.tenant.currency) || "USD" };
+      const payload = { transaction_id: code, value: total, currency: currency() };
       window.gtag("event", "purchase", payload);        // GA4 recommended commerce event
       window.gtag("event", "booking_complete", payload); // explicit custom conversion
     }
@@ -167,7 +169,7 @@
         const u = new URL(redirect);
         u.searchParams.set("booking_ref", code);
         u.searchParams.set("total", total);
-        u.searchParams.set("currency", (state.tenant && state.tenant.currency) || "USD");
+        u.searchParams.set("currency", currency());
         $("#redirectLink").href = u.toString();
         $("#redirectNote").hidden = false;
         setTimeout(() => { location.href = u.toString(); }, 1500);
@@ -834,6 +836,7 @@
       state.tenant = tenants && tenants[0];
       if (!state.tenant) { showError("We could not find this property. Check the link and try again."); return; }
       const t = state.tenant;
+      window.SH_TENANT_ID = t.id; // error reports name the property
       state.theme = SHTheme.apply(t.booking_theme);
       presentTenant();
       setupGA();
@@ -870,6 +873,7 @@
       if (isPreview && window.parent !== window) window.parent.postMessage({ type: "simplehotelier:preview-ready" }, location.origin);
     } catch (e) {
       showError("Booking is temporarily unavailable. Please contact the property directly.");
+      if (window.SHReportError) window.SHReportError(e, "booking page load");
     }
   }
 
@@ -1000,6 +1004,8 @@
       resetTurnstile(); // the token is spent; get a fresh one for the retry
       btn.disabled = false; btn.textContent = "Request booking";
       showError(bookingErrorText(e));
+      // Known refusals (sold out, throttled, bot check) are expected; anything else is a bug.
+      if (!(e && e.details && /^[a-z_]+$/.test(e.code || "")) && window.SHReportError) window.SHReportError(e, "booking request");
       if (e && e.code === "unavailable" && state.tenant) checkAvailability().catch(() => {});
     }
   });

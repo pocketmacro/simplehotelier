@@ -6,6 +6,7 @@
 import { createClient } from "../_shared/deps.ts";
 import { withCors } from "../_shared/cors.ts";
 import { syncFeed } from "../_shared/sync.js";
+import { allRows } from "../_shared/paged.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const CORS = {
@@ -37,9 +38,9 @@ Deno.serve(withCors(async (req) => {
     const body = await req.json().catch(() => ({}));
     if (body.action === "sync_all") {
       if (!(await cronSecretOk(req))) return json({ error: "unauthorized" }, 401);
-      const { data: feeds } = await admin.from("ical_feeds").select("*");
+      const feeds = await allRows(() => admin.from("ical_feeds").select("*").order("id"));
       const results = [];
-      for (const feed of feeds || []) results.push({ feed: feed.id, ...(await syncFeed(admin, feed)) });
+      for (const feed of feeds) results.push({ feed: feed.id, ...(await syncFeed(admin, feed)) });
       return json({ feeds: results.length, results });
     }
     if (!body.feed_id) return json({ error: "feed_id required" }, 400);

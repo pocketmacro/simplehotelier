@@ -3,7 +3,9 @@
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
-const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/* Money shows in the property's currency (Settings > Currency, js/money.js). */
+let moneyCurrency = "USD";
+const money = (n) => SHMoney.format(n, moneyCurrency);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 /* ---------------- Demo data ---------------- */
@@ -724,12 +726,12 @@ function openRoomTypes(editId) {
       <div class="form-3">
         <div class="field"><label>Min stay (nights)</label><input class="input" id="rtMinStay" type="number" min="0" value="${editing.minStay}"></div>
         <div class="field"><label>Max stay (nights)</label><input class="input" id="rtMaxStay" type="number" min="0" value="${num(editing.maxStay)}" placeholder="No limit"></div>
-        <div class="field"><label>Nightly rate (USD/night)</label><input class="input mono" id="rtRackRate" type="number" min="0" step="0.01" value="${num(editing.rackRate)}" placeholder="0.00"><span class="help">Every room of this type sells at this rate unless a date override applies.</span></div>
+        <div class="field"><label>Nightly rate (${moneyCurrency}/night)</label><input class="input mono" id="rtRackRate" type="number" min="0" step="0.01" value="${num(editing.rackRate)}" placeholder="0.00"><span class="help">Every room of this type sells at this rate unless a date override applies.</span></div>
       </div>
       <div class="form-3">
-        <div class="field"><label>Extra adult (USD/night)</label><input class="input mono" id="rtExtraAdult" type="number" min="0" step="0.01" value="${num(editing.extraAdultRate)}" placeholder="0.00"></div>
-        <div class="field"><label>Extra child (USD/night)</label><input class="input mono" id="rtExtraChild" type="number" min="0" step="0.01" value="${num(editing.extraChildRate)}" placeholder="0.00"></div>
-        <div class="field"><label>Extra infant (USD/night)</label><input class="input mono" id="rtExtraInfant" type="number" min="0" step="0.01" value="${num(editing.extraInfantRate)}" placeholder="0.00"></div>
+        <div class="field"><label>Extra adult (${moneyCurrency}/night)</label><input class="input mono" id="rtExtraAdult" type="number" min="0" step="0.01" value="${num(editing.extraAdultRate)}" placeholder="0.00"></div>
+        <div class="field"><label>Extra child (${moneyCurrency}/night)</label><input class="input mono" id="rtExtraChild" type="number" min="0" step="0.01" value="${num(editing.extraChildRate)}" placeholder="0.00"></div>
+        <div class="field"><label>Extra infant (${moneyCurrency}/night)</label><input class="input mono" id="rtExtraInfant" type="number" min="0" step="0.01" value="${num(editing.extraInfantRate)}" placeholder="0.00"></div>
       </div>
 
       <h4 class="rt-sec">Occupancies</h4>
@@ -910,7 +912,7 @@ function openRoomTypeRates(typeId, planId, fromPage) {
 
       <h4 class="rt-sec">Rates</h4>
       <div class="form-3">
-        <div class="field"><label>Rate type</label><select class="select" id="rpKind"><option value="percent" ${p.rateKind === "percent" ? "selected" : ""}>% difference</option><option value="flat" ${p.rateKind === "flat" ? "selected" : ""}>$ difference / night</option></select></div>
+        <div class="field"><label>Rate type</label><select class="select" id="rpKind"><option value="percent" ${p.rateKind === "percent" ? "selected" : ""}>% difference</option><option value="flat" ${p.rateKind === "flat" ? "selected" : ""}>${esc(SHMoney.symbol(moneyCurrency))} difference / night</option></select></div>
         <div class="field"><label>Difference *</label><input class="input mono" id="rpDiff" type="number" step="0.1" value="${p.difference}"><span class="help">Use a negative number for a discount, e.g. -10.</span></div>
         <div class="field"><label>Extra adult rate *</label><input class="input mono" id="rpExtraAdult" type="number" min="0" step="0.01" value="${p.extraAdultRate}"></div>
       </div>
@@ -1049,7 +1051,7 @@ function openRateDay(iso) {
     title: `${esc(type.name)} · ${pretty}`, sub: `Nightly rate ${money(typeBaseRate(type))} for every ${esc(type.name)} room · same options as the Bulk updater, for this one day`,
     body: `
       <div class="form-3">
-        <div class="field"><label>Rate (USD/night)</label><input class="input mono" id="rdRate" type="number" min="0" step="0.01" value="${prev.rate != null ? prev.rate : typeBaseRate(type)}" placeholder="Leave blank = unchanged"></div>
+        <div class="field"><label>Rate (${moneyCurrency}/night)</label><input class="input mono" id="rdRate" type="number" min="0" step="0.01" value="${prev.rate != null ? prev.rate : typeBaseRate(type)}" placeholder="Leave blank = unchanged"></div>
         <div class="field"><label>Min stay (nights)</label><input class="input" id="rdMinStay" type="number" min="0" value="${prev.minStay ? prev.minStay : ""}" placeholder="Leave blank = unchanged"></div>
         <div class="field"><label>Max stay (nights)</label><input class="input" id="rdMaxStay" type="number" min="0" value="${prev.maxStay ? prev.maxStay : ""}" placeholder="Blank = unchanged · 0 clears"></div>
       </div>
@@ -1101,7 +1103,7 @@ function openBulkUpdater() {
         </div>
         <div class="bulk-col">
           <h4>What changes?</h4>
-          <div class="field"><label>Rate (USD/night)</label><input class="input mono" id="buRate" type="number" min="0" step="0.01" placeholder="Leave blank = unchanged"></div>
+          <div class="field"><label>Rate (${moneyCurrency}/night)</label><input class="input mono" id="buRate" type="number" min="0" step="0.01" placeholder="Leave blank = unchanged"></div>
           <div class="field"><label>Min stay (nights)</label><input class="input" id="buMinStay" type="number" min="0" placeholder="Leave blank = unchanged"></div>
           <div class="field"><label>Max stay (nights)</label><input class="input" id="buMaxStay" type="number" min="0" placeholder="Blank = unchanged · 0 clears"></div>
           <div class="field"><label>Closed (stop sell)</label><select class="select" id="buClosed"><option value="">Leave as-is</option><option value="1">Close these nights</option><option value="0">Reopen these nights</option></select></div>
@@ -1773,7 +1775,7 @@ document.addEventListener("click", (e) => {
     const selVal = (id) => { const v = $(id).value; return v === "" ? null : v === "1"; };
     const closedVal = selVal("#rdClosed"), ctaVal = selVal("#rdCta"), ctdVal = selVal("#rdCtd");
     const hasRate = Number.isFinite(rateVal), hasMin = Number.isFinite(minVal), hasMax = maxRaw !== "";
-    if (hasRate && rateVal < 0) { toast("Enter a valid rate", "USD per night, 0 or more", "warn"); return; }
+    if (hasRate && rateVal < 0) { toast("Enter a valid rate", moneyCurrency + " per night, 0 or more", "warn"); return; }
     if (!hasRate && !hasMin && !hasMax && closedVal === null && ctaVal === null && ctdVal === null) {
       toast("Nothing to change", "Set a rate, stay limit, or a closed / CTA / CTD option", "warn"); return;
     }
@@ -2034,18 +2036,29 @@ document.addEventListener("click", (e) => {
       maximum_infants: intOrNull("#pfMaximumInfants"), maximum_total_occupants: maximumTotalOccupants,
       min_room_rate_cents: Number.isFinite(minRate) ? Math.round(minRate * 100) : null,
       weekend_starts: v("#pfWeekendStarts") || "saturday",
+      ...($("#pfCurrency") && !$("#pfCurrency").disabled ? { currency: SHMoney.code(v("#pfCurrency")) } : {}),
       allow_decimals: !!($("#pfAllowDecimals") && $("#pfAllowDecimals").checked),
       booking_email: v("#pfBookingEmail") || null, booking_cc_email: v("#pfBookingCc") || null,
       enquiry_email: v("#pfEnquiryEmail") || null, availability_email: v("#pfAvailEmail") || null,
       gdpr_consent: !!($("#pfGdpr") && $("#pfGdpr").checked)
     };
     tenantDisplayName = patch.name;
+    const prevCurrency = moneyCurrency;
     if (liveTenant) Object.assign(liveTenant, patch);
+    if (patch.currency && patch.currency !== prevCurrency) setCurrency(patch.currency);
     renderOverview();
     if ($("#bkName")) $("#bkName").value = patch.name;
     if (window.SHDB && SHDB.hasLive()) {
       SHDB.updateTenantSettings(patch).then(() => toast("Settings saved", "Property profile updated", "ok"))
-        .catch(() => toast("Settings saved locally only", "Supabase write failed", "warn"));
+        .catch((e) => {
+          if (e && e.code === "currency_locked") {
+            if (liveTenant) liveTenant.currency = prevCurrency;
+            setCurrency(prevCurrency, { locked: true });
+            toast("Currency not changed", e.details || "The currency is locked once payments are recorded.", "warn");
+            return;
+          }
+          toast("Settings saved locally only", "Supabase write failed", "warn");
+        });
     } else toast("Settings saved", "Property profile updated (demo)", "ok");
   }
   else if (a === "toggle-addon") {
@@ -2137,7 +2150,7 @@ $("#globalSearch").addEventListener("keydown", (e) => {
   const q = e.target.value.trim().toLowerCase();
   const hit = reservations.find((r) => (r.guest + r.ref + r.room).toLowerCase().includes(q));
   if (hit) { goto("reservations"); resQuery = q; $("#resSearch").value = e.target.value; resFilter = "all"; $$("#resFilter button").forEach((x, i) => x.classList.toggle("active", i === 0)); renderReservations(); openResDetail(hit.ref); }
-  else toast("No matches", `Nothing found for “${e.target.value}”`, "warn");
+  else toast("No matches", `Nothing found for “${e.target.value}”` + (olderMore ? " in recent stays. Older history loads from Reservations." : ""), "warn");
 });
 
 /* ---------------- Boot ---------------- */
@@ -2177,6 +2190,59 @@ function renderAll() {
   renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns();
   renderAddons(); renderTaxes(); renderReports(); renderOverview();
 }
+
+/* Currency: one per property; every amount re-renders in it. The setting
+   locks after the first recorded payment (the database enforces this too). */
+function setCurrency(code, { locked } = {}) {
+  const changed = SHMoney.code(code) !== moneyCurrency;
+  moneyCurrency = SHMoney.code(code);
+  $$("[data-currency-code]").forEach((el) => { el.textContent = moneyCurrency; });
+  const sel = $("#pfCurrency");
+  if (sel) {
+    sel.value = moneyCurrency;
+    if (locked != null) sel.disabled = !!locked;
+    const help = $("#pfCurrencyHelp");
+    if (help) help.textContent = sel.disabled
+      ? "Locked: this property has recorded payments, and past amounts would change meaning."
+      : "Prices, payments, receipts and emails use this currency. It locks after your first payment.";
+  }
+  if (changed) { renderAll(); renderRateMgmt(); }
+}
+{
+  const sel = $("#pfCurrency");
+  if (sel) {
+    sel.innerHTML = Object.entries(SHMoney.CURRENCIES).map(([c, name]) => `<option value="${c}">${c} · ${esc(name)}</option>`).join("");
+    sel.value = moneyCurrency;
+  }
+}
+
+/* Older reservations: the dashboard loads recent and upcoming stays plus any
+   with a balance; history before that loads a page at a time. */
+let olderOffset = 0, olderMore = false;
+function renderOlderButton() {
+  const btn = $("#resOlder");
+  if (btn) btn.hidden = !olderMore;
+}
+async function loadOlderReservations() {
+  const btn = $("#resOlder");
+  btn.disabled = true; btn.textContent = "Loading…";
+  try {
+    const { rows, more } = await SHDB.loadOlderReservations(olderOffset);
+    olderOffset += rows.length;
+    olderMore = more;
+    const have = new Set(reservations.map((r) => r.id));
+    rows.forEach((r) => { if (!have.has(r.id)) reservations.push(r); });
+    reservations.sort((a, b) => a.inN - b.inN);
+    renderReservations();
+    if (!rows.length) toast("No older reservations", "You're seeing your full history", "ok");
+  } catch {
+    toast("Couldn't load older reservations", "Check your connection and try again", "warn");
+  } finally {
+    btn.disabled = false; btn.textContent = "Load older reservations";
+    renderOlderButton();
+  }
+}
+$("#resOlder").addEventListener("click", loadOlderReservations);
 function openPropertySetup() {
   openModal({
     title: "Set up your property", sub: "Name it, then add a card to start your 30-day free trial",
@@ -2319,6 +2385,11 @@ function loadLiveIntoUI() {
     liveIcalToken = live.tenant.ical_token || "";
     tenantDisplayName = live.tenant.name || "";
     liveTenant = live.tenant;
+    window.SH_TENANT_ID = live.tenant.id; // error reports name the property
+    olderOffset = 0;
+    olderMore = !!live.olderReservations;
+    renderOlderButton();
+    moneyCurrency = SHMoney.code(live.tenant.currency);
     liveMembersCount = live.membersCount != null ? live.membersCount : 1;
     renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
     renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns(); renderAddons(); renderTaxes(); renderReports(); renderOverview(); renderRateMgmt();
@@ -2351,6 +2422,7 @@ function loadLiveIntoUI() {
     if ($("#pfEmail")) $("#pfEmail").value = live.tenant.contact_email || "";
     if ($("#pfCheckIn")) $("#pfCheckIn").value = live.tenant.check_in_time || "3:00 PM";
     if ($("#pfCheckOut")) $("#pfCheckOut").value = live.tenant.check_out_time || "11:00 AM";
+    setCurrency(live.tenant.currency, { locked: !!live.hasPayments });
     if ($("#pfPolicy")) {
       const ix = ["moderate", "flexible", "strict", "custom"].indexOf(live.tenant.cancellation_policy);
       $("#pfPolicy").selectedIndex = ix >= 0 ? ix : 0;

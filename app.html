@@ -174,6 +174,7 @@
           <thead><tr><th>Guest</th><th>Confirmation</th><th>Room</th><th>Dates</th><th>Status</th><th style="text-align:right">Total</th><th style="text-align:right">Balance</th><th></th></tr></thead>
           <tbody></tbody>
         </table></div>
+        <div class="older-row"><button class="btn btn-ghost" id="resOlder" type="button" hidden>Load older reservations</button></div>
       </section>
 
       <!-- ===== CALENDAR ===== -->
@@ -236,7 +237,7 @@
           <button class="btn btn-brass" type="button" data-action="charge">Charge customer</button>
         </div>
         <div class="grid g-kpi" style="grid-template-columns:repeat(3,1fr)">
-          <div class="card kpi"><div class="k-label">Collected</div><div class="k-value" id="payCollected">$0.00</div><div class="k-sub" id="payCollectedSub">0 charges</div></div>
+          <div class="card kpi"><div class="k-label">Collected · 30 days</div><div class="k-value" id="payCollected">$0.00</div><div class="k-sub" id="payCollectedSub">0 charges</div></div>
           <div class="card kpi"><div class="k-label">Outstanding balances</div><div class="k-value" id="payOutstanding">$0.00</div><div class="k-sub" id="payOutstandingSub">Across 0 open folios</div></div>
           <div class="card kpi"><div class="k-label">Next payout</div><div class="k-value">—</div><div class="k-sub">No payout scheduled</div></div>
         </div>
@@ -428,7 +429,7 @@
         <div class="seg" id="rmtTypes" role="tablist" aria-label="Room type" style="margin-bottom:14px"></div>
         <div class="card card-pad">
           <div id="rmtPlans"></div>
-          <p class="hint" style="margin-top:12px">Rates adjust each room's nightly price by a % or $ difference and can carry their own stay rules, release period, extra-guest charges and occupancy limits. A rate with a promotional code stays hidden until a guest enters that code on your booking page (or arrives with <span class="mono">?PROMO=CODE</span> in the link).</p>
+          <p class="hint" style="margin-top:12px">Rates adjust each room's nightly price by a % or fixed-amount difference and can carry their own stay rules, release period, extra-guest charges and occupancy limits. A rate with a promotional code stays hidden until a guest enters that code on your booking page (or arrives with <span class="mono">?PROMO=CODE</span> in the link).</p>
         </div>
       </section>
 
@@ -499,6 +500,12 @@
         <div class="section-title"><h2>All support cases</h2><div class="line"></div></div>
         <div class="table-wrap"><table class="data" id="adminCasesTable">
           <thead><tr><th>Subject</th><th>Property</th><th>From</th><th>Type</th><th>Status</th><th>Updated</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <div class="section-title"><h2>Site errors</h2><div class="line"></div></div>
+        <p class="hint">Uncaught errors from guests' and owners' browsers over the last 30 days, newest first. Each row is one distinct error per day.</p>
+        <div class="table-wrap"><table class="data" id="adminErrorsTable">
+          <thead><tr><th>Error</th><th>Page</th><th>Property</th><th style="text-align:right">Count</th><th>Last seen</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </section>
@@ -619,7 +626,8 @@
               <div class="field"><label>Maximum infants</label><input class="input" id="pfMaximumInfants" type="number" min="0" placeholder="No property-wide limit"><span class="help">This is the maximum number of infants allowed, not an infant age.</span></div>
               <div class="field"><label>Maximum total occupants</label><input class="input" id="pfMaximumTotalOccupants" type="number" min="0" placeholder="No property-wide limit"><span class="help">The booking page will not accept more total guests than this when set.</span></div>
               <h4 class="rt-sec">Inventory &amp; front desk</h4>
-              <div class="field"><label>Minimum room rate (USD)</label><input class="input mono" id="pfMinRoomRate" type="number" min="0" step="0.01" placeholder="10.00"><span class="help">Rate plans and overrides will not price a night below this.</span></div>
+              <div class="field"><label for="pfCurrency">Currency</label><select class="select" id="pfCurrency"></select><span class="help" id="pfCurrencyHelp">Prices, payments, receipts and emails use this currency. It locks after your first payment.</span></div>
+              <div class="field"><label>Minimum room rate (<span data-currency-code>USD</span>)</label><input class="input mono" id="pfMinRoomRate" type="number" min="0" step="0.01" placeholder="10.00"><span class="help">Rate plans and overrides will not price a night below this.</span></div>
               <div class="field"><label>Weekend starts</label><select class="select" id="pfWeekendStarts"><option value="friday">Friday</option><option value="saturday">Saturday</option><option value="sunday">Sunday</option></select></div>
               <label class="check-item"><input type="checkbox" id="pfAllowDecimals" checked><span>Allow decimals in rates</span></label>
             </div>
@@ -695,6 +703,8 @@
 <div class="overlay" id="overlay"><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
 <div class="toasts" id="toasts"></div>
 <script src="js/config.js"></script>
+<script src="js/error-report.js"></script>
+<script src="js/money.js"></script>
 <script src="js/db.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/booking-theme.js"></script>
