@@ -115,3 +115,16 @@ Secret keys live only in function secrets, never in browser code.
 - `supabase/` — Postgres schema (RLS + no-double-booking rule), seed, functions
 - `scripts/` — one-time Supabase setup/claim helpers (read `.env`, gitignored)
 - `tests/` — focused checks (run: `node --test tests/db-writes.test.mjs`)
+
+## License
+Copyright (C) 2026 Sam Williams.
+
+SimpleHotelier is free software: you can redistribute it and/or modify it
+under the terms of the GNU Affero General Public License, version 3, as
+published by the Free Software Foundation. See [LICENSE](LICENSE).
+
+In short: you may run, change and rebrand it (see "Run your own copy"). If
+you run a modified version as a service for other people, the AGPL requires
+you to offer those users the source code of your version under the same
+license. Properties that use a hosted copy, or embed its booking page on
+their website, take on no obligations.
