@@ -517,6 +517,29 @@ table.data .guest span { color: var(--muted); font-size: 12.3px; }
 .legend i { width: 11px; height: 11px; border-radius: 4px; }
 .legend b { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ink); padding-left: 18px; }
 
+/* Reports: sub-items in the sidebar, the period picker, report tables. */
+.nav-sub { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 6px 19px; padding-left: 9px; border-left: 1px solid rgb(255 255 255 / 12%); }
+.nav-sub-btn { display: flex; align-items: center; gap: 9px; background: none; border: 0; color: var(--sidebar-ink); border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 13px; font-weight: 520; cursor: pointer; width: 100%; text-align: left; }
+.nav-sub-btn svg { width: 15px; height: 15px; opacity: .75; flex: none; }
+.nav-sub-btn:hover { background: rgb(255 255 255 / 7%); }
+.nav-sub-btn.active { background: rgb(255 255 255 / 12%); color: #fff; }
+.rep-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.rep-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rep-range .select, .rep-range .input { width: auto; min-width: 0; }
+.rep-to { color: var(--muted); font-size: 13px; }
+table.data.rep-table { min-width: 0; }
+table.data.rep-table.rep-wide { min-width: 720px; }
+table.data.rep-table tbody tr { cursor: default; }
+table.data.rep-table tfoot td { padding: 12px 14px; border-top: 1px solid var(--line); background: var(--surface-2); }
+.rep-hint { display: block; color: var(--muted); font-size: 12px; font-weight: 500; }
+.rep-meter { display: inline-block; width: 72px; height: 7px; border-radius: 99px; background: var(--surface-3); overflow: hidden; vertical-align: middle; margin-right: 8px; }
+.rep-meter i { display: block; height: 100%; background: var(--brand-2); border-radius: 99px; }
+.rep-up { color: var(--success); font-weight: 650; }
+.rep-down { color: var(--danger); font-weight: 650; }
+.rep-flat { color: var(--muted); }
+.rep-tools .input { max-width: 360px; }
+.rep-export-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
 /* Checklist */
 .check { display: flex; gap: 12px; padding: 12px 2px; border-bottom: 1px solid var(--line-soft); align-items: flex-start; }
 .check:last-child { border-bottom: 0; }

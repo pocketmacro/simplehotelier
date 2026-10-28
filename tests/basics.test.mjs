@@ -31,11 +31,12 @@ test("reservation export has real dates, contact columns and a dated filename", 
   const stem = (site) => new Function("SITE", "return " + app.match(/const fileStem = ([^\n]+);/)[1])(site)();
   assert.equal(stem(SITE), "simplehotelier", "named after the platform (site.config.json)");
   assert.equal(stem({ name: "Lakeside Stays & Co" }), "lakeside-stays-co");
-  assert.match(block, /"\\uFEFF" \+/, "BOM so Excel reads UTF-8");
+  assert.match(block, /downloadCsv\(/);
+  assert.match(slice(app, "function downloadCsv(rows, fname) {", "function renderReports"), /"\\uFEFF" \+/, "BOM so Excel reads UTF-8");
 });
 
 test("CSV cells can't smuggle spreadsheet formulas; negative amounts stay numbers", () => {
-  const src = slice(app, "const csvCell = (v) => {", "const stamp");
+  const src = slice(app, "const csvCell = (v) => {", "function downloadCsv");
   const csvCell = new Function(src + "\nreturn csvCell;")();
   assert.equal(csvCell("=HYPERLINK(\"x\")"), `"'=HYPERLINK(""x"")"`);
   for (const bad of ["+1+1", "-1+cmd", "@SUM(A1)"]) assert.ok(csvCell(bad).startsWith(`"'`), bad);

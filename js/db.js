@@ -176,6 +176,8 @@
       // What was charged, as priced (Reports splits tax and revenue by night).
       tax: (r.tax_cents || 0) / 100, subtotal: (r.subtotal_cents || 0) / 100, discount: (r.discount_cents || 0) / 100,
       extras: (r.extras_cents || 0) / 100, extraPerson: (r.extra_person_cents || 0) / 100,
+      adults: r.adults || 0, children: r.children || 0, infants: r.infants || 0,
+      bookedN: r.created_at ? dayOff(isoDay(new Date(r.created_at).getTime())) : null, // lead time
       card: r.card_last4 ? { brand: r.card_brand || "card", last4: r.card_last4 } : null,
       // Booked online, card step not finished (released after 30 minutes).
       awaitingCard: r.status === "pending" && !!r.card_required && !r.stripe_payment_method_id && !(r.paid_cents > 0)
@@ -327,6 +329,40 @@
     const rows = await rest("reservations?tenant_id=eq." + ctx.tenantId + "&check_out=lt." + historyCutoff() +
       "&select=*&order=check_in.desc,id.desc&limit=" + OLDER_PAGE + "&offset=" + (offset | 0));
     return { rows: (rows || []).map(mapReservation), more: (rows || []).length === OLDER_PAGE };
+  }
+
+  /* Reports: a period's bookings (any status) when it reaches back before the
+     loaded history, their add-on lines, its payments and its closed dates. */
+  const historyStart = () => historyCutoff();
+  async function reportReservations(fromIso, toIso) {
+    if (!ctx.tenantId) return [];
+    const rows = await restAll("reservations?tenant_id=eq." + ctx.tenantId + "&check_in=lte." + toIso + "&check_out=gt." + fromIso + "&select=*&order=check_in.asc,id.asc");
+    return rows.map(mapReservation);
+  }
+  async function reportAddons(ids) {
+    const out = [];
+    for (let i = 0; i < ids.length; i += 80) {
+      out.push(...await restAll("reservation_addons?reservation_id=in.(" + ids.slice(i, i + 80).join(",") + ")&select=reservation_id,name_snapshot,price_cents,qty&order=id.asc"));
+    }
+    // price_cents is the line's total (per stay, night or person already applied).
+    return out.map((a) => ({ resId: a.reservation_id, name: a.name_snapshot, qty: a.qty || 1, amount: (a.price_cents || 0) * (a.qty || 1) / 100 }));
+  }
+  async function reportTransactions(fromIso, toIso) {
+    if (!ctx.tenantId) return [];
+    const end = new Date(toIso + "T00:00:00"); end.setDate(end.getDate() + 1);
+    const rows = await restAll("transactions?tenant_id=eq." + ctx.tenantId + "&status=in.(paid,refunded)" +
+      "&created_at=gte." + encodeURIComponent(new Date(fromIso + "T00:00:00").toISOString()) + "&created_at=lt." + encodeURIComponent(end.toISOString()) +
+      "&select=*,reservations(confirmation_code,guest_name)&order=created_at.asc,id.asc");
+    return rows.map((t) => ({
+      id: t.id, at: t.created_at, date: isoDay(new Date(t.created_at).getTime()), resId: t.reservation_id,
+      ref: t.reservations ? t.reservations.confirmation_code : "", guest: t.reservations ? t.reservations.guest_name : "",
+      desc: t.description || "", method: t.method || "", kind: t.kind || "", amount: (t.amount_cents || 0) / 100, fee: (t.fee_cents || 0) / 100
+    }));
+  }
+  async function reportClosures(fromIso, toIso) {
+    if (!ctx.tenantId) return [];
+    const rows = await restAll("room_rate_overrides?tenant_id=eq." + ctx.tenantId + "&closed=is.true&date=gte." + fromIso + "&date=lte." + toIso + "&select=room_type_id,date&order=date.asc");
+    return rows.map((o) => ({ typeId: o.room_type_id, date: String(o.date).slice(0, 10) }));
   }
 
   // Best-effort housekeeping sync (requires a signed-in member; RLS decides).
@@ -598,6 +634,7 @@
     createRoomType, updateRoomType, deleteRoomType, upsertRateOverrides, deleteRateOverride, uploadPublic,
     createTicket, setTicketStatus, deleteTicket, createIcalFeed, deleteIcalFeed,
     listInvites, deleteInvite, teamMembers, setMemberRole, removeMember,
-    reservationBundle, staffQuote, saveReservation, recordManualPayment
+    reservationBundle, staffQuote, saveReservation, recordManualPayment,
+    historyStart, reportReservations, reportAddons, reportTransactions, reportClosures
   };
 })();
