@@ -108,3 +108,24 @@ test("a save answered with an empty body succeeded (bulk rate updates)", async (
   await assert.rejects(make(403, '{"message":"denied"}')("x"), (e) => e.status === 403 && e.code === "denied");
   assert.match(db, /headers: \{ Prefer: "resolution=merge-duplicates,return=minimal" \}/, "the bulk update still asks for no body");
 });
+
+test("booking page: the same calendar in the property's theme, sized into embeds", () => {
+  const book = read("book.html"), bookJs = read("js/book.js"), css = read("css/book.css");
+  assert.match(book, /<script src="js\/pickers\.js"><\/script>\n<script src="js\/book\.js"><\/script>/);
+  assert.match(book, /id="inDate" type="date" required data-pk-end="outDate" data-pk-short/);
+  assert.match(book, /id="outDate" type="date" required data-pk-start="inDate" data-pk-gap="1" data-pk-short/);
+  assert.match(css, /\.bk-skip, \.bk-cardel, \.pk-pop \{/, "card colours, like the search bar");
+  assert.match(css, /\.pk-day\.sel, \.pk-day\.sel:hover \{ background: var\(--brand\); color: var\(--brand-ink\);/);
+  assert.match(bookJs, /if \(isEmbed\) window\.addEventListener\("sh-picker", postHeight\);/);
+  assert.match(bookJs, /height: Math\.max\(document\.body\.scrollHeight, below\)/);
+  // A check-in on or after check-out keeps the stay's length.
+  assert.match(bookJs, /if \(id === "inDate" && [^\n]*!\(outIso > inIso\)\) \{\n\s+\$\("#outDate"\)\.value = new Date\(Date\.parse\(inIso \+ "T00:00:00Z"\) \+ stayNights \* 864e5\)/);
+  assert.match(src, /window\.dispatchEvent\(new CustomEvent\("sh-picker", \{ detail: \{ open \} \}\)\)/);
+});
+
+test("short dates drop this year's year", () => {
+  const thisYear = new Date().getFullYear();
+  assert.equal(P.fmtDate(`${thisYear}-11-04`, true).includes(String(thisYear)), false);
+  assert.match(P.fmtDate(`${thisYear + 1}-01-02`, true), new RegExp(String(thisYear + 1)));
+  assert.match(P.fmtDate(`${thisYear}-11-04`), new RegExp(String(thisYear)), "the dashboard keeps the year");
+});

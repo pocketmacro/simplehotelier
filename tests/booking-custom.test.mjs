@@ -154,7 +154,7 @@ test("apply sets page and card text separately, and cards re-scope them", () => 
   assert.match(styles["--muted"], /#f4f2eb 64%, #0e0e10/);
   assert.match(styles["--card-muted"], /#1a1a1a 64%, #f4f2eb/);
   assert.match(bookCss, /h1, h2, h3 \{[^}]*color: var\(--heading\)/);
-  const scope = bookCss.match(/\.bk-search, \.bk-card, \.bk-room, \.bk-addon, \.bk-tile, \.bk-summary, \.bk-success, \.bk-skip, \.bk-cardel \{([^}]*)\}/);
+  const scope = bookCss.match(/\.bk-search, \.bk-card, \.bk-room, \.bk-addon, \.bk-tile, \.bk-summary, \.bk-success, \.bk-skip, \.bk-cardel, \.pk-pop \{([^}]*)\}/);
   assert.ok(scope, "cards re-scope their text colors");
   for (const v of ["--ink: var(--card-ink)", "--heading: var(--card-ink)", "--muted: var(--card-muted)", "--line: var(--card-line)"]) assert.ok(scope[1].includes(v), v);
 });

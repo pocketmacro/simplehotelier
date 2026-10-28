@@ -155,9 +155,13 @@
   }
   function postHeight() {
     if (!isEmbed || !window.parent || window.parent === window) return;
-    window.parent.postMessage({ type: "simplehotelier:height", height: document.body.scrollHeight }, "*");
+    // An open date picker floats over the page: make room for it too.
+    const pop = document.querySelector(".pk-pop");
+    const below = pop ? Math.ceil(pop.getBoundingClientRect().bottom + window.scrollY + 16) : 0;
+    window.parent.postMessage({ type: "simplehotelier:height", height: Math.max(document.body.scrollHeight, below) }, "*");
   }
   if (isEmbed && window.ResizeObserver) new ResizeObserver(postHeight).observe(document.body);
+  if (isEmbed) window.addEventListener("sh-picker", postHeight);
 
   async function api(path, opts = {}) {
     const res = await fetch(base + "/rest/v1/" + path, {
@@ -1177,7 +1181,14 @@
     }
   }
   syncDateMins();
+  const dayDiff = (a, b) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 864e5);
+  let stayNights = Math.max(1, dayDiff($("#inDate").value, $("#outDate").value) || 2);
   ["inDate", "outDate"].forEach((id) => $("#" + id).addEventListener("change", () => {
+    const inIso = $("#inDate").value, outIso = $("#outDate").value;
+    if (id === "inDate" && /^\d{4}-\d{2}-\d{2}$/.test(inIso) && !(outIso > inIso)) {
+      $("#outDate").value = new Date(Date.parse(inIso + "T00:00:00Z") + stayNights * 864e5).toISOString().slice(0, 10);
+    }
+    if ($("#outDate").value > $("#inDate").value) stayNights = dayDiff($("#inDate").value, $("#outDate").value);
     syncDateMins();
     if (state.tenant) checkAvailability(); else { renderRooms(); renderSummary(); }
   }));

@@ -34,8 +34,8 @@
     </div>
   </div>
   <form class="bk-search" id="searchForm" aria-label="Find your stay">
-    <label class="bk-sf"><span>Check-in</span><input id="inDate" type="date" required></label>
-    <label class="bk-sf"><span>Check-out</span><input id="outDate" type="date" required></label>
+    <label class="bk-sf"><span>Check-in</span><input id="inDate" type="date" required data-pk-end="outDate" data-pk-short></label>
+    <label class="bk-sf"><span>Check-out</span><input id="outDate" type="date" required data-pk-start="inDate" data-pk-gap="1" data-pk-short></label>
     <div class="bk-sf bk-guests"><span id="guestsLabel">Guests</span>
       <div class="bk-stepper" id="guestsSimple" role="group" aria-labelledby="guestsLabel">
         <button type="button" data-step="-1" aria-label="Remove a guest">−</button>
@@ -156,6 +156,7 @@
 <script src="js/config.js"></script>
 <script src="js/error-report.js"></script>
 <script src="js/money.js"></script>
+<script src="js/pickers.js"></script>
 <script src="js/book.js"></script>
 </body>
 </html>

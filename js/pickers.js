@@ -7,7 +7,10 @@
    up too.
    Pairs: data-pk-end="<id>" on a start date opens the end date next, and
    data-pk-start="<id>" on the end date shades the range (data-pk-gap="1"
-   when the end must be at least a night later, like check-out). */
+   when the end must be at least a night later, like check-out).
+   data-pk-short drops this year's year from the field ("Wed, Nov 4").
+   The booking page uses it too, themed by css/book.css; it hears
+   "sh-picker" events to grow its embed frame around an open picker. */
 (function () {
   "use strict";
   const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -32,7 +35,12 @@
     const start = addDays(first, -first.getDay());
     return Array.from({ length: 42 }, (_, i) => addDays(start, i));
   }
-  const fmtDate = (s) => { const d = parseIso(s); return d ? d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : ""; };
+  function fmtDate(s, short) {
+    const d = parseIso(s);
+    if (!d) return "";
+    const year = !short || d.getFullYear() !== new Date().getFullYear();
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", ...(year ? { year: "numeric" } : {}) });
+  }
   const longDate = (d) => d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
   const nightsBetween = (a, b) => Math.round((b - a) / 864e5);
 
@@ -74,7 +82,7 @@
     if (!btn) return;
     const kind = kindOf(input), v = valueDesc.get.call(input);
     const mins = kind === "time" ? parseTime(v) : null;
-    const text = kind === "date" ? fmtDate(v) : mins != null ? fmtTime(mins) : v;
+    const text = kind === "date" ? fmtDate(v, "pkShort" in input.dataset) : mins != null ? fmtTime(mins) : v;
     btn.innerHTML = ICON[kind] + `<span class="pk-text">${esc(text || input.getAttribute("placeholder") || (kind === "date" ? "Choose a date" : "Choose a time"))}</span>`;
     btn.classList.toggle("pk-empty", !text);
     btn.disabled = input.disabled;
@@ -90,9 +98,12 @@
     btn.setAttribute("aria-expanded", "false");
     if (input.id) {
       btn.id = input.id + "-pk";
-      // Named by its <label for>, or the label in the same field.
+      // Named by its <label for>, the label in the same field, or the
+      // caption of a label wrapped around it.
+      const wrap = input.closest && input.closest("label");
       const label = document.querySelector(`label[for="${CSS.escape(input.id)}"]`) ||
-        (input.parentElement && input.parentElement.querySelector && input.parentElement.querySelector(":scope > label"));
+        (input.parentElement && input.parentElement.querySelector && input.parentElement.querySelector(":scope > label")) ||
+        (wrap && (wrap.querySelector(":scope > span") || wrap));
       if (label) { if (!label.id) label.id = input.id + "-label"; btn.setAttribute("aria-labelledby", label.id + " " + btn.id); }
     }
     if (!btn.hasAttribute("aria-labelledby") && input.getAttribute("aria-label")) btn.setAttribute("aria-label", input.getAttribute("aria-label"));
@@ -126,6 +137,7 @@
   function close(refocus) {
     if (!pop) return;
     pop.remove(); pop = null;
+    announce(false);
     if (cur) {
       const btn = fieldOf(cur.input);
       if (btn) { btn.setAttribute("aria-expanded", "false"); if (refocus) btn.focus(); }
@@ -153,7 +165,9 @@
     render();
     place();
     focusInside();
+    announce(true);
   }
+  const announce = (open) => { try { window.dispatchEvent(new CustomEvent("sh-picker", { detail: { open } })); } catch { /* old browsers */ } };
   function place() {
     if (!pop || !cur) return;
     const btn = fieldOf(cur.input);

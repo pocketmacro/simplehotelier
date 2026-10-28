@@ -22,7 +22,7 @@ body > * { flex-shrink: 0; width: 100%; }
 h1, h2, h3 { font-family: var(--font-head); font-weight: var(--head-weight); letter-spacing: var(--head-track); color: var(--heading); margin: 0; }
 /* Cards and panels carry their own text color (Card text), so a dark page
    can have light cards: everything inside reads the card versions. */
-.bk-search, .bk-card, .bk-room, .bk-addon, .bk-tile, .bk-summary, .bk-success, .bk-skip, .bk-cardel {
+.bk-search, .bk-card, .bk-room, .bk-addon, .bk-tile, .bk-summary, .bk-success, .bk-skip, .bk-cardel, .pk-pop {
   --ink: var(--card-ink); --heading: var(--card-ink); --ink-2: var(--card-ink-2); --muted: var(--card-muted);
   --line: var(--card-line); --field-line: var(--card-field-line); --link: var(--card-link);
   color: var(--ink);
@@ -167,6 +167,44 @@ label.bk-sf { cursor: pointer; }
   border: 0; background: none; font: inherit; font-size: 16px; font-weight: 500; color: var(--ink); cursor: pointer; text-align: left; }
 .bk-guests-btn svg { flex: none; color: var(--muted); transition: transform .2s; }
 .bk-guests-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+/* Check-in / check-out calendar (js/pickers.js), in the property's theme. */
+.pk-native { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; border: 0 !important; overflow: hidden; clip-path: inset(50%); opacity: 0; pointer-events: none; }
+.bk-sf .pk-field { display: flex; align-items: center; gap: 7px; width: 100%; border: 0; padding: 0; margin: 0; background: transparent; color: var(--ink);
+  font: inherit; font-size: 16px; font-weight: 500; text-align: left; white-space: nowrap; cursor: pointer; min-width: 0; border-radius: 4px; }
+.bk-sf .pk-field svg { width: 15px; height: 15px; flex: none; color: var(--muted); }
+.bk-sf .pk-field .pk-text { overflow: hidden; text-overflow: ellipsis; }
+.bk-sf .pk-field.pk-empty { color: var(--muted); }
+.bk-sf:has(.pk-field[aria-expanded="true"]) { background: var(--brand-soft); }
+.pk-pop { position: fixed; z-index: 60; width: 316px; max-width: calc(100vw - 16px); padding: 14px; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow-float); font-family: var(--font-body); font-size: 14px;
+  animation: pk-in .14s ease-out; }
+@keyframes pk-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .pk-pop { animation: none; } }
+.pk-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.pk-title { flex: 1; font: inherit; font-family: var(--font-head); font-weight: var(--head-weight); letter-spacing: var(--head-track); font-size: 19px;
+  color: var(--heading); background: none; border: 0; border-radius: var(--r-input); padding: 4px 8px; cursor: pointer; }
+.pk-nav { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 999px; background: none; color: var(--ink); cursor: pointer; }
+.pk-title:hover, .pk-nav:hover { background: var(--brand-soft); }
+.pk-dow { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11.5px; font-weight: 600; color: var(--muted);
+  letter-spacing: .04em; text-transform: uppercase; padding-bottom: 6px; }
+.pk-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px; }
+.pk-day { height: 40px; border: 0; border-radius: 999px; background: none; font: inherit; font-variant-numeric: tabular-nums; color: var(--ink); cursor: pointer; }
+.pk-day:hover:not(:disabled) { background: var(--brand-soft); }
+.pk-day.out { color: var(--muted); }
+.pk-day.today { box-shadow: inset 0 0 0 1.5px var(--brand); font-weight: 650; }
+.pk-day.range { background: var(--brand-soft); border-radius: 0; }
+.pk-day.edge { background: var(--brand-soft); box-shadow: inset 0 0 0 2px var(--brand); font-weight: 650; }
+.pk-day.sel, .pk-day.sel:hover { background: var(--brand); color: var(--brand-ink); font-weight: 650; }
+.pk-day:disabled { opacity: .32; cursor: default; text-decoration: line-through; text-decoration-thickness: 1px; }
+.pk-months { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.pk-month { height: 46px; border: 0; border-radius: var(--r-input); background: var(--brand-soft); font: inherit; font-weight: 600; color: var(--ink); cursor: pointer; }
+.pk-month.now { box-shadow: inset 0 0 0 1.5px var(--brand); }
+.pk-month.sel { background: var(--brand); color: var(--brand-ink); }
+.pk-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.pk-link { font: inherit; font-weight: 600; color: var(--link); background: none; border: 0; border-radius: 6px; padding: 4px 6px; cursor: pointer; }
+.pk-link:disabled { opacity: .4; cursor: default; }
+.pk-note { color: var(--muted); font-size: 13px; font-weight: 500; }
+.pk-pop :focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
 .bk-guests-pop { position: absolute; z-index: 20; top: calc(100% + 12px); left: -12px; width: min(340px, calc(100vw - 32px)); padding: 8px 18px 16px;
   background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow-float); }
 .bk-gp-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
