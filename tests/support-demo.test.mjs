@@ -40,6 +40,7 @@ globalThis.openModal = () => {};
 globalThis.closeModal = () => {};
 globalThis.goto = () => {};
 
+eval(readFileSync(new URL("../js/site.js", import.meta.url), "utf8")); // window.SH_SITE
 eval(support);
 
 test("demo disables the Spark chat and case form controls", () => {

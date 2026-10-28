@@ -5,6 +5,7 @@
 
 (function () {
   const cfg = window.SH_CONFIG || {};
+  const SITE = window.SH_SITE; // the platform: name, plan (js/site.js)
   const base = (cfg.SUPABASE_URL || "").replace(/\/$/, "");
   const anon = cfg.SUPABASE_ANON_KEY || "";
   const configured = () => !!(base && anon);
@@ -196,7 +197,7 @@
     return data;
   }
 
-  /* Starts Stripe Checkout for the $30/mo subscription when billing is deployed. */
+  /* Starts Stripe Checkout for the platform subscription when billing is deployed. */
   async function tryBilling(tenant) {
     try {
       const res = await fetch(base + "/functions/v1/create-checkout", {
@@ -312,7 +313,7 @@
           inviteNote("You're already on the team at ", data.property, ". Log in to open it.");
           inviteLogin(data.email);
         } else if (data.account) {
-          inviteNote("You're joining ", data.property, ` as ${data.role}. You already have a SimpleHotelier account with this email, so log in to accept.`);
+          inviteNote("You're joining ", data.property, ` as ${data.role}. You already have a ${SITE.name} account with this email, so log in to accept.`);
           inviteLogin(data.email);
         } else {
           inviteNote("You're joining ", data.property, ` as ${data.role}. Set a password to finish.`);
@@ -347,7 +348,7 @@
         await requestReset(email);
         setTab("login");
         $("#liEmail").value = email;
-        showNote(`If ${email} has a SimpleHotelier account, a reset link is on its way. It works for 1 hour. Nothing after a few minutes? Check your spam folder.`);
+        showNote(`If ${email} has a ${SITE.name} account, a reset link is on its way. It works for 1 hour. Nothing after a few minutes? Check your spam folder.`);
       } catch (err) {
         showError(/rate limit|security purposes|429/i.test(err.message)
           ? "Too many reset emails were requested just now. Wait a few minutes, then try again."

@@ -15,8 +15,12 @@ test("live load restores property name and page address into the studio", () => 
   const restore = app.slice(app.indexOf('if ($("#bkGa"))'), app.indexOf('if ($("#pfName"))'));
   assert.ok(restore.length > 0, "studio restore block not found");
   assert.match(restore, /\$\("#bkName"\)\.value = live\.tenant\.name/);
-  assert.match(restore, /\$\("#bkUrl"\)\.value = live\.tenant\.slug \+ "\.simplehotelier\.com"/);
-  assert.match(restore, /\$\("#bkUrlPrev"\)\.textContent = live\.tenant\.slug \+ "\.simplehotelier\.com"/);
+  assert.match(restore, /\$\("#bkUrl"\)\.value = bookingAddress\(live\.tenant\.slug\)/);
+  assert.match(restore, /\$\("#bkUrlPrev"\)\.textContent = bookingAddress\(live\.tenant\.slug\)/);
+  // {slug}.{platform domain}, or the booking page link when there are no wildcard subdomains.
+  const addr = (site) => new Function("SITE", "return " + app.match(/const bookingAddress = ([^\n]+);/)[1])(site);
+  assert.equal(addr({ domain: "simplehotelier.com", bookingSubdomains: true })("pinecrest"), "pinecrest.simplehotelier.com");
+  assert.equal(addr({ domain: "stays.example", bookingSubdomains: false })("pinecrest"), "stays.example/book.html?property=pinecrest");
   assert.match(restore, /setPreviewSrc\(\);/, "the live preview loads the property's own page");
 });
 

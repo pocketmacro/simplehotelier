@@ -116,7 +116,7 @@ const authJs = read("js/auth.js");
 test("the invite page sends existing accounts straight to the login form", () => {
   assert.match(accept, /account: !!\(acct && acct\.confirmed\), member,/);
   assert.match(authJs, /if \(data\.member\) \{\s+inviteNote\("You're already on the team at ", data\.property, "\. Log in to open it\."\);\s+inviteLogin\(data\.email\);/);
-  assert.match(authJs, /\} else if \(data\.account\) \{\s+inviteNote\("You're joining ", data\.property, ` as \$\{data\.role\}\. You already have a SimpleHotelier account with this email, so log in to accept\.`\);\s+inviteLogin\(data\.email\);/);
+  assert.match(authJs, /\} else if \(data\.account\) \{\s+inviteNote\("You're joining ", data\.property, ` as \$\{data\.role\}\. You already have a \$\{SITE\.name\} account with this email, so log in to accept\.`\);\s+inviteLogin\(data\.email\);/);
   // The late fallback is a note, not an error.
   const fallback = authJs.slice(authJs.indexOf('if (data.error === "account_exists")'), authJs.indexOf("} else if (!ok) {"));
   assert.doesNotMatch(fallback, /showError/);

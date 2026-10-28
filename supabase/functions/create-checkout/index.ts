@@ -1,18 +1,20 @@
-// SimpleHotelier — the property's $30/mo subscription.
+// SimpleHotelier — the property's platform subscription (plan in site.config.json).
 // POST { tenant_id, origin } with the user's JWT -> { url } (Stripe Checkout)
 // POST { action: "portal", tenant_id, origin } -> { url } (Stripe Customer
 //   Portal: change card, download invoices, cancel at the end of the period)
-// Secrets: STRIPE_SECRET_KEY, STRIPE_PRICE_ID (recurring $30/mo price).
+// Secrets: STRIPE_SECRET_KEY, STRIPE_PRICE_ID (the recurring monthly price;
+// scripts/setup-platform.mjs creates it from the config's plan).
 // Deploy: supabase functions deploy create-checkout
 // deno-lint-ignore-file no-explicit-any
 import { createClient, Stripe } from "../_shared/deps.ts";
 import { withCors } from "../_shared/cors.ts";
 import { appOrigin } from "../_shared/guard.ts";
 import { logError } from "../_shared/errors.ts";
+import { SITE } from "../_shared/site.js";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2024-06-20" });
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-const SITE = (Deno.env.get("SITE_URL") || "https://simplehotelier.com").replace(/\/$/, "");
+const SITE_URL = (Deno.env.get("SITE_URL") || SITE.siteUrl).replace(/\/$/, "");
 
 const CORS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -34,11 +36,11 @@ async function portalConfiguration() {
   if (found) return (portalConfig = found.id);
   const made = await stripe.billingPortal.configurations.create({
     business_profile: {
-      headline: "SimpleHotelier · $30/month, everything included",
-      privacy_policy_url: SITE + "/privacy",
-      terms_of_service_url: SITE + "/terms",
+      headline: `${SITE.name} · ${SITE.priceLabel}/month, everything included`,
+      privacy_policy_url: SITE_URL + "/privacy",
+      terms_of_service_url: SITE_URL + "/terms",
     },
-    default_return_url: SITE + "/app#settings",
+    default_return_url: SITE_URL + "/app#settings",
     features: {
       customer_update: { enabled: true, allowed_updates: ["email", "name", "address"] },
       invoice_history: { enabled: true },
@@ -114,11 +116,11 @@ Deno.serve(withCors(async (req) => {
       success_url: base + "/app.html?checkout=success",
       cancel_url: base + "/app.html?checkout=cancelled",
       metadata: { tenant_id: tenant.id },
-      // Card is required up front. The 30-day free trial is for a property's
+      // Card is required up front. The free trial is for a property's
       // first subscription only, not for each re-subscribe after cancelling.
       payment_method_collection: "always",
       subscription_data: {
-        ...(tenant.stripe_subscription_id ? {} : { trial_period_days: 30 }),
+        ...(tenant.stripe_subscription_id ? {} : { trial_period_days: SITE.plan.trialDays }),
         metadata: { tenant_id: tenant.id },
       },
     });

@@ -7,8 +7,42 @@ flags, guest charges, custom add-ons, room taxes, and reports.
 This repo currently contains the interactive dashboard prototype wired to a
 live Supabase backend.
 
+## Run your own copy (your name, domain and price)
+Everything that says who runs the platform lives in `site.config.json`:
+
+| Key | What it is |
+|---|---|
+| `name` | Platform name: page titles, dashboard, emails, legal pages, "Powered by" on booking pages |
+| `domain` | Your site's host, e.g. `stays.example` (the site is served at `https://{domain}`) |
+| `bookingSubdomains` | `true` if `*.{domain}` points at the site, so each property gets `{slug}.{domain}`; `false` uses `book.html?property={slug}` |
+| `extraOrigins` | Other https origins that serve the site (e.g. a `workers.dev` preview) |
+| `supportEmail` | Shown on the Terms and Privacy pages |
+| `emailFrom` | Sender for every email (verify this domain with your mail provider) |
+| `plan` | `priceCents`, `currency` and `trialDays` of the monthly subscription |
+| `logoMark`, `favicon` | Logo files (replace the SVGs in `assets/`, or point at your own) |
+
+Then run `node scripts/site.mjs`. It rewrites `js/site.js` (the browser's
+copy), `supabase/functions/_shared/site.js` (the functions' copy) and the
+static pages, which carry the name, domain, price and trial without needing
+JavaScript. Run it again after every change: `js/site.js` records the values
+last applied, so it knows what to replace. `node scripts/site.mjs --check`
+(and `tests/site-config.test.mjs`) fail if anything is out of date.
+Use a distinctive name and domain: the static pages are updated by replacing
+the old values. It also points the `_headers` CSP at the Supabase project in
+`js/config.js`.
+
+Also yours to change:
+- The wording of `index.html` (marketing), `terms.html` and `privacy.html`
+  (have your own legal terms reviewed; the name, domain, email, price and
+  trial update automatically).
+- Colors: `css/tokens.css` (site) and the email shells in
+  `supabase/functions/_shared/email.ts` and `scripts/set-auth-emails.mjs`.
+- After `site.config.json`: `node scripts/setup-platform.mjs phase1` creates
+  the Stripe product and price for your plan; `node scripts/set-auth-emails.mjs`
+  brands the sign-in emails; redeploy the Edge Functions.
+
 ## Run locally
-- `index.html` is the public marketing landing page ($30/month).
+- `index.html` is the public marketing landing page.
 - `app.html` is the dashboard (login gate, then your property).
 - `book.html?property={slug}` is the guest booking page / embed widget.
 Open the files in a browser (no build step). Without Supabase keys the
@@ -63,7 +97,8 @@ See [supabase/README.md](supabase/README.md). Short version:
   for gallery uploads; the first photo becomes the booking page cover.
 - Requires `supabase/migrations/20261029000000_rates_photos.sql`
   (`node scripts/apply-sql.mjs supabase/migrations/20261029000000_rates_photos.sql`).
-- Brand assets: `assets/logo.svg`, `assets/logo-mark.svg`, `assets/favicon.svg`.
+- Brand assets: `assets/logo.svg`, `assets/logo-mark.svg`, `assets/favicon.svg`
+  (the paths and name are set in `site.config.json`).
 
 ## Accounts
 - **Log in** with your Supabase Auth user to load your property's live data.

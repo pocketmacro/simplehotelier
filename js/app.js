@@ -6,6 +6,14 @@ const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 /* Money shows in the property's currency (Settings > Currency, js/money.js). */
 let moneyCurrency = "USD";
 const money = (n) => SHMoney.format(n, moneyCurrency);
+/* The platform itself (site.config.json, via js/site.js): name, domain, plan. */
+const SITE = window.SH_SITE;
+const planPrice = () => `${SITE.priceLabel}/month`;
+/* Where a property's booking page lives: {slug}.domain when the platform has
+   wildcard subdomains, else the booking page with ?property=. */
+const bookingAddress = (slug) => SITE.bookingSubdomains ? `${slug}.${SITE.domain}` : `${SITE.domain}/book.html?property=${slug}`;
+/* Download names start with the platform name: "simplehotelier-report-…". */
+const fileStem = () => SITE.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "export";
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 /* ---------------- Demo data ---------------- */
@@ -303,7 +311,7 @@ function computeSetup() {
   const steps = [
     { key: "profile", title: "Company profile created", desc: T.name ? `${T.name} · address and phone for guests` : "Name, address and phone guests see", done: !!(T.name && (T.address_line1 || T.address) && T.phone), view: "settings", cta: "Edit profile" },
     { key: "rooms", title: rooms.length ? `${rooms.length} room${rooms.length > 1 ? "s" : ""} added with rates` : "Add your rooms and rates", desc: "Each room gets a code, sleeps count and nightly rate", done: rooms.length > 0, view: "rooms", cta: rooms.length ? "Manage rooms" : "Add rooms" },
-    { key: "booking", title: "Booking page published", desc: T.slug ? `${T.slug}.simplehotelier.com` : "Your public booking page", done: !!T.booking_headline, view: "booking", cta: "Open booking studio" },
+    { key: "booking", title: "Booking page published", desc: T.slug ? bookingAddress(T.slug) : "Your public booking page", done: !!T.booking_headline, view: "booking", cta: "Open booking studio" },
     { key: "taxes", title: taxes.length ? "Taxes configured" : "Configure taxes", desc: taxes.length ? `${taxes.length} rule${taxes.length > 1 ? "s" : ""} applied to totals` : "Lodging tax, tourism fees and other rules", done: taxes.length > 0, view: "addons", cta: "Set up taxes" },
     { key: "payouts", title: "Connect bank payouts", desc: "2–3 day transfers · required to charge cards", done: !!T.stripe_onboarding_complete, action: "connect-bank", cta: "Connect Stripe" },
     { key: "team", title: "Invite your team", desc: liveMembersCount > 1 ? `${liveMembersCount} people on the team` : "Cleaners get a free mobile turnover list", done: liveMembersCount > 1, action: "invite", cta: "Invite" }
@@ -1274,7 +1282,7 @@ function renderTaxes() {
 
 /* ---------------- Booking studio ---------------- */
 function bookingBase() {
-  return location.protocol.startsWith("http") ? location.origin : "https://simplehotelier.pocketmacro.workers.dev";
+  return location.protocol.startsWith("http") ? location.origin : SITE.siteUrl;
 }
 function updateEmbed(tenant) {
   const slug = (tenant && tenant.slug) || "pinecrest";
@@ -1464,7 +1472,7 @@ function applyStudioPreview() {
 }
 function bindStudio() {
   ["bkName", "bkHead", "bkSub"].forEach((id) => { const el = document.getElementById(id); if (el) el.addEventListener("input", queuePreview); });
-  $("#bkUrl").addEventListener("input", (e) => { $("#bkUrlPrev").textContent = e.target.value || "you.simplehotelier.com"; });
+  $("#bkUrl").addEventListener("input", (e) => { $("#bkUrlPrev").textContent = e.target.value || bookingAddress("you"); });
   renderStudioDesign();
   $("#bkPresets").addEventListener("click", (e) => {
     const b = e.target.closest("[data-preset]"); if (!b) return;
@@ -1775,7 +1783,7 @@ document.addEventListener("click", (e) => {
       rows = [["Metric", "Value"], ["Window (days)", rep.days], ["Reservations", rep.count], ["Revenue booked", rep.revenue.toFixed(2)], ["Collected", rep.collected.toFixed(2)], ["Estimated tax liability", rep.taxTotal.toFixed(2)], ["", ""], ["Top unit", "Revenue"]]
         .concat(rep.top.map(([n, v]) => [n, v.toFixed(2)]))
         .concat([["", ""], ["Tax rule", "Estimated amount"]], rep.taxRows.map(([n, v]) => [n, v.toFixed(2)]));
-      fname = `simplehotelier-report-${stamp}.csv`;
+      fname = `${fileStem()}-report-${stamp}.csv`;
     } else {
       // Live rows carry real dates; demo rows only day offsets from today.
       const day = (iso, n) => iso || isoLocal(addDays(n));
@@ -1784,7 +1792,7 @@ document.addEventListener("click", (e) => {
       rows = [["Confirmation", "Guest", "Email", "Phone", "Room", "Check-in", "Check-out", "Nights", "Status", "Source", "Total", "Paid", "Balance"]]
         .concat(reservations.filter(resMatches).map((r) => [r.ref, r.guest, email(r), phone(r), r.room, day(r.checkIn, r.inN), day(r.checkOut, r.outN),
           Math.max(0, r.outN - r.inN), r.status, r.source || "direct", r.total.toFixed(2), r.paid.toFixed(2), balance(r).toFixed(2)]));
-      fname = `simplehotelier-reservations-${stamp}.csv`;
+      fname = `${fileStem()}-reservations-${stamp}.csv`;
     }
     // BOM so Excel reads accented names as UTF-8.
     const blob = new Blob(["\uFEFF" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
@@ -2335,7 +2343,7 @@ bindStudio(); updateEmbed(null);
   }, 2200);
 })();
 
-/* ---------------- Onboarding: property first, then card + 30-day trial ---------------- */
+/* ---------------- Onboarding: property first, then card + free trial ---------------- */
 function clearAllData() {
   rooms.splice(0, rooms.length);
   reservations.splice(0, reservations.length);
@@ -2428,13 +2436,13 @@ $("#resOlder").addEventListener("click", loadOlderReservations);
 function openPropertySetup(another = false) {
   openModal({
     title: another ? "Add a property" : "Set up your property",
-    sub: another ? "It gets its own rooms, team and booking page. Name it, then add a card to start its 30-day free trial"
-      : "Name it, then add a card to start your 30-day free trial",
+    sub: another ? `It gets its own rooms, team and booking page. Name it, then add a card to start its ${SITE.plan.trialDays}-day free trial`
+      : `Name it, then add a card to start your ${SITE.plan.trialDays}-day free trial`,
     body: `
       <div class="field"><label>Property name</label><input class="input" id="obPropertyName" placeholder="e.g. Pinecrest Cabins"><span class="help">This becomes your booking page title. You can add address, photos, rooms and rates right after.</span></div>
       <div class="kv" style="margin-top:6px">
-        <dt>Plan</dt><dd>SimpleHotelier · $30 / month</dd>
-        <dt>Free trial</dt><dd>30 days · card required, nothing charged today</dd>
+        <dt>Plan</dt><dd>${esc(SITE.name)} · ${esc(SITE.priceLabel)} / month</dd>
+        <dt>Free trial</dt><dd>${SITE.plan.trialDays} days · card required, nothing charged today</dd>
         <dt>Then</dt><dd>Add rooms, set rates, publish your booking page</dd>
       </div>`,
     foot: `<button class="btn btn-ghost btn-sm" data-close type="button">${another ? "Cancel" : "I'll do this later"}</button>
@@ -2492,15 +2500,15 @@ function renderBilling(t) {
   const ending = live && t.subscription_cancel_at;
   $("#billStatus").innerHTML = pill(ending ? ["pending", "Cancels " + day(t.subscription_cancel_at)] : BILL_STATUS[status]);
   $("#billPeriodLabel").textContent = !started ? "Free trial" : ending ? "Ends" : status === "canceled" ? "Ended" : status === "trialing" ? "Trial ends" : "Renews";
-  $("#billPeriod").textContent = !started ? "30 days" : ending ? day(t.subscription_cancel_at) : t.current_period_end ? day(t.current_period_end) : "-";
-  $("#billNote").textContent = !started ? "30 days free, then $30/month. Cancel anytime from this page."
+  $("#billPeriod").textContent = !started ? `${SITE.plan.trialDays} days` : ending ? day(t.subscription_cancel_at) : t.current_period_end ? day(t.current_period_end) : "-";
+  $("#billNote").textContent = !started ? `${SITE.plan.trialDays} days free, then ${planPrice()}. Cancel anytime from this page.`
     : status === "past_due" || status === "unpaid" ? "Your last payment didn't go through. Update your card in Manage billing to keep your account running."
     : ending ? "Your plan is cancelled and stops on " + day(t.subscription_cancel_at) + ". Changed your mind? Renew it in Manage billing."
-    : status === "canceled" ? "Your subscription has ended. Subscribe again to keep using SimpleHotelier."
+    : status === "canceled" ? `Your subscription has ended. Subscribe again to keep using ${SITE.name}.`
     : "Change your card, download invoices or cancel in Manage billing.";
   $("#billNote").hidden = false;
   $("#billCheckout").hidden = live;
-  $("#billCheckout").textContent = started ? "Subscribe again" : "Start 30-day free trial";
+  $("#billCheckout").textContent = started ? "Subscribe again" : `Start ${SITE.plan.trialDays}-day free trial`;
   $("#billPortal").hidden = !t.stripe_customer_id;
 }
 let checkoutToastShown = false, billingReminderShown = false;
@@ -2750,8 +2758,8 @@ function loadLiveIntoUI() {
     if ($("#bkAddressMode")) $("#bkAddressMode").value = live.tenant.guest_address_mode || "off";
     if ($("#bkDepositPct") && live.tenant.deposit_percent) $("#bkDepositPct").value = live.tenant.deposit_percent;
     if ($("#bkName")) $("#bkName").value = live.tenant.name || "";
-    if (live.tenant.slug && $("#bkUrl")) $("#bkUrl").value = live.tenant.slug + ".simplehotelier.com";
-    if (live.tenant.slug && $("#bkUrlPrev")) $("#bkUrlPrev").textContent = live.tenant.slug + ".simplehotelier.com";
+    if (live.tenant.slug && $("#bkUrl")) $("#bkUrl").value = bookingAddress(live.tenant.slug);
+    if (live.tenant.slug && $("#bkUrlPrev")) $("#bkUrlPrev").textContent = bookingAddress(live.tenant.slug);
     if (live.tenant.booking_headline && $("#bkHead")) $("#bkHead").value = live.tenant.booking_headline;
     if (live.tenant.booking_subheading && $("#bkSub")) $("#bkSub").value = live.tenant.booking_subheading;
     setPreviewSrc();
@@ -2820,7 +2828,7 @@ function loadLiveIntoUI() {
       else if (qs.get("billing") === "updated") setTimeout(() => toast("Back from billing", "Changes can take a minute to show here", "ok"), 600);
       else if (!ROLE_VIEWS[liveRole] && !live.tenant.stripe_customer_id && !billingReminderShown) {
         billingReminderShown = true;
-        setTimeout(() => toast("One step left: start your free trial", "Add a card in Settings → Plan and billing · 30 days free, then $30/month", "warn"), 900);
+        setTimeout(() => toast("One step left: start your free trial", `Add a card in Settings → Plan and billing · ${SITE.plan.trialDays} days free, then ${planPrice()}`, "warn"), 900);
       }
     }
   });

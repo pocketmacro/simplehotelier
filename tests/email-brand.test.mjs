@@ -55,7 +55,7 @@ test("guest emails use the property brand and reply-to; owner and team emails st
   const daily = read("supabase/functions/daily-jobs/index.ts");
   assert.match(daily, /to: r\.guest_email,\s+fromName: brand\.name,\s+replyTo: brand\.replyTo,/, "check-in/check-out reminders");
   const email = read("supabase/functions/_shared/email.ts");
-  assert.match(email, /from: \{ name: senderName\(fromName\) \|\| "SimpleHotelier", address: FROM \}/);
+  assert.match(email, /from: \{ name: senderName\(fromName\) \|\| senderName\(SITE\.name\), address: FROM \}/);
   assert.match(email, /const reply = cleanEmail\(replyTo\);/);
   assert.match(email, /\$\{esc\(brand\.name\)\}/, "property name is escaped in the header");
 });

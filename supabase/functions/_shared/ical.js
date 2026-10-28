@@ -1,6 +1,7 @@
 /* SimpleHotelier — minimal iCalendar (RFC 5545) parse/build helpers.
    Plain ESM so the same file runs in Deno Edge Functions and Node tests.
    Dates are handled as YYYY-MM-DD strings; a stay is [check_in, check_out). */
+import { SITE } from "./site.js";
 
 /** YYYYMMDD or YYYY-MM-DD or YYYYMMDDTHHMMSS(Z) -> YYYY-MM-DD (date part only). */
 export function icalDateToISO(raw) {
@@ -72,10 +73,10 @@ export function buildICS(events, calName) {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//SimpleHotelier//Booking Calendar//EN",
+    `PRODID:-//${SITE.name}//Booking Calendar//EN`,
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    `X-WR-CALNAME:${escapeText(calName || "SimpleHotelier bookings")}`
+    `X-WR-CALNAME:${escapeText(calName || SITE.name + " bookings")}`
   ];
   for (const e of events) {
     lines.push(

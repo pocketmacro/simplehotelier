@@ -13,3 +13,4 @@ scripts
 tests
 generated_images
 node_modules
+/site.config.json

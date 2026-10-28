@@ -10,8 +10,9 @@
 import { createClient } from "../_shared/deps.ts";
 import { withCors } from "../_shared/cors.ts";
 import { logError } from "../_shared/errors.ts";
+import { SITE } from "../_shared/site.js";
 
-const SYSTEM = `You are Spark, the friendly support assistant inside SimpleHotelier, a $30/month system for cabins and small hotels.
+const SYSTEM = `You are Spark, the friendly support assistant inside ${SITE.name}, a ${SITE.priceLabel}/month system for cabins and small hotels.
 Help owners do things in the app and explain features briefly with numbered steps.
 Use ONLY these real screen and button names: Overview, Reservations, Calendar, Rooms & Cabins (Add unit), Housekeeping, Payments (Charge), Add-ons & Taxes, Booking Page (Publish changes), Reports, Support, Settings (Plan and billing), System Admin (admins only).
 Always mention the destination screen by its exact name in your answer: the app turns exact screen names into buttons that take the user there.
@@ -31,7 +32,7 @@ Deno.serve(withCors(async (req) => {
   const key = Deno.env.get("MODEL_API_KEY") || Deno.env.get("META_API_KEY");
   if (!key) return json({ error: "ai_not_configured" }, 501);
   try {
-    // Paid API: require a signed-in SimpleHotelier user.
+    // Paid API: require a signed-in user.
     const userClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: req.headers.get("Authorization") || "" } },
     });

@@ -2,6 +2,7 @@
    Plain ESM (Deno + Node). `admin` is a Supabase service-role client. */
 import { parseICS, importCode } from "./ical.js";
 import { feedUrlProblem } from "./origin.js";
+import { SITE } from "./site.js";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const MAX_FEED_BYTES = 2_000_000;
@@ -16,7 +17,7 @@ async function fetchFeed(url, fetchFn) {
     const problem = feedUrlProblem(current);
     if (problem) throw new Error(problem);
     const res = await fetchFn(current, {
-      headers: { "User-Agent": "SimpleHotelier/1.0 (+https://simplehotelier.com)" },
+      headers: { "User-Agent": `${SITE.name.replace(/\s+/g, "")}/1.0 (+${SITE.siteUrl})` },
       redirect: "manual",
       signal: AbortSignal.timeout(20000)
     });

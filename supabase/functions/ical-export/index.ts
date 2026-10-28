@@ -7,6 +7,7 @@ import { createClient } from "../_shared/deps.ts";
 import { buildICS } from "../_shared/ical.js";
 import { allRows } from "../_shared/paged.ts";
 import { logError } from "../_shared/errors.ts";
+import { SITE } from "../_shared/site.js";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
@@ -49,15 +50,15 @@ async function exportFeed(req: Request) {
   const events = reservations.map((r) => {
     const room = roomById.get(r.room_id);
     return {
-      uid: `${r.confirmation_code}@simplehotelier.com`,
+      uid: `${r.confirmation_code}@${SITE.domain}`,
       start: String(r.check_in).slice(0, 10),
       end: String(r.check_out).slice(0, 10),
       summary: roomCode ? "Reserved" : `Reserved · ${room ? room.code + " " + room.name : ""}`.trim(),
-      description: `SimpleHotelier booking ${r.confirmation_code}`
+      description: `${SITE.name} booking ${r.confirmation_code}`
     };
   });
 
-  return new Response(buildICS(events, `${tenant.name} · SimpleHotelier`), {
+  return new Response(buildICS(events, `${tenant.name} · ${SITE.name}`), {
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",
       "Content-Disposition": `inline; filename="${slug}.ics"`,

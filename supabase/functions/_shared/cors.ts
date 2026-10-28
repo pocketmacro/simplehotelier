@@ -1,5 +1,5 @@
 // SimpleHotelier — CORS for browser-called Edge Functions: only our own sites
-// (simplehotelier.com, property subdomains, the workers.dev preview,
+// (the platform domain, property subdomains, site.config.json extraOrigins,
 // localhost for development, ALLOWED_ORIGINS) get a CORS grant. Requests
 // without an Origin (Stripe, cron, other functions) are unaffected.
 import { isOwnOrigin } from "./origin.js";

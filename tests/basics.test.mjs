@@ -18,6 +18,8 @@ const checkout = read("supabase/functions/create-checkout/index.ts");
 const webhook = read("supabase/functions/stripe-webhook/index.ts");
 const email = read("supabase/functions/send-email/index.ts");
 const slice = (src, from, to) => src.slice(src.indexOf(from), src.indexOf(to, src.indexOf(from)));
+// The platform config as the browser gets it (js/site.js).
+const SITE = new Function("window", read("js/site.js") + "\nreturn window.SH_SITE;")({});
 
 /* ------------------------------------------------------------ CSV export */
 test("reservation export has real dates, contact columns and a dated filename", () => {
@@ -25,7 +27,10 @@ test("reservation export has real dates, contact columns and a dated filename", 
   assert.doesNotMatch(block, /"Check-in offset"/);
   assert.match(block, /"Check-in", "Check-out", "Nights"/);
   assert.match(block, /day\(r\.checkIn, r\.inN\), day\(r\.checkOut, r\.outN\)/, "live dates, demo offsets turned into dates");
-  assert.match(block, /simplehotelier-reservations-\$\{stamp\}\.csv/);
+  assert.match(block, /`\$\{fileStem\(\)\}-reservations-\$\{stamp\}\.csv`/);
+  const stem = (site) => new Function("SITE", "return " + app.match(/const fileStem = ([^\n]+);/)[1])(site)();
+  assert.equal(stem(SITE), "simplehotelier", "named after the platform (site.config.json)");
+  assert.equal(stem({ name: "Lakeside Stays & Co" }), "lakeside-stays-co");
   assert.match(block, /"\\uFEFF" \+/, "BOM so Excel reads UTF-8");
 });
 
@@ -46,13 +51,13 @@ test("owners open Stripe's billing portal to change card, see invoices or cancel
   assert.match(checkout, /mode: "at_period_end"/, "cancel keeps access to the end of the period");
   assert.match(checkout, /invoice_history: \{ enabled: true \}/);
   assert.match(checkout, /payment_method_update: \{ enabled: true \}/);
-  assert.match(checkout, /privacy_policy_url: SITE \+ "\/privacy",\s+terms_of_service_url: SITE \+ "\/terms"/);
+  assert.match(checkout, /privacy_policy_url: SITE_URL \+ "\/privacy",\s+terms_of_service_url: SITE_URL \+ "\/terms"/);
   assert.match(checkout, /member\.role !== "owner" && member\.role !== "admin"/, "billing stays owner/admin only");
 });
 
 test("no second subscription, and the free trial is for the first one only", () => {
   assert.match(checkout, /if \(hasLiveSub\) return json\(\{ error: "This property already has a subscription", portal: true \}, 409\);/);
-  assert.match(checkout, /\.\.\.\(tenant\.stripe_subscription_id \? \{\} : \{ trial_period_days: 30 \}\)/);
+  assert.match(checkout, /\.\.\.\(tenant\.stripe_subscription_id \? \{\} : \{ trial_period_days: SITE\.plan\.trialDays \}\)/);
   assert.match(app, /if \(d\.portal\) \{ openBilling\("portal"\); return; \}/, "the dashboard opens the portal instead");
 });
 
@@ -71,7 +76,8 @@ function billingCard(t) {
   const els = {};
   const $ = (sel) => (els[sel] ||= { textContent: "", innerHTML: "", hidden: false });
   const pill = ([cls, label]) => `<span class="pill ${cls}">${label}</span>`;
-  new Function("$", "pill", slice(app, "const BILL_STATUS = {", "let checkoutToastShown") + "\nrenderBilling(t);".replace("t", "arguments[2]"))($, pill, t);
+  const planPrice = () => `${SITE.priceLabel}/month`;
+  new Function("$", "pill", "SITE", "planPrice", slice(app, "const BILL_STATUS = {", "let checkoutToastShown") + "\nrenderBilling(arguments[4]);")($, pill, SITE, planPrice, t);
   return { status: els["#billStatus"].innerHTML, label: els["#billPeriodLabel"].textContent, period: els["#billPeriod"].textContent,
     note: els["#billNote"].textContent, checkout: els["#billCheckout"].hidden ? null : els["#billCheckout"].textContent, portal: !els["#billPortal"].hidden };
 }

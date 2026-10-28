@@ -1,6 +1,7 @@
 // SimpleHotelier — caller checks shared by Edge Functions.
 // deno-lint-ignore-file no-explicit-any
 import { safeOrigin } from "./origin.js";
+import { SITE } from "./site.js";
 
 /* The signed-in user behind the request's JWT, or null. */
 export async function callerUser(admin: any, req: Request) {
@@ -21,7 +22,7 @@ export async function memberRole(admin: any, tenantId: string, userId: string): 
 /* Our own site origin for links (SITE_URL, ALLOWED_ORIGINS secrets). */
 export function appOrigin(candidate?: string | null) {
   return safeOrigin(candidate, {
-    site: Deno.env.get("SITE_URL") || "https://simplehotelier.com",
+    site: Deno.env.get("SITE_URL") || SITE.siteUrl,
     extra: (Deno.env.get("ALLOWED_ORIGINS") || "").split(","),
   });
 }

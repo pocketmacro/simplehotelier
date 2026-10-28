@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 globalThis.window = { SH_CONFIG: {} };
+eval(readFileSync(new URL("../js/site.js", import.meta.url), "utf8")); // window.SH_SITE
 globalThis.document = { querySelector: () => null, addEventListener: () => {} };
 globalThis.location = { search: "", protocol: "https:", origin: "https://example.com" };
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };

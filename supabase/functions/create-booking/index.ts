@@ -11,6 +11,7 @@
 import { createClient } from "../_shared/deps.ts";
 import { withCors } from "../_shared/cors.ts";
 import { logError } from "../_shared/errors.ts";
+import { SITE } from "../_shared/site.js";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const ACTION = "booking";
@@ -19,12 +20,12 @@ const PARAMS = ["p_tenant", "p_check_in", "p_check_out", "p_name", "p_email", "p
   "p_children", "p_infants", "p_guest_address"];
 const EXTRA_HOSTS = new Set((Deno.env.get("TURNSTILE_HOSTNAMES") || "").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean));
 
-/* Our booking page only: simplehotelier.com, property subdomains, the
-   workers.dev deployment (never localhost in production). */
+/* Our booking page only: the platform domain, property subdomains, the
+   config's extraOrigins (never localhost in production). */
+const SITE_HOSTS = new Set(SITE.extraOrigins.map((o: string) => new URL(o).hostname));
 function hostAllowed(hostname: unknown) {
   const h = String(hostname || "").toLowerCase();
-  return h === "simplehotelier.com" || h.endsWith(".simplehotelier.com")
-    || h === "simplehotelier.pocketmacro.workers.dev" || EXTRA_HOSTS.has(h);
+  return h === SITE.domain || h.endsWith("." + SITE.domain) || SITE_HOSTS.has(h) || EXTRA_HOSTS.has(h);
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });

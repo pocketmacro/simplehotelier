@@ -30,6 +30,14 @@ export function httpsUrl(v) {
   try { const u = new URL(String(v || "").trim()); return u.protocol === "https:" ? u.toString() : ""; } catch { return ""; }
 }
 
+/* The platform's name as an email wordmark: a CamelCase or two-word name
+   gets its second part in the accent color ("Simple" + "Hotelier"). */
+export function wordmark(name, accent) {
+  const n = String(name || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const at = Math.max(n.lastIndexOf(" ") + 1, n.search(/[a-z][A-Z][^A-Z]*$/) + 1);
+  return at > 0 && at < n.length ? `${n.slice(0, at)}<span style="color:${accent}">${n.slice(at)}</span>` : n;
+}
+
 /* Sender display name: no quotes, angle brackets or line breaks. */
 export const senderName = (v) => String(v || "").replace(/[\p{Cc}"<>\\]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 64);
 

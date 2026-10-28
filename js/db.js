@@ -308,7 +308,7 @@
         }))
       };
     } catch (err) {
-      console.warn("[SimpleHotelier] Live load failed:", err.message);
+      console.warn("Live load failed:", err.message);
       if (window.SHReportError) window.SHReportError(err, "dashboard load");
       return null;
     }

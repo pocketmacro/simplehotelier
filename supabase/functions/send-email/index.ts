@@ -18,6 +18,7 @@ import { withCors } from "../_shared/cors.ts";
 import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured, propertyBrand } from "../_shared/email.ts";
 import { appOrigin, callerUser, memberRole } from "../_shared/guard.ts";
 import { logError } from "../_shared/errors.ts";
+import { SITE } from "../_shared/site.js";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const CORS = {
@@ -253,10 +254,10 @@ async function teamInvite(req: Request, body: any) {
   const roleLabel = ({ cleaner: "housekeeping", staff: "front desk", maintenance: "maintenance", admin: "an admin" } as Record<string, string>)[role] || role;
   const res = await sendMail({
     to: email,
-    subject: `You're invited to join ${tenant.name} on SimpleHotelier`,
+    subject: `You're invited to join ${tenant.name} on ${SITE.name}`,
     html: emailShell(`Join ${tenant.name}`,
       p(`Hi,`) +
-      p(`You've been invited to join <strong>${esc(tenant.name)}</strong> on SimpleHotelier as ${roleLabel}. New to SimpleHotelier? Set a password and you're straight in, with no card or trial needed. Already have an account with this email? Log in and ${esc(tenant.name)} is added to it.`) +
+      p(`You've been invited to join <strong>${esc(tenant.name)}</strong> on ${esc(SITE.name)} as ${roleLabel}. New to ${esc(SITE.name)}? Set a password and you're straight in, with no card or trial needed. Already have an account with this email? Log in and ${esc(tenant.name)} is added to it.`) +
       p(`<a href="${esc(link)}" style="display:inline-block;background:#0c3b3c;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;padding:12px 22px;border-radius:10px">Accept invite</a>`) +
       p(`Or paste this link into your browser:<br><span style="word-break:break-all">${esc(link)}</span>`),
       `This invite was sent to ${esc(email)}. If it wasn't meant for you, you can ignore this email.`)

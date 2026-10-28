@@ -39,7 +39,7 @@ test("create-booking fails closed when Siteverify is unreachable or the secret i
 test("create-booking accepts only our own hostnames (never localhost in production)", () => {
   const body = fn.slice(fn.indexOf("function hostAllowed"), fn.indexOf("const json ="));
   assert.doesNotMatch(body, /localhost|127\.0\.0\.1/);
-  assert.match(body, /h === "simplehotelier\.com" \|\| h\.endsWith\("\.simplehotelier\.com"\)/);
+  assert.match(body, /h === SITE\.domain \|\| h\.endsWith\("\." \+ SITE\.domain\) \|\| SITE_HOSTS\.has\(h\) \|\| EXTRA_HOSTS\.has\(h\)/);
 });
 
 test("create-booking passes only the booking fields and the guest IP", () => {

@@ -48,7 +48,7 @@ test("ordinary page loads are left alone", () => {
 test("the reset request goes back to this page and never reveals accounts", () => {
   assert.match(auth, /await authFetch\("recover" \+ redirectParam\(\), \{ method: "POST", body: JSON\.stringify\(\{ email \}\) \}\);/);
   assert.match(auth, /authFetch\("signup" \+ redirectParam\(\)/, "signup shares the same redirect");
-  assert.match(auth, /showNote\(`If \$\{email\} has a SimpleHotelier account, a reset link is on its way\./);
+  assert.match(auth, /showNote\(`If \$\{email\} has a \$\{SITE\.name\} account, a reset link is on its way\./);
   assert.match(auth, /\/rate limit\|security purposes\|429\/i\.test\(err\.message\)/);
 });
 

@@ -14,6 +14,7 @@ import { computeWeeklyStats } from "../_shared/report.js";
 import { addDaysISO } from "../_shared/ical.js";
 import { allRows } from "../_shared/paged.ts";
 import { logError } from "../_shared/errors.ts";
+import { SITE } from "../_shared/site.js";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -112,7 +113,7 @@ async function weeklyReports(out: Record<string, number>) {
           ["Arrivals next 7 days", String(stats.arrivals.length)]
         ]) +
         (arrivalRows ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:6px">${arrivalRows}</table>` : p("No arrivals in the next 7 days.")),
-        `You're receiving this because ${esc(t.name)} uses SimpleHotelier. Manage notification emails in Settings.`)
+        `You're receiving this because ${esc(t.name)} uses ${esc(SITE.name)}. Manage notification emails in Settings.`)
     }).catch(() => ({ sent: false }));
     if (res.sent) {
       sent++;

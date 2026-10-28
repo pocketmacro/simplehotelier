@@ -4,9 +4,12 @@
 //   node scripts/setup-platform.mjs phase2   # Stripe webhook + webhook secret
 // Reads .env; never prints secrets (Stripe key type only, price/product IDs are safe).
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { normalize } from "./site.mjs";
 
 const root = new URL("../", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const envPath = root + ".env";
+// The platform name and plan price (site.config.json).
+const SITE = normalize(JSON.parse(readFileSync(root + "site.config.json", "utf8")), root);
 function loadEnv() {
   const map = {};
   for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
@@ -72,24 +75,25 @@ async function phase1() {
   const verify = await sql("select (select count(*) from public.system_admins) as admins, (select count(*) from public.support_cases) as cases;");
   console.log("verify:", JSON.stringify(verify));
 
-  // 2) Stripe product + $30/mo price (reuse if present).
+  // 2) Stripe product + the plan's monthly price (reuse if present).
   if (!stripeKey) { console.log("STRIPE_API_KEY missing: skipping Stripe"); return; }
   const kind = stripeKey.startsWith("sk_test_") ? "test secret" : stripeKey.startsWith("sk_live_") ? "LIVE secret" : stripeKey.startsWith("rk_") ? "restricted" : "unknown";
   console.log("Stripe key type:", kind);
   const account = await stripe("GET", "/account");
   console.log("Stripe account:", account.id, account.country || "");
   const products = await stripe("GET", "/products?limit=100");
-  let product = (products.data || []).find((p) => p.name === "SimpleHotelier" && p.active);
+  let product = (products.data || []).find((p) => p.name === SITE.name && p.active);
   if (!product) {
-    product = await stripe("POST", "/products", { name: "SimpleHotelier", description: "SimpleHotelier subscription for cabins and small hotels" });
+    product = await stripe("POST", "/products", { name: SITE.name, description: `${SITE.name} subscription for cabins and small hotels` });
     console.log("product created:", product.id);
   } else console.log("product reused:", product.id);
   const prices = await stripe("GET", `/prices?product=${product.id}&limit=100`);
-  let price = (prices.data || []).find((p) => p.active && p.unit_amount === 3000 && p.currency === "usd" && p.recurring?.interval === "month");
+  const { priceCents, currency } = SITE.plan;
+  let price = (prices.data || []).find((p) => p.active && p.unit_amount === priceCents && p.currency === currency.toLowerCase() && p.recurring?.interval === "month");
   if (!price) {
-    price = await stripe("POST", "/prices", { product: product.id, unit_amount: "3000", currency: "usd", "recurring[interval]": "month" });
-    console.log("price created:", price.id, "($30/month)");
-  } else console.log("price reused:", price.id, "($30/month)");
+    price = await stripe("POST", "/prices", { product: product.id, unit_amount: String(priceCents), currency: currency.toLowerCase(), "recurring[interval]": "month" });
+    console.log("price created:", price.id, `(${SITE.priceLabel}/month)`);
+  } else console.log("price reused:", price.id, `(${SITE.priceLabel}/month)`);
   env.STRIPE_PRODUCT_ID = product.id;
   env.STRIPE_PRICE_ID = price.id;
   saveEnv(env);
@@ -106,7 +110,7 @@ async function phase2() {
     return;
   }
   const events = ["checkout.session.completed", "customer.subscription.updated", "customer.subscription.deleted", "invoice.payment_failed"];
-  const params = { url: hookUrl, description: "SimpleHotelier subscription sync" };
+  const params = { url: hookUrl, description: `${SITE.name} subscription sync` };
   events.forEach((e, i) => { params[`enabled_events[${i}]`] = e; });
   const hook = await stripe("POST", "/webhook_endpoints", params);
   console.log("webhook created:", hook.id);

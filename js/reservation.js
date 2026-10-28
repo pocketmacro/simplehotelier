@@ -428,7 +428,7 @@ function rxShowPanel(kind, extra = {}) {
           ${extra.url ? `<div class="field" style="margin-top:12px"><label>Payment link (valid 24 hours)</label><div class="rx-copy"><input class="input mono" readonly value="${esc(extra.url)}" id="rxLinkOut"><button class="btn btn-ghost btn-xs" type="button" data-rx="copy-link">Copy</button></div></div>` : ""}</div>`
       : `<div class="rx-panel"><p class="rx-panel-sub">Demo property — sign in to your own property to send payment requests.</p></div>`;
   } else if (kind === "record") {
-    box.innerHTML = `<div class="rx-panel"><p class="rx-panel-h">Record a payment</p><p class="rx-panel-sub">For money you already received outside SimpleHotelier — no card is charged.</p>
+    box.innerHTML = `<div class="rx-panel"><p class="rx-panel-h">Record a payment</p><p class="rx-panel-sub">For money you already received outside ${esc(SITE.name)} — no card is charged.</p>
         ${amount("rxRecAmt", due || 0)}
         <div class="form-2"><div class="field"><label for="rxRecMethod">Method</label><select class="select" id="rxRecMethod">${rxOptions(RX_METHODS.map((m) => [m, m]), "Cash")}</select></div>
         <div class="field"><label for="rxRecNote">Note (optional)</label><input class="input" id="rxRecNote" placeholder="Receipt #, check #…"></div></div>

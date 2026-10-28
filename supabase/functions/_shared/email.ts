@@ -2,11 +2,12 @@
 // Secrets: SES_SMTP_HOST, SES_SMTP_USER, SES_SMTP_PASS (SES SMTP credentials).
 // deno-lint-ignore-file no-explicit-any
 import nodemailer from "npm:nodemailer@6.9.14";
-import { cleanEmail, senderName } from "./brand.js";
+import { cleanEmail, senderName, wordmark } from "./brand.js";
+import { SITE } from "./site.js";
 import { logError } from "./errors.ts";
 export { propertyBrand } from "./brand.js";
 
-const FROM = Deno.env.get("EMAIL_FROM") || "noreply@simplehotelier.com";
+const FROM = Deno.env.get("EMAIL_FROM") || SITE.emailFrom;
 
 let transporter: any = null;
 function transport() {
@@ -29,21 +30,21 @@ export const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ({
 
 /* Email shell. Guest emails pass the property's brand (propertyBrand):
    its logo/name on its button color, and its contact details in the footer.
-   Emails to owners and teams keep the SimpleHotelier look. */
+   Emails to owners and teams carry the platform's own look (site.config.json). */
 export function emailShell(heading: string, bodyHtml: string, footnote = "", brand?: any) {
   const header = brand
     ? `<tr><td style="background:${brand.color};padding:20px 30px">
           ${brand.logo ? `<img src="${esc(brand.logo)}" alt="${esc(brand.name)}" height="40" style="height:40px;max-width:180px;border-radius:8px;vertical-align:middle;margin-right:12px;border:0">` : ""}<span style="font-family:Arial,Helvetica,sans-serif;font-size:19px;font-weight:700;letter-spacing:-.01em;color:${brand.ink};vertical-align:middle">${esc(brand.name)}</span>
         </td></tr>`
     : `<tr><td style="background:#0a2a2b;padding:22px 30px">
-          <span style="font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:800;letter-spacing:-.02em;color:#ffffff">Simple<span style="color:#e0aa4e">Hotelier</span></span>
+          <span style="font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:800;letter-spacing:-.02em;color:#ffffff">${wordmark(SITE.name, "#e0aa4e")}</span>
         </td></tr>`;
   const footer = brand
     ? [`<strong style="color:#33413f">${esc(brand.name)}</strong>`, brand.place && esc(brand.place), brand.phone && esc(brand.phone),
         brand.replyTo && `<a href="mailto:${esc(brand.replyTo)}" style="color:${brand.link}">${esc(brand.replyTo)}</a>`,
         brand.website && `<a href="${esc(brand.website)}" style="color:${brand.link}">${esc(brand.website.replace(/^https:\/\/(www\.)?/, "").replace(/\/$/, ""))}</a>`]
         .filter(Boolean).join(" · ")
-    : `Sent by SimpleHotelier on behalf of the property · <a href="https://simplehotelier.com" style="color:#115152">simplehotelier.com</a>`;
+    : `Sent by ${esc(SITE.name)} on behalf of the property · <a href="${esc(SITE.siteUrl)}" style="color:#115152">${esc(SITE.domain)}</a>`;
   return `<div style="margin:0;padding:0;background:#edf0ee">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#edf0ee;padding:28px 12px">
     <tr><td align="center">
@@ -82,7 +83,7 @@ export async function sendMail({ to, subject, html, text, fromName, replyTo }:
   let info;
   try {
     info = await transport().sendMail({
-      from: { name: senderName(fromName) || "SimpleHotelier", address: FROM },
+      from: { name: senderName(fromName) || senderName(SITE.name), address: FROM },
       ...(reply ? { replyTo: reply } : {}),
       to: list.join(", "),
       subject,

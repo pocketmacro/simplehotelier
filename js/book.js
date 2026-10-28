@@ -111,9 +111,11 @@
   const base = (cfg.SUPABASE_URL || "").replace(/\/$/, "");
   const anon = cfg.SUPABASE_ANON_KEY || "";
   const params = new URLSearchParams(location.search);
-  /* Property subdomains ({slug}.simplehotelier.com/book.html) name the tenant too. */
+  /* Property subdomains ({slug}.{platform domain}/book.html, js/site.js) name the tenant too. */
   const hostLabel = (() => {
-    const h = location.hostname.toLowerCase(), suffix = ".simplehotelier.com";
+    const site = window.SH_SITE || {};
+    const h = location.hostname.toLowerCase(), suffix = "." + site.domain;
+    if (!site.domain || !site.bookingSubdomains) return "";
     if (!h.endsWith(suffix)) return "";
     const label = h.slice(0, -suffix.length);
     return label && label.indexOf(".") === -1 && label !== "www" && /^[a-z0-9-]+$/.test(label) ? label : "";

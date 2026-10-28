@@ -1,6 +1,6 @@
 // SimpleHotelier — brand the Supabase auth emails and point them at Amazon SES.
 // Prereqs (one-time, in AWS + Cloudflare):
-//   1. SES console: verify the domain simplehotelier.com, add the DKIM CNAME
+//   1. SES console: verify your domain (site.config.json), add the DKIM CNAME
 //      records it gives you to Cloudflare DNS, and request production access
 //      (sandbox mode can only email verified addresses).
 //   2. SES console > SMTP settings > Create SMTP credentials.
@@ -8,6 +8,8 @@
 //      e.g. SES_SMTP_HOST=email-smtp.us-east-1.amazonaws.com
 // Run: node scripts/set-auth-emails.mjs
 import { readFileSync } from "node:fs";
+import { normalize } from "./site.mjs";
+import { wordmark } from "../supabase/functions/_shared/brand.js";
 
 const root = new URL("../", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const env = {};
@@ -25,9 +27,12 @@ if (!SES_SMTP_HOST || !SES_SMTP_USER || !SES_SMTP_PASS) {
   process.exit(1);
 }
 
-const FROM = env.AUTH_FROM_EMAIL || "noreply@simplehotelier.com";
+// The platform name, domain, sender and plan (site.config.json).
+const SITE = normalize(JSON.parse(readFileSync(root + "site.config.json", "utf8")), root);
+const NAME = SITE.name;
+const FROM = env.AUTH_FROM_EMAIL || SITE.emailFrom;
 
-/* Branded shell matching simplehotelier.com: deep pine header, brass button.
+/* Branded shell matching the platform site: deep pine header, brass button.
    Email clients ignore SVG and webfonts, so the wordmark is styled text. */
 const shell = (heading, intro, buttonLabel, footnote) => `
 <div style="margin:0;padding:0;background:#edf0ee">
@@ -35,7 +40,7 @@ const shell = (heading, intro, buttonLabel, footnote) => `
     <tr><td align="center">
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #dbe4e1">
         <tr><td style="background:#0a2a2b;padding:22px 30px">
-          <span style="font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:800;letter-spacing:-.02em;color:#ffffff">Simple<span style="color:#e0aa4e">Hotelier</span></span>
+          <span style="font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:800;letter-spacing:-.02em;color:#ffffff">${wordmark(NAME, "#e0aa4e")}</span>
           <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#9dbcb5;margin-top:3px">Reservations, housekeeping and direct bookings for cabins and small hotels</div>
         </td></tr>
         <tr><td style="padding:28px 30px 8px">
@@ -50,7 +55,7 @@ const shell = (heading, intro, buttonLabel, footnote) => `
           <p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#5f7a73;margin:0;word-break:break-all">{{ .ConfirmationURL }}</p>
         </td></tr>
         <tr><td style="background:#f6f8f7;border-top:1px solid #e8eeec;padding:16px 30px">
-          <p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#5f7a73;margin:0">SimpleHotelier · $30/month, everything included · <a href="https://simplehotelier.com" style="color:#115152">simplehotelier.com</a></p>
+          <p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#5f7a73;margin:0">${NAME} · ${SITE.priceLabel}/month, everything included · <a href="${SITE.siteUrl}" style="color:#115152">${SITE.domain}</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -58,52 +63,52 @@ const shell = (heading, intro, buttonLabel, footnote) => `
 </div>`;
 
 const templates = {
-  mailer_subjects_confirmation: "Confirm your SimpleHotelier account",
+  mailer_subjects_confirmation: `Confirm your ${NAME} account`,
   mailer_templates_confirmation_content: shell(
     "Confirm your email address",
-    "Welcome to SimpleHotelier. Confirm this email address to finish creating your account and set up your property.",
+    `Welcome to ${NAME}. Confirm this email address to finish creating your account and set up your property.`,
     "Confirm my email",
-    "If you did not sign up for SimpleHotelier, you can safely ignore this email. The button does not work? Copy and paste this link into your browser:"
+    `If you did not sign up for ${NAME}, you can safely ignore this email. The button does not work? Copy and paste this link into your browser:`
   ),
-  mailer_subjects_recovery: "Reset your SimpleHotelier password",
+  mailer_subjects_recovery: `Reset your ${NAME} password`,
   mailer_templates_recovery_content: shell(
     "Reset your password",
-    "We received a request to reset the password for your SimpleHotelier account. Choose a new one with the button below.",
+    `We received a request to reset the password for your ${NAME} account. Choose a new one with the button below.`,
     "Reset my password",
     "If you did not request this, ignore this email and your password stays the same. The button does not work? Copy and paste this link into your browser:"
   ),
-  mailer_subjects_magic_link: "Your SimpleHotelier sign-in link",
+  mailer_subjects_magic_link: `Your ${NAME} sign-in link`,
   mailer_templates_magic_link_content: shell(
-    "Sign in to SimpleHotelier",
+    `Sign in to ${NAME}`,
     "Use the button below to sign in. This link expires shortly and can only be used once.",
     "Sign in",
     "If you did not request this link, you can safely ignore this email. The button does not work? Copy and paste this link into your browser:"
   ),
-  mailer_subjects_invite: "You've been invited to SimpleHotelier",
+  mailer_subjects_invite: `You've been invited to ${NAME}`,
   mailer_templates_invite_content: shell(
     "You've been invited",
-    "You've been invited to join a property team on SimpleHotelier. Accept the invite to create your account and get started.",
+    `You've been invited to join a property team on ${NAME}. Accept the invite to create your account and get started.`,
     "Accept the invite",
     "If you weren't expecting this, you can safely ignore this email. The button does not work? Copy and paste this link into your browser:"
   ),
-  mailer_subjects_email_change: "Confirm your new SimpleHotelier email",
+  mailer_subjects_email_change: `Confirm your new ${NAME} email`,
   mailer_templates_email_change_content: shell(
     "Confirm your new email address",
-    "Follow the button below to confirm {{ .NewEmail }} as the new email address for your SimpleHotelier account.",
+    `Follow the button below to confirm {{ .NewEmail }} as the new email address for your ${NAME} account.`,
     "Confirm new email",
     "If you did not request this change, contact support right away. The button does not work? Copy and paste this link into your browser:"
   )
 };
 
 const body = {
-  site_url: "https://simplehotelier.com",
-  uri_allow_list: "https://simplehotelier.com/**,https://simplehotelier.pocketmacro.workers.dev/**,http://localhost:3000/**",
+  site_url: SITE.siteUrl,
+  uri_allow_list: [SITE.siteUrl, ...SITE.extraOrigins].map((o) => o + "/**").concat("http://localhost:3000/**").join(","),
   smtp_host: SES_SMTP_HOST,
   smtp_port: String(env.SES_SMTP_PORT || 587),
   smtp_user: SES_SMTP_USER,
   smtp_pass: SES_SMTP_PASS,
   smtp_admin_email: FROM,
-  smtp_sender_name: "SimpleHotelier",
+  smtp_sender_name: NAME,
   // Auth emails per hour, project-wide (sign-up confirmations + password
   // resets share it). Supabase's default of 2 is meant for its own test
   // mailer; with SES behind it, 100 leaves room for real traffic.
