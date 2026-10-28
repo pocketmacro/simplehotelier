@@ -219,6 +219,7 @@
 
   const CHECK_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
   const HOUSE_SVG = `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/></svg>`;
+  const chevron = (d) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
   /* Who's coming. Adults + children count toward occupancy; infants don't.
      The three are asked for separately only when the property's rooms price
      or limit them (otherwise one guest counter, all adults). */
@@ -262,9 +263,13 @@
       : problem ? `${problem}: change who's coming to book` : (booked ? "Not available for these dates" : cancelDeadline());
     const disabled = booked || tooSmall;
     const label = booked ? "Sold out" : sel ? "Selected" : `Select ${name}`;
+    // Several photos: a slideshow (showPhoto), still on the same photo after a re-render.
+    const many = photos.length > 1;
+    if (many) gallery[key] = { photos, name };
+    const at = many ? Math.min(photoAt[key] || 0, photos.length - 1) : 0;
     return `<article class="bk-room${sel ? " sel" : ""}${booked ? " booked" : ""}">
-      <div class="bk-room-media">${photos.length ? `<img src="${esc(photos[0])}" alt="${esc(name)}" loading="lazy">` : `<div class="bk-room-ph">${HOUSE_SVG}<span>${esc(name)}</span></div>`}
-        ${tag ? `<span class="bk-tag${tagLow ? " low" : ""}">${esc(tag)}</span>` : ""}${photos.length > 1 ? `<span class="bk-photos">${photos.length} photos</span>` : ""}</div>
+      <div class="bk-room-media"${many ? ` data-card="${esc(key)}"` : ""}>${photos.length ? `<img src="${esc(photos[at])}" alt="${esc(photoAlt(name, at, photos.length))}" loading="lazy">` : `<div class="bk-room-ph">${HOUSE_SVG}<span>${esc(name)}</span></div>`}
+        ${tag ? `<span class="bk-tag${tagLow ? " low" : ""}">${esc(tag)}</span>` : ""}${many ? `<button type="button" class="bk-ph-nav prev" data-photo="-1" aria-label="Previous photo"${at === 0 ? " hidden" : ""}>${chevron("m15 18-6-6 6-6")}</button><button type="button" class="bk-ph-nav next" data-photo="1" aria-label="Next photo"${at === photos.length - 1 ? " hidden" : ""}>${chevron("m9 18 6-6-6-6")}</button><span class="bk-photos">${at + 1} / ${photos.length}</span>` : ""}</div>
       <div class="bk-room-body">
         <div class="bk-room-top"><div><h3>${esc(name)}</h3><p class="bk-facts">${facts.map(esc).join(" · ")}</p></div>
           <div class="bk-price"><p><b>${price(rate)}</b><span> / night</span></p><p class="bk-stay">${price(stayTotal || rate * n)} for ${plural(n, "night", "nights")}</p></div></div>
@@ -275,6 +280,30 @@
           <button class="bk-select" type="button" ${keyAttr}="${esc(key)}" aria-pressed="${sel ? "true" : "false"}"${disabled ? " disabled" : ""}>${esc(label)}</button></div>
       </div>
     </article>`;
+  }
+  /* Photo slideshows on the cards: each card's photos, and which one it shows. */
+  const gallery = {}, photoAt = {};
+  const photoAlt = (name, at, count) => (count > 1 ? `${name}, photo ${at + 1} of ${count}` : name);
+  /* Show photo `to` on a card in place (no re-render), first to last with no
+     wrap-around: an arrow shows only where there's another photo. */
+  function showPhoto(media, to) {
+    const key = media.dataset.card, g = gallery[key];
+    if (!g) return;
+    const at = Math.max(0, Math.min(g.photos.length - 1, to));
+    photoAt[key] = at;
+    const img = media.querySelector("img");
+    img.src = g.photos[at];
+    img.alt = photoAlt(g.name, at, g.photos.length);
+    media.querySelector(".bk-ph-nav.prev").hidden = at === 0;
+    media.querySelector(".bk-ph-nav.next").hidden = at === g.photos.length - 1;
+    media.querySelector(".bk-photos").textContent = `${at + 1} / ${g.photos.length}`;
+    preloadPhoto(media);
+  }
+  /* The next photo, fetched ahead so it's there when asked for. */
+  function preloadPhoto(media) {
+    const g = gallery[media.dataset.card];
+    const next = g && g.photos[(photoAt[media.dataset.card] || 0) + 1];
+    if (next) new Image().src = next;
   }
   function typeFacts(type, sleeps, extra) {
     const facts = [`Sleeps ${sleeps}`].concat(extra || []);
@@ -1092,6 +1121,14 @@
   $("#outDate").value = linkStay ? linkOut : d(9);
 
   $("#roomsList").addEventListener("click", (e) => {
+    const nav = e.target.closest("[data-photo]");
+    if (nav) {
+      const media = nav.closest(".bk-room-media");
+      showPhoto(media, (photoAt[media.dataset.card] || 0) + Number(nav.dataset.photo));
+      // At the first or last photo that arrow hides; keep focus on the card.
+      if (nav.hidden) media.querySelector(".bk-ph-nav:not([hidden])").focus();
+      return;
+    }
     const tb = e.target.closest("[data-type]");
     if (tb && !tb.disabled) {
       state.selectedTypeId = tb.dataset.type;
@@ -1106,6 +1143,25 @@
     state.selected = state.rooms.find((r) => r.id === b.dataset.room) || null;
     renderRooms(); renderSummary();
   });
+  // Pointing at a slideshow fetches its next photo; on touch screens a
+  // sideways swipe changes photo (book.css lets vertical drags scroll).
+  $("#roomsList").addEventListener("pointerover", (e) => {
+    const media = e.target.closest(".bk-room-media[data-card]");
+    if (media) preloadPhoto(media);
+  });
+  let swipe = null;
+  $("#roomsList").addEventListener("pointerdown", (e) => {
+    const media = e.pointerType === "touch" && e.target.closest(".bk-room-media[data-card]");
+    swipe = media ? { media, x: e.clientX, y: e.clientY } : null;
+  });
+  $("#roomsList").addEventListener("pointerup", (e) => {
+    if (!swipe) return;
+    const { media, x, y } = swipe;
+    swipe = null;
+    const dx = e.clientX - x, dy = e.clientY - y;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > 1.5 * Math.abs(dy)) showPhoto(media, (photoAt[media.dataset.card] || 0) + (dx < 0 ? 1 : -1));
+  });
+  $("#roomsList").addEventListener("pointercancel", () => { swipe = null; });
   function syncDateMins() {
     const todayIso = d(0);
     $("#inDate").min = todayIso;
