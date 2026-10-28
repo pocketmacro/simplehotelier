@@ -1,5 +1,5 @@
 // SimpleHotelier — apply site.config.json (the platform's name, domain,
-// emails, plan price, logo and source link) to the whole project. There is no build step:
+// emails, plan price, logo, source link and operator) to the whole project. There is no build step:
 // this rewrites files in place, and is safe to run again after every change.
 //  * js/site.js: window.SH_SITE for the browser. It also records the values
 //    the static pages now carry, so the next run knows what to replace.
@@ -7,7 +7,7 @@
 //  * Static pages (*.html, llms.txt, robots.txt, sitemap.xml, assets/*.svg):
 //    the recorded name, domain, emails, price, trial length, logo paths and
 //    source link are replaced with the new ones, so titles, meta tags and legal pages are
-//    right without JavaScript.
+//    right without JavaScript. The footer's operator line is written whole.
 //  * _headers: the CSP's Supabase host follows SUPABASE_URL in js/config.js.
 // Run: node scripts/site.mjs            apply
 //      node scripts/site.mjs --check    exit 1 when anything is out of date
@@ -64,12 +64,25 @@ export function normalize(cfg, root = ROOT) {
   let src;
   try { src = new URL(sourceUrl); } catch { /* checked below */ }
   if (!src || src.protocol !== "https:" || /["'<>\s]/.test(sourceUrl)) fail("sourceUrl: the https link to this copy's source code (AGPL)");
+  // Optional: the business behind this copy, named in the site footer
+  // ("{name} is owned and operated by {operator}"). Empty: no line.
+  const operator = String(c.operator || "").trim();
+  if (operator.length > 100 || /[<>"\\\p{Cc}]/u.test(operator)) fail("operator: up to 100 characters, without < > \" or \\ (or leave it empty)");
   return {
     name, domain, siteUrl: "https://" + domain, bookingSubdomains: c.bookingSubdomains !== false, extraOrigins,
     supportEmail: email("supportEmail"), emailFrom: email("emailFrom"),
     plan: { priceCents, currency, trialDays }, priceLabel: priceLabel(priceCents, currency),
-    logoMark: asset("logoMark"), favicon: asset("favicon"), sourceUrl
+    logoMark: asset("logoMark"), favicon: asset("favicon"), sourceUrl, operator
   };
+}
+
+/* The footer's operator line, written whole from the config on every run
+   (and kept, hidden, when there is no operator, so it can come back). */
+const OPERATOR_LINE = /<p class="foot-operator" data-site="operator"(?: hidden)?>[^<]*<\/p>/g;
+export function operatorLine(site) {
+  return site.operator
+    ? `<p class="foot-operator" data-site="operator">${`${site.name} is owned and operated by ${site.operator}`.replace(/&/g, "&amp;")}</p>`
+    : `<p class="foot-operator" data-site="operator" hidden></p>`;
 }
 
 /* What js/site.js says the pages carry now (null on a first run). */
@@ -127,7 +140,7 @@ export function plan(root = ROOT, config = JSON.parse(readFileSync(root + "site.
   const prev = recorded(read(root, BROWSER_FILE)) || next;
   const out = [];
   const put = (path, after) => { const before = read(root, path); if (before !== after) out.push({ path, before, after }); };
-  for (const path of staticFiles(root)) put(path, rebrand(read(root, path), prev, next));
+  for (const path of staticFiles(root)) put(path, rebrand(read(root, path), prev, next).replace(OPERATOR_LINE, operatorLine(next)));
   const supabaseUrl = (read(root, "js/config.js") || "").match(/SUPABASE_URL:\s*"(https:\/\/[a-z0-9-]+\.supabase\.co)\/?"/);
   const headers = read(root, "_headers");
   if (supabaseUrl && headers) put("_headers", headers.replace(/https:\/\/[a-z0-9-]+\.supabase\.co\b/g, supabaseUrl[1]));

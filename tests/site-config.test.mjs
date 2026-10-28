@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdirSync, cpSync, mkdtempSync, rmSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { plan, normalize, rebrand, priceLabel } from "../scripts/site.mjs";
+import { plan, normalize, rebrand, priceLabel, operatorLine } from "../scripts/site.mjs";
 import { SITE } from "../supabase/functions/_shared/site.js";
 import { isOwnOrigin, safeOrigin } from "../supabase/functions/_shared/origin.js";
 import { wordmark } from "../supabase/functions/_shared/brand.js";
@@ -24,7 +24,8 @@ const FORK = {
   name: "Lakeside Stays", domain: "lakeside.example", bookingSubdomains: false, extraOrigins: [],
   supportEmail: "help@lakeside.example", emailFrom: "bookings@lakeside.example",
   plan: { priceCents: 2450, currency: "EUR", trialDays: 14 },
-  logoMark: "assets/logo-mark.svg", favicon: "assets/favicon.svg", sourceUrl: "https://git.lakeside.example/stays"
+  logoMark: "assets/logo-mark.svg", favicon: "assets/favicon.svg", sourceUrl: "https://git.lakeside.example/stays",
+  operator: "Lakeside Holdings & Sons"
 };
 
 /* A scratch copy of everything scripts/site.mjs reads or writes. */
@@ -58,7 +59,7 @@ test("a rebrand reaches every static page and round-trips back exactly", () => {
     apply(dir, FORK);
     for (const path of Object.keys(before).filter((p) => !p.endsWith("site.js"))) {
       const text = readFileSync(dir + path, "utf8");
-      assert.doesNotMatch(text, /simplehotelier|\$30(?!\d)|"price":"30"|30-day|30 days free/i, path + " still has the old brand");
+      assert.doesNotMatch(text, /simplehotelier|Pocket Macro|\$30(?!\d)|"price":"30"|30-day|30 days free/i, path + " still has the old brand");
     }
     const index = readFileSync(dir + "index.html", "utf8");
     assert.match(index, /<title>[^<]*\| Lakeside Stays<\/title>/);
@@ -72,9 +73,17 @@ test("a rebrand reaches every static page and round-trips back exactly", () => {
     for (const page of ["index.html", "terms.html", "privacy.html", "book.html", "app.html"]) {
       assert.match(readFileSync(dir + page, "utf8"), /href="https:\/\/git\.lakeside\.example\/stays"[^>]*>Source code/, page + " links the fork's source");
     }
+    for (const page of ["index.html", "terms.html", "privacy.html"]) {
+      assert.match(readFileSync(dir + page, "utf8"), /<p class="foot-operator" data-site="operator">Lakeside Stays is owned and operated by Lakeside Holdings &amp; Sons<\/p>\n  <\/div>\n<\/footer>/, page + " footer names the operator");
+    }
     assert.match(readFileSync(dir + "js/site.js", "utf8"), /"name": "Lakeside Stays"[\s\S]*"bookingSubdomains": false/);
     assert.match(readFileSync(dir + "supabase/functions/_shared/site.js", "utf8"), /export const SITE = Object\.freeze\(\{\s+"name": "Lakeside Stays"/);
     assert.deepEqual(plan(dir, FORK), [], "applying twice changes nothing");
+
+    // No operator: the line is hidden (and comes back when one is set).
+    apply(dir, { ...FORK, operator: "" });
+    assert.match(readFileSync(dir + "index.html", "utf8"), /<p class="foot-operator" data-site="operator" hidden><\/p>/);
+    assert.doesNotMatch(readFileSync(dir + "terms.html", "utf8"), /owned and operated/);
 
     apply(dir, config);
     for (const [path, text] of Object.entries(before)) assert.equal(readFileSync(dir + path, "utf8"), text, path + " restored");
@@ -106,6 +115,10 @@ test("bad config values are refused with a reason", () => {
   bad({ favicon: "../outside.svg" }, /favicon/);
   bad({ sourceUrl: "" }, /sourceUrl/);
   bad({ sourceUrl: "http://github.com/x/y" }, /sourceUrl/);
+  bad({ operator: "<script>x</script> LLC" }, /operator/);
+  bad({ operator: "x".repeat(101) }, /operator/);
+  assert.equal(normalize({ ...config, operator: undefined }, root).operator, "", "operator is optional");
+  assert.equal(operatorLine(normalize({ ...config, operator: "  " }, root)), '<p class="foot-operator" data-site="operator" hidden></p>');
 });
 
 test("server origin checks follow the configured domain", () => {

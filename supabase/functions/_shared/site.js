@@ -19,5 +19,6 @@ export const SITE = Object.freeze({
   "priceLabel": "$45",
   "logoMark": "assets/logo-mark.svg",
   "favicon": "assets/favicon.svg",
-  "sourceUrl": "https://github.com/pocketmacro/simplehotelier"
+  "sourceUrl": "https://github.com/pocketmacro/simplehotelier",
+  "operator": "Pocket Macro LLC"
 });
