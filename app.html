@@ -382,27 +382,49 @@
       <!-- ===== REPORTS ===== -->
       <section class="view" id="view-reports">
         <div class="view-head">
-          <div><h1>Reports</h1><p class="sub" id="repSub">Revenue, occupancy and booking mix.</p></div>
+          <div><h1>Reports</h1><p class="sub" id="repSub">Revenue, occupancy, where bookings come from and tax.</p></div>
           <div class="spacer"></div>
-          <div class="seg" id="repRange" role="tablist" aria-label="Report range"><button type="button" data-days="7">Week</button><button class="active" type="button" data-days="30">Month</button><button type="button" data-days="90">Season</button></div>
+          <div class="seg" id="repRange" role="tablist" aria-label="Report period"><button type="button" data-days="7">Last 7 days</button><button class="active" type="button" data-days="30">Last 30 days</button><button type="button" data-days="90">Last 90 days</button><button type="button" data-days="30" data-ahead="1">Next 30 days</button></div>
           <button class="btn btn-ghost" type="button" data-action="export">Export CSV</button>
         </div>
-        <div class="grid g-2eq">
-          <div class="card card-pad">
-            <h3>Revenue by day</h3><p class="hint">Booked revenue by check-in date</p>
-            <div class="bar-chart" id="revChart"></div>
+        <div class="grid g-kpi">
+          <div class="card kpi accent">
+            <div class="k-label">Revenue</div>
+            <div class="k-value" id="repRev">—</div>
+            <div class="k-sub" id="repRevSub">—</div>
           </div>
-          <div class="card card-pad" id="channelCard">
-            <h3>Bookings by status</h3><p class="hint">Loading…</p>
+          <div class="card kpi">
+            <div class="k-label">Occupancy</div>
+            <div class="k-value" id="repOcc">—</div>
+            <div class="k-sub" id="repOccSub">—</div>
+          </div>
+          <div class="card kpi">
+            <div class="k-label">Average nightly rate</div>
+            <div class="k-value" id="repAdr">—</div>
+            <div class="k-sub" id="repAdrSub">—</div>
+          </div>
+          <div class="card kpi">
+            <div class="k-label">Balance due</div>
+            <div class="k-value" id="repDue">—</div>
+            <div class="k-sub" id="repDueSub">—</div>
           </div>
         </div>
         <div class="grid g-2eq mt">
           <div class="card card-pad">
-            <h3>Top performing units</h3><p class="hint">By booked revenue in this window</p>
+            <h3 id="revTitle">Revenue by night</h3><p class="hint" id="revHint">Earned on the nights guests stayed, before tax</p>
+            <div class="bar-chart" id="revChart"></div>
+          </div>
+          <div class="card card-pad" id="channelCard">
+            <h3>Where bookings come from</h3><p class="hint">Loading…</p>
+          </div>
+        </div>
+        <div class="grid g-2eq mt">
+          <div class="card card-pad">
+            <h3>Top performing units</h3><p class="hint">Revenue and nights sold in this period</p>
             <div class="row-list" id="topRooms"></div>
           </div>
           <div class="card card-pad">
-            <h3>Tax liability</h3><p class="hint">Estimated from booked revenue in this window</p>
+            <h3>Tax</h3><p class="hint">Charged on the nights in this period, by tax rule, and how much guests have paid so far</p>
             <div class="kv" id="taxLiability"></div>
           </div>
         </div>

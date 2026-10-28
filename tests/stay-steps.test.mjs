@@ -87,11 +87,11 @@ function steps({ live = true, fail = false } = {}) {
   };
   const noop = () => {};
   const f = new Function("reservations", "balance", "openReservationEditor", "SHDB", "window", "toast", "fnInvoke", "roomByCode",
-    "renderReservations", "renderToday", "renderOverview", "renderCalendar", "renderRooms", "renderMiniRooms", "renderFolios", "renderHK",
+    "renderReservations", "renderToday", "renderOverview", "renderCalendar", "renderRooms", "renderMiniRooms", "renderFolios", "renderHK", "renderReports",
     src + "\nreturn { resStep, turnRoom };");
   const api = f(reservations, (r) => Math.max(0, r.total - r.paid), (ref, o) => log.push(["editor", ref, o]), SHDB, { SHDB },
     (t) => log.push(["toast", t]), async (name, body) => { log.push(["fn", name, body]); return { sent: true }; },
-    (c) => rooms.find((r) => r.code === c), noop, noop, noop, noop, noop, noop, noop, noop);
+    (c) => rooms.find((r) => r.code === c), noop, noop, noop, noop, noop, noop, noop, noop, noop);
   return { ...api, log, rooms, reservations };
 }
 

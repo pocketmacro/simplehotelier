@@ -20,7 +20,9 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const TODAY = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })(); // local today; demo data offsets count from here
 const dayMs = 864e5;
 const dstr = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-const addDays = (n) => new Date(TODAY.getTime() + n * dayMs);
+// Calendar days, not 24-hour blocks: across a daylight-saving change a day
+// is 23 or 25 hours, and adding hours would land on the day before.
+const addDays = (n) => { const d = new Date(TODAY); d.setDate(d.getDate() + n); return d; };
 
 const rooms = [
   { code: "A1", name: "Aspen Loft", type: "Loft · Sleeps 4", rate: 189, status: "reserved", hk: "dirty", note: "Checkout 11 AM · arrival 3 PM" },
@@ -114,16 +116,16 @@ function syncRoomType(r) { r.type = (r.typeName ? r.typeName + " · " : "") + "S
 
 const reservations = [
   { ref: "R-1042", guest: "Daniel Okafor", contact: "d.okafor@mail.com", room: "A2", inN: -2, outN: 2, status: "checked-in", total: 872.40, paid: 386.20 },
-  { ref: "R-1043", guest: "Priya Nair", contact: "(970) 555-0182", room: "A3", inN: -1, outN: 1, status: "checked-in", total: 402.10, paid: 402.10 },
-  { ref: "R-1044", guest: "Sam Whitaker", contact: "sam.w@mail.com", room: "B1", inN: -3, outN: 3, status: "checked-in", total: 1244.55, paid: 900.00 },
+  { ref: "R-1043", source: "phone", guest: "Priya Nair", contact: "(970) 555-0182", room: "A3", inN: -1, outN: 1, status: "checked-in", total: 402.10, paid: 402.10 },
+  { ref: "R-1044", source: "airbnb", guest: "Sam Whitaker", contact: "sam.w@mail.com", room: "B1", inN: -3, outN: 3, status: "checked-in", total: 1244.55, paid: 900.00 },
   { ref: "R-1045", guest: "Lucia Fernandez", contact: "(970) 555-0119", room: "B3", inN: -1, outN: 3, status: "checked-in", total: 1102.30, paid: 1102.30 },
   { ref: "R-1046", guest: "Tom Becker", contact: "tom.b@mail.com", room: "A1", inN: 0, outN: 3, status: "confirmed", total: 640.75, paid: 200.00, arrival: "4 – 6 PM" },
-  { ref: "R-1047", guest: "Aisha Khan", contact: "(970) 555-0144", room: "C1", inN: 0, outN: 2, status: "confirmed", total: 715.90, paid: 0 },
+  { ref: "R-1047", source: "vrbo", guest: "Aisha Khan", contact: "(970) 555-0144", room: "C1", inN: 0, outN: 2, status: "confirmed", total: 715.90, paid: 0 },
   { ref: "R-1048", guest: "Greg Poulsen", contact: "greg.p@mail.com", room: "B2", inN: 4, outN: 7, status: "pending", total: 655.20, paid: 0 },
   { ref: "R-1049", guest: "Nina Rossi", contact: "nina.r@mail.com", room: "C2", inN: 4, outN: 6, status: "pending", total: 348.60, paid: 0 },
-  { ref: "R-1050", guest: "Carl Jensen", contact: "(970) 555-0190", room: "A3", inN: 2, outN: 5, status: "confirmed", total: 521.40, paid: 521.40 },
-  { ref: "R-1051", guest: "Marta Silva", contact: "marta.s@mail.com", room: "B2", inN: 8, outN: 11, status: "confirmed", total: 690.00, paid: 150.00 },
-  { ref: "R-1052", guest: "Jonah Lee", contact: "jonah.l@mail.com", room: "A1", inN: -6, outN: 0, status: "checked-out", total: 1180.00, paid: 1180.00 },
+  { ref: "R-1050", source: "phone", guest: "Carl Jensen", contact: "(970) 555-0190", room: "A3", inN: 2, outN: 5, status: "confirmed", total: 521.40, paid: 521.40 },
+  { ref: "R-1051", source: "airbnb", guest: "Marta Silva", contact: "marta.s@mail.com", room: "B2", inN: 8, outN: 11, status: "confirmed", total: 690.00, paid: 150.00 },
+  { ref: "R-1052", source: "walkin", guest: "Jonah Lee", contact: "jonah.l@mail.com", room: "A1", inN: -6, outN: 0, status: "checked-out", total: 1180.00, paid: 1180.00 },
   { ref: "R-1039", guest: "Emily Zhang", contact: "emily.z@mail.com", room: "C2", inN: -9, outN: -7, status: "cancelled", total: 310.00, paid: 0 },
 ];
 
@@ -218,6 +220,7 @@ function goto(view, history = "push") {
   if (view === "setup") renderSetupUI();
   if (view === "booking") loadFontPreviews(); // theme cards and font pickers show each face
   if (view === "account") openAccount();
+  if (view === "reports") renderReports(); // today may have moved on, and bookings changed
   document.body.classList.remove("nav-open");
   if (location.hash !== "#" + view && history !== "none") {
     try { window.history[history === "replace" ? "replaceState" : "pushState"](null, "", "#" + view); } catch { /* sandboxed or file:// */ }
@@ -712,7 +715,7 @@ if (roomTypeTabsEl) roomTypeTabsEl.addEventListener("click", (e) => {
 const repRange = $("#repRange");
 if (repRange) repRange.addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
-  reportDays = parseInt(b.dataset.days, 10) || 30;
+  reportPeriod = { days: parseInt(b.dataset.days, 10) || 30, ahead: b.dataset.ahead === "1" };
   $$("#repRange button").forEach((x) => x.classList.toggle("active", x === b));
   renderReports();
 });
@@ -1579,73 +1582,141 @@ function bindStudio() {
   }
 }
 
-/* ---------------- Reports (computed from your reservations, not samples) ---------------- */
-let reportDays = 30;
-function computeReports(days) {
-  const active = reservations.filter((r) => r.status !== "cancelled");
-  const inWin = active.filter((r) => r.inN >= -(days - 1) && r.inN <= 0);
-  // Chart buckets: daily up to 31 days, weekly beyond that.
+/* ---------------- Reports (computed from your reservations, not samples) ----------------
+   Earned basis: a stay's money is spread evenly over its nights and a period
+   counts the nights inside it, so a week-long stay shows up in every week it
+   touches. Firm bookings only (confirmed, in-house, checked out); requests
+   waiting for confirmation are counted apart. Calendar imports (Airbnb,
+   Vrbo) fill nights but carry no money. */
+let reportPeriod = { days: 30, ahead: false };
+const REP_SOURCES = [["direct", "Direct / website", "#0c3b3c"], ["phone", "Phone", "#c98a2e"], ["walkin", "Walk-in", "#7fa8a3"],
+  ["airbnb", "Airbnb", "#d4776b"], ["vrbo", "Vrbo", "#4f6fa8"], ["other", "Other", "#b9c8c3"]];
+const r2 = (v) => Math.round(v * 100) / 100;
+/* A booking's money before tax, and its tax. Live bookings carry the tax they
+   were charged; demo ones don't, so it is backed out with the current rules. */
+function stayMoney(r) {
+  const n = Math.max(1, r.outN - r.inN);
+  if (r.tax != null) return { n, tax: r.tax, net: r.total - r.tax };
+  const on = taxes.filter((t) => t.on);
+  const pct = on.filter((t) => t.kind === "percent").reduce((s, t) => s + (Number(t.value) || 0), 0);
+  const flat = on.filter((t) => t.kind !== "percent").reduce((s, t) => s + (Number(t.value) || 0), 0) * n;
+  const net = Math.max(0, (r.total - flat) / (1 + pct / 100));
+  return { n, tax: r.total - net, net };
+}
+/* How a booking's tax divides between the tax rules, worked out the way
+   pricing does (percent of the room, or of everything; flat per night) and
+   scaled to what was actually charged. Exact unless the rules changed since. */
+function taxSplit(r, m) {
+  const on = taxes.filter((t) => t.on);
+  const room = r.subtotal != null ? r.subtotal - (r.discount || 0) : m.net;
+  const all = r.subtotal != null ? room + (r.extras || 0) + (r.extraPerson || 0) : m.net;
+  const est = on.map((t) => t.kind === "percent"
+    ? (/room only/i.test(t.applies || "") ? room : all) * (Number(t.value) || 0) / 100
+    : (Number(t.value) || 0) * m.n);
+  const sum = est.reduce((s, v) => s + v, 0);
+  return sum > 0 ? on.map((t, i) => [t.name, m.tax * est[i] / sum]) : m.tax ? [["Tax", m.tax]] : [];
+}
+function computeReports(p = reportPeriod) {
+  // Night offsets from today, inclusive: the last N nights end with tonight.
+  const from = p.ahead ? 1 : -(p.days - 1), to = p.ahead ? p.days : 0, span = to - from + 1;
+  const first = (r) => Math.max(r.inN, from), last = (r) => Math.min(r.outN - 1, to);
+  const nightsIn = (r) => Math.max(0, last(r) - first(r) + 1);
+  const firm = (r) => r.status === "confirmed" || r.status === "checked-in" || r.status === "checked-out";
+  const stays = reservations.filter((r) => firm(r) && nightsIn(r) > 0);
+  const requests = reservations.filter((r) => r.status === "pending" && nightsIn(r) > 0).length;
+  const weekly = span > 31;
   const buckets = [];
-  if (days <= 31) {
-    for (let off = -(days - 1); off <= 0; off++) {
-      const dt = addDays(off);
-      buckets.push({ label: String(dt.getDate()), title: dt.toLocaleDateString("en-US", { month: "short", day: "numeric" }), value: 0 });
-    }
-    inWin.forEach((r) => { const b = buckets[r.inN + days - 1]; if (b) b.value += r.total; });
-  } else {
-    const weeks = Math.ceil(days / 7);
-    for (let w = weeks - 1; w >= 0; w--) buckets.push({ label: "W" + (weeks - w), title: "Week of " + dstr(addDays(-w * 7 - 6)), value: 0 });
-    inWin.forEach((r) => { const w = Math.min(weeks - 1, Math.floor(-r.inN / 7)); buckets[weeks - 1 - w].value += r.total; });
+  for (let off = from; off <= to; off += weekly ? 7 : 1) {
+    const dt = addDays(off);
+    buckets.push(weekly
+      ? { label: "W" + (buckets.length + 1), title: "Week of " + dstr(dt), iso: isoLocal(dt), value: 0 }
+      : { label: String(dt.getDate()), title: dt.toLocaleDateString("en-US", { month: "short", day: "numeric" }), iso: isoLocal(dt), value: 0 });
   }
-  const byRoom = {};
-  inWin.forEach((r) => { byRoom[r.room] = (byRoom[r.room] || 0) + r.total; });
-  const top = Object.entries(byRoom).map(([code, v]) => { const rm = roomByCode(code); return [code + (rm ? " · " + rm.name : ""), Math.round(v * 100) / 100]; }).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const taxRows = taxes.filter((t) => t.on).map((t) => {
-    let amt = 0;
-    inWin.forEach((r) => { const nights = Math.max(1, r.outN - r.inN); amt += t.kind === "percent" ? r.total * t.value / 100 : t.value * nights; });
-    return [t.name, Math.round(amt * 100) / 100];
+  let revenue = 0, nightsSold = 0, moneyNights = 0, due = 0, dueCount = 0, taxTotal = 0, taxPaid = 0;
+  const byRoom = {}, bySource = {}, byTax = {};
+  stays.forEach((r) => {
+    const m = stayMoney(r), k = nightsIn(r), share = k / m.n;
+    const paidShare = r.total > 0 ? Math.min(1, Math.max(0, r.paid / r.total)) : 0;
+    for (let off = first(r); off <= last(r); off++) buckets[weekly ? Math.floor((off - from) / 7) : off - from].value += m.net / m.n;
+    revenue += m.net * share;
+    nightsSold += k;
+    if (m.net > 0) moneyNights += k;
+    const room = byRoom[r.room] || (byRoom[r.room] = { revenue: 0, nights: 0 });
+    room.revenue += m.net * share; room.nights += k;
+    const src = REP_SOURCES.some(([v]) => v === r.source) ? r.source : r.source ? "other" : "direct";
+    const s = bySource[src] || (bySource[src] = { count: 0, revenue: 0 });
+    s.count++; s.revenue += m.net * share;
+    taxTotal += m.tax * share; taxPaid += m.tax * share * paidShare;
+    taxSplit(r, m).forEach(([name, v]) => {
+      const t = byTax[name] || (byTax[name] = { charged: 0, paid: 0 });
+      t.charged += v * share; t.paid += v * share * paidShare;
+    });
+    if (balance(r) > 0) { due += balance(r); dueCount++; }
   });
-  const byStatus = { "checked-in": 0, confirmed: 0, pending: 0, "checked-out": 0 };
-  inWin.forEach((r) => { if (byStatus[r.status] != null) byStatus[r.status]++; });
+  buckets.forEach((b) => { b.value = r2(b.value); });
+  const units = Object.entries(byRoom).map(([code, v]) => ({ code, name: (roomByCode(code) || {}).name || "", revenue: r2(v.revenue), nights: v.nights }))
+    .sort((a, b) => b.revenue - a.revenue || b.nights - a.nights);
+  const roomNights = rooms.length * span;
   return {
-    days, buckets, top, taxRows,
-    taxTotal: Math.round(taxRows.reduce((s, [, v]) => s + v, 0) * 100) / 100,
-    revenue: Math.round(inWin.reduce((s, r) => s + r.total, 0) * 100) / 100,
-    collected: Math.round(inWin.reduce((s, r) => s + r.paid, 0) * 100) / 100,
-    count: inWin.length, byStatus
+    period: p, start: addDays(from), end: addDays(to), span, weekly, buckets,
+    count: stays.length, requests, revenue: r2(revenue), nightsSold, roomNights,
+    occupancy: roomNights ? Math.min(1, nightsSold / roomNights) : 0,
+    adr: moneyNights ? r2(revenue / moneyNights) : 0,
+    due: r2(due), dueCount, units, top: units.slice(0, 5),
+    sources: REP_SOURCES.filter(([v]) => bySource[v]).map(([v, label, color]) => ({ key: v, label, color, count: bySource[v].count, revenue: r2(bySource[v].revenue) })),
+    taxRows: Object.entries(byTax).map(([name, t]) => ({ name, charged: r2(t.charged), paid: r2(t.paid) })),
+    taxTotal: r2(taxTotal), taxPaid: r2(taxPaid)
   };
 }
+function reportLabel(p) { return `${p.ahead ? "Next" : "Last"} ${p.days} days`; }
 function renderReports() {
-  const rep = computeReports(reportDays);
+  if (!$("#revChart")) return;
+  const rep = computeReports(), p = rep.period;
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const set = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
+  set("#repSub", `${reportLabel(p)} · ${dstr(rep.start)} – ${dstr(rep.end)} · ${plural(rep.count, "stay", "stays")}` +
+    (rep.requests ? ` · ${plural(rep.requests, "request", "requests")} awaiting confirmation, not counted` : ""));
+  set("#repRev", money(rep.revenue));
+  set("#repRevSub", p.ahead ? "On the books, before tax" : "Earned, before tax");
+  $("#repOcc").innerHTML = `${Math.round(rep.occupancy * 100)}<small>%</small>`;
+  set("#repOccSub", `${rep.nightsSold} of ${plural(rep.roomNights, "room-night", "room-nights")} filled`);
+  set("#repAdr", money(rep.adr));
+  set("#repAdrSub", "Revenue per night sold");
+  set("#repDue", money(rep.due));
+  set("#repDueSub", rep.dueCount ? `Owed on ${plural(rep.dueCount, "stay", "stays")}` : "Every stay is paid");
+  set("#revTitle", rep.weekly ? "Revenue by week" : "Revenue by night");
+  set("#revHint", p.ahead ? "Booked for the nights ahead, before tax" : "Earned on the nights guests stayed, before tax");
   const max = Math.max(1, ...rep.buckets.map((d) => d.value));
-  $("#revChart").innerHTML = rep.buckets.map((d) =>
-    `<div class="bar" title="${esc(d.title)} · ${money(d.value)}"><i style="height:${Math.max(2, Math.round(d.value / max * 100))}%"></i><span>${esc(d.label)}</span></div>`).join("") ||
-    `<div class="empty">No bookings in this window yet.</div>`;
-  const tmax = rep.top.length ? rep.top[0][1] : 1;
-  $("#topRooms").innerHTML = rep.top.map(([n, v]) => `
-    <div class="row-item"><div class="ri-main" style="flex:1"><strong>${esc(n)}</strong>
-      <div class="progress" style="background:var(--surface-3);margin-top:6px"><i style="width:${Math.round(v / tmax * 100)}%;background:var(--brand-2)"></i></div></div>
-      <div class="ri-right mono">${money(v)}</div></div>`).join("") || `<div class="empty">No revenue in this window yet.</div>`;
-  $("#taxLiability").innerHTML = (rep.taxRows.map(([n, v]) => `<dt>${esc(n)}</dt><dd class="mono">${money(v)}</dd>`).join("") ||
-    `<dt>No tax rules yet</dt><dd class="mono">—</dd>`) +
-    `<dt><strong>Estimated total</strong></dt><dd class="mono"><strong>${money(rep.taxTotal)}</strong></dd>`;
-  const sub = $("#repSub"); if (sub) sub.textContent = `Revenue, occupancy and booking mix · last ${reportDays} days · ${rep.count} reservations · ${money(rep.revenue)} booked`;
+  $("#revChart").innerHTML = rep.revenue > 0
+    ? rep.buckets.map((d) => `<div class="bar" title="${esc(d.title)} · ${money(d.value)}"><i style="height:${Math.max(2, Math.round(d.value / max * 100))}%"></i><span>${esc(d.label)}</span></div>`).join("")
+    : `<div class="empty">No revenue in this period.</div>`;
+  const tmax = rep.top.length ? Math.max(1, rep.top[0].revenue) : 1;
+  $("#topRooms").innerHTML = rep.top.map((u) => `
+    <div class="row-item"><div class="ri-main" style="flex:1"><strong>${esc(u.code)}${u.name ? " · " + esc(u.name) : ""}</strong>
+      <span>${plural(u.nights, "night", "nights")} · ${Math.round(u.nights / rep.span * 100)}% occupied</span>
+      <div class="progress" style="background:var(--surface-3);margin-top:6px"><i style="width:${Math.round(u.revenue / tmax * 100)}%;background:var(--brand-2)"></i></div></div>
+      <div class="ri-right mono">${money(u.revenue)}</div></div>`).join("") || `<div class="empty">No stays in this period.</div>`;
+  $("#taxLiability").innerHTML = rep.taxRows.length
+    ? rep.taxRows.map((t) => `<dt>${esc(t.name)}</dt><dd class="mono">${money(t.charged)}</dd>`).join("") +
+      `<dt><strong>Tax on these stays</strong></dt><dd class="mono"><strong>${money(rep.taxTotal)}</strong></dd>` +
+      `<dt>Paid by guests so far</dt><dd class="mono">${money(rep.taxPaid)}</dd>` +
+      `<dt>Still to collect</dt><dd class="mono">${money(r2(rep.taxTotal - rep.taxPaid))}</dd>`
+    : `<dt>${taxes.some((t) => t.on) ? "No tax on stays in this period" : "No tax rules yet"}</dt><dd class="mono">${money(0)}</dd>`;
   const card = $("#channelCard");
   if (card) {
-    const groups = [["In-house", rep.byStatus["checked-in"], "#0c3b3c"], ["Confirmed", rep.byStatus.confirmed, "#c98a2e"], ["Pending", rep.byStatus.pending, "#7fa8a3"], ["Checked out", rep.byStatus["checked-out"], "#b9c8c3"]];
-    const total = Math.max(1, groups.reduce((s, g) => s + g[1], 0));
+    const total = rep.sources.reduce((s, g) => s + g.count, 0);
     const C = 2 * Math.PI * 58;
     let acc = 0;
-    const arcs = groups.filter((g) => g[1] > 0).map((g) => {
-      const frac = g[1] / total;
-      const s = `<circle cx="75" cy="75" r="58" fill="none" stroke="${g[2]}" stroke-width="20" stroke-dasharray="${(frac * C).toFixed(1)} ${C.toFixed(1)}" stroke-dashoffset="${(-acc * C).toFixed(1)}" transform="rotate(-90 75 75)"/>`;
+    const arcs = rep.sources.map((g) => {
+      const frac = g.count / Math.max(1, total);
+      const s = `<circle cx="75" cy="75" r="58" fill="none" stroke="${g.color}" stroke-width="20" stroke-dasharray="${(frac * C).toFixed(1)} ${C.toFixed(1)}" stroke-dashoffset="${(-acc * C).toFixed(1)}" transform="rotate(-90 75 75)"/>`;
       acc += frac; return s;
     }).join("");
-    card.innerHTML = `<h3>Bookings by status</h3><p class="hint">${rep.count} reservations in the last ${reportDays} days</p>
-      <div class="donut-row">
-        <svg width="150" height="150" viewBox="0 0 150 150"><circle cx="75" cy="75" r="58" fill="none" stroke="#e8eeec" stroke-width="20"/>${arcs}<text x="75" y="71" text-anchor="middle" font-family="Sora,sans-serif" font-weight="700" font-size="22" fill="#101f1e">${rep.count}</text><text x="75" y="89" text-anchor="middle" font-size="11" fill="#5d6f6b">reservations</text></svg>
-        <div class="legend" style="flex:1">${groups.map((g) => `<div><i style="background:${g[2]}"></i>${g[0]}<b>${total ? Math.round(g[1] / total * 100) : 0}%</b></div>`).join("")}</div>
-      </div>`;
+    card.innerHTML = `<h3>Where bookings come from</h3><p class="hint">Stays in this period by booking source</p>
+      ${total ? `<div class="donut-row">
+        <svg width="150" height="150" viewBox="0 0 150 150" role="img" aria-label="${esc(rep.sources.map((g) => `${g.label} ${g.count}`).join(", "))}"><circle cx="75" cy="75" r="58" fill="none" stroke="#e8eeec" stroke-width="20"/>${arcs}<text x="75" y="71" text-anchor="middle" font-family="Sora,sans-serif" font-weight="700" font-size="22" fill="#101f1e">${total}</text><text x="75" y="89" text-anchor="middle" font-size="11" fill="#5d6f6b">${total === 1 ? "stay" : "stays"}</text></svg>
+        <div class="legend" style="flex:1">${rep.sources.map((g) => `<div><i style="background:${g.color}"></i>${esc(g.label)} · ${g.count}<b>${money(g.revenue)}</b></div>`).join("")}</div>
+      </div>` : `<div class="empty">No stays in this period.</div>`}`;
   }
 }
 
@@ -1675,7 +1746,7 @@ function openNewTicket() {
 const STEP_STATUS = { confirm: "confirmed", checkin: "checked-in", checkout: "checked-out" };
 const STEP_DONE = { confirmed: "confirmed", "checked-in": "checked in", "checked-out": "checked out", cancelled: "cancelled" };
 function renderStays() {
-  renderReservations(); renderToday(); renderOverview(); renderCalendar(); renderRooms(); renderMiniRooms(); renderFolios();
+  renderReservations(); renderToday(); renderOverview(); renderCalendar(); renderRooms(); renderMiniRooms(); renderFolios(); renderReports();
 }
 /* A guest who has left leaves a room to clean. */
 function turnRoom(code) {
@@ -1847,10 +1918,17 @@ document.addEventListener("click", (e) => {
     const stamp = isoLocal(new Date());
     let rows, fname;
     if (activeView === "view-reports") {
-      const rep = computeReports(reportDays);
-      rows = [["Metric", "Value"], ["Window (days)", rep.days], ["Reservations", rep.count], ["Revenue booked", rep.revenue.toFixed(2)], ["Collected", rep.collected.toFixed(2)], ["Estimated tax liability", rep.taxTotal.toFixed(2)], ["", ""], ["Top unit", "Revenue"]]
-        .concat(rep.top.map(([n, v]) => [n, v.toFixed(2)]))
-        .concat([["", ""], ["Tax rule", "Estimated amount"]], rep.taxRows.map(([n, v]) => [n, v.toFixed(2)]));
+      const rep = computeReports();
+      const blank = ["", ""];
+      rows = [["Report", reportLabel(rep.period)], ["From", isoLocal(rep.start)], ["To", isoLocal(rep.end)], ["Currency", moneyCurrency],
+        ["Stays", rep.count], ["Requests awaiting confirmation (not counted)", rep.requests],
+        ["Revenue before tax", rep.revenue.toFixed(2)], ["Room-nights sold", rep.nightsSold], ["Room-nights available", rep.roomNights],
+        ["Occupancy %", (rep.occupancy * 100).toFixed(1)], ["Average nightly rate", rep.adr.toFixed(2)], ["Balance due on these stays", rep.due.toFixed(2)],
+        blank, ["Tax", "Charged", "Paid by guests so far"]]
+        .concat(rep.taxRows.map((t) => [t.name, t.charged.toFixed(2), t.paid.toFixed(2)]), [["Total tax", rep.taxTotal.toFixed(2), rep.taxPaid.toFixed(2)]],
+          [blank, ["Source", "Stays", "Revenue before tax"]], rep.sources.map((g) => [g.label, g.count, g.revenue.toFixed(2)]),
+          [blank, ["Unit", "Nights", "Revenue before tax"]], rep.units.map((u) => [u.code + (u.name ? " · " + u.name : ""), u.nights, u.revenue.toFixed(2)]),
+          [blank, [rep.weekly ? "Week of" : "Night", "Revenue before tax"]], rep.buckets.map((b) => [b.iso, b.value.toFixed(2)]));
       fname = `${fileStem()}-report-${stamp}.csv`;
     } else {
       // Live rows carry real dates; demo rows only day offsets from today.
