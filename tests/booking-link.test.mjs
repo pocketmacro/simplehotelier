@@ -72,7 +72,7 @@ test("adults and children come through; nonsense is ignored", () => {
 
 test("load keeps the linked party (within limits) and checks availability for linked dates", () => {
   assert.match(book, /if \(linkParty && splitParty\(\)\) setParty\(linkParty\);\n\s+else setGuests\(linkParty \? linkParty\.adults \+ linkParty\.children : guestsCount\(\)\);/);
-  assert.match(book, /if \(paidRef\) showPaidThanks\(\);\n\s+else if \(linkStay\) checkAvailability\(\);/);
+  assert.match(book, /if \(paidRef\) showPaidThanks\(\);\n\s+else if \(linkStay\) avail = checkAvailability\(\)\.catch\(\(\) => \{\}\);/);
 });
 
 test("the ARI feed is service-role only and checked live", () => {

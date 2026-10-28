@@ -34,6 +34,18 @@ input, textarea, button, select { font-family: inherit; }
 .bk-skip { position: absolute; width: auto; left: -999px; top: 8px; background: var(--surface); padding: 8px 14px; border-radius: var(--r-input); z-index: 10; }
 .bk-skip:focus { left: 8px; }
 
+/* Until the property loads (js/book.js endBoot), only a quiet loader shows:
+   the page then appears at once in the property's own theme, name and
+   photos, instead of the default page first. The loader fades in late, so a
+   quick load never flashes it. */
+.bk-boot { display: none; }
+body.booting > :not(.bk-boot) { visibility: hidden; }
+body.booting .bk-boot { display: flex; position: fixed; inset: 0; align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-size: 15px; animation: bk-boot-in .2s ease .4s both; }
+body.embed.booting .bk-boot { position: absolute; bottom: auto; height: 240px; }
+.bk-boot-spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--brand); animation: bk-spin .8s linear infinite; }
+@keyframes bk-boot-in { from { opacity: 0; } }
+@keyframes bk-spin { to { transform: rotate(360deg); } }
+
 /* Header */
 .bk-top { max-width: 1200px; margin: 0 auto; padding: 18px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .bk-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--ink); min-width: 0; }

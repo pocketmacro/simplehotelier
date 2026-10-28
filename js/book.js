@@ -834,11 +834,16 @@
      typed here. get_rate_plans never returns other promo codes. */
   async function loadRatePlans() {
     if (!state.tenant) return;
+    applyRatePlans(await fetchRatePlans());
+  }
+  function fetchRatePlans() {
     const promo = ($("#promoCode").value || "").trim().toUpperCase();
-    const rows = await api("rpc/get_rate_plans", {
+    return api("rpc/get_rate_plans", {
       method: "POST",
       body: JSON.stringify({ p_tenant: state.tenant.id, p_promo: promo || null })
     }).catch(() => null);
+  }
+  function applyRatePlans(rows) {
     if (!rows) return;
     Object.values(state.types).forEach((t) => { t.rate_plans = []; });
     rows.forEach((row) => {
@@ -902,8 +907,25 @@
     $("#gConsentWrap").hidden = !t.gdpr_consent;
   }
 
+  /* The page appears (book.css: body.booting) once the property is loaded. */
+  function endBoot() {
+    document.body.classList.remove("booting");
+    postHeight();
+  }
+  /* What would otherwise pop in just after the page appears: the hero photo,
+     logo and theme fonts. */
+  function pageAssets() {
+    const t = state.tenant;
+    const images = [t.hero_image_url, t.logo_url].map((u) => safeUrl(u, { httpsOnly: true })).filter(Boolean).map((src) => {
+      const img = new Image();
+      img.src = src;
+      return img.decode ? img.decode().catch(() => {}) : null;
+    });
+    return Promise.all([...images, SHTheme.fontsReady()]);
+  }
+
   async function load() {
-    if (!base || !anon) { showError("Booking is not configured yet. Please contact the property directly."); return; }
+    if (!base || !anon) { showError("Booking is not configured yet. Please contact the property directly."); endBoot(); return; }
     try {
       // Public booking profile only — never select=*: tenants also hold
       // secrets (ical_token, Stripe customer ids, private notification
@@ -912,14 +934,26 @@
       const tenantCols = "id,name,slug,card_fee_mode,contact_email,phone,logo_url,booking_theme,hero_image_url,hero_focus_x,hero_focus_y,booking_headline,booking_subheading,description,address_line1,address_line2,postcode,city,state,country,website_url,facebook_url,instagram_url,twitter_url,youtube_url,star_rated,star_count,gdpr_consent,check_in_time,check_out_time,cancellation_policy,cancellation_policy_text,rental_terms,currency,stripe_account_id,stripe_onboarding_complete,ga_measurement_id,booking_redirect_url,deposit_enabled,deposit_percent,booking_by_type,included_occupants,maximum_total_occupants,maximum_adults,maximum_children,maximum_infants,guest_address_mode,min_room_rate_cents";
       const tenants = await api("tenants?slug=eq." + encodeURIComponent(slug) + "&select=" + tenantCols);
       state.tenant = tenants && tenants[0];
-      if (!state.tenant) { showError("We could not find this property. Check the link and try again."); return; }
+      if (!state.tenant) { showError("We could not find this property. Check the link and try again."); endBoot(); return; }
       const t = state.tenant;
       window.SH_TENANT_ID = t.id; // error reports name the property
       state.theme = SHTheme.apply(t.booking_theme);
+      SHTheme.rememberTheme(t.booking_theme); // the next visit starts in it
       presentTenant();
+      const assets = pageAssets(); // loads alongside the rooms and rates
       setupGA();
       const tid = "tenant_id=eq." + t.id;
-      const overrideRows = await api("room_rate_overrides?" + tid + "&select=room_type_id,date,rate_cents,min_stay,max_stay,closed,cta,ctd").catch(() => []);
+      // Everything else in one round: rooms, extras, taxes, types, rates, plans.
+      const [rooms, addons, taxes, typeRows, overrideRows, planRows] = await Promise.all([
+        api("rooms?" + tid + "&select=id,tenant_id,room_type_id,code,name,sleeps,rate_cents,weekend_rate_cents,photos,sort_order&order=sort_order.asc"),
+        api("addons?" + tid + "&active=eq.true&select=*&order=name.asc"),
+        api("tax_rules?" + tid + "&active=eq.true&select=*&order=sort_order.asc"),
+        // Never select=* or rate_plans: anon cannot read promo codes (see
+        // 20261115000100_public_booking_lockdown); plans come from get_rate_plans.
+        api("room_types?" + tid + "&select=" + TYPE_COLS + "&order=name.asc").catch(() => []),
+        api("room_rate_overrides?" + tid + "&select=room_type_id,date,rate_cents,min_stay,max_stay,closed,cta,ctd").catch(() => []),
+        fetchRatePlans()
+      ]);
       state.overrides = {};
       (overrideRows || []).forEach((o) => {
         state.overrides[o.room_type_id + "|" + String(o.date).slice(0, 10)] = {
@@ -928,20 +962,12 @@
           closed: !!o.closed, cta: !!o.cta, ctd: !!o.ctd
         };
       });
-      const [rooms, addons, taxes, typeRows] = await Promise.all([
-        api("rooms?" + tid + "&select=id,tenant_id,room_type_id,code,name,sleeps,rate_cents,weekend_rate_cents,photos,sort_order&order=sort_order.asc"),
-        api("addons?" + tid + "&active=eq.true&select=*&order=name.asc"),
-        api("tax_rules?" + tid + "&active=eq.true&select=*&order=sort_order.asc"),
-        // Never select=* or rate_plans: anon cannot read promo codes (see
-        // 20261115000100_public_booking_lockdown); plans come from loadRatePlans().
-        api("room_types?" + tid + "&select=" + TYPE_COLS + "&order=name.asc").catch(() => [])
-      ]);
       state.types = {};
       (typeRows || []).forEach((t) => { state.types[t.id] = t; });
       state.rooms = rooms || [];
       state.addons = addons || [];
       state.taxes = (taxes || []).map((x) => ({ name: x.name, kind: x.kind, value: Number(x.rate), applies: x.applies_to }));
-      await loadRatePlans();
+      applyRatePlans(planRows);
       presentTenant(); // unit words can now come from the room types
       renderTurnstile();
       presentGuestFields();
@@ -949,12 +975,18 @@
       if (linkParty && splitParty()) setParty(linkParty);
       else setGuests(linkParty ? linkParty.adults + linkParty.children : guestsCount());
       renderTerms();
-      renderRooms(); renderAddons(); renderSummary(); postHeight();
+      renderRooms(); renderAddons(); renderSummary();
+      let avail = null;
       if (paidRef) showPaidThanks();
-      else if (linkStay) checkAvailability(); // linked dates: show what's free right away
+      else if (linkStay) avail = checkAvailability().catch(() => {}); // linked dates: show what's free right away
+      // A moment for the photo, fonts and linked availability, so the page
+      // doesn't change just after it appears; never longer than this.
+      await Promise.race([Promise.all([assets, avail]), new Promise((done) => setTimeout(done, 1200))]);
+      endBoot();
       if (isPreview && window.parent !== window) window.parent.postMessage({ type: "simplehotelier:preview-ready" }, location.origin);
     } catch (e) {
       showError("Booking is temporarily unavailable. Please contact the property directly.");
+      endBoot();
       if (window.SHReportError) window.SHReportError(e, "booking page load");
     }
   }

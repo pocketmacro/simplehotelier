@@ -185,8 +185,46 @@
       d.head.appendChild(link);
     }
     const href = fontsHref(t);
-    if (link.href !== href) link.href = href;
+    if (link.href !== href) {
+      link.href = href;
+      if (link.addEventListener && d.fonts) {
+        const faces = [`${HEAD_WEIGHT[t.headingFont] || 600} 1em "${FONTS[t.headingFont].family}"`,
+          `400 1em "${FONTS[t.bodyFont].family}"`, `600 1em "${FONTS[t.bodyFont].family}"`];
+        fontsLoading.set(d, new Promise((done) => {
+          link.addEventListener("load", done, { once: true });
+          link.addEventListener("error", done, { once: true });
+        }).then(() => Promise.all(faces.map((f) => d.fonts.load(f)))).catch(() => {}));
+      }
+    }
     return t;
+  }
+  const fontsLoading = new WeakMap();
+  /* Resolves once the applied theme's fonts can draw (or failed to load), so
+     the booking page can appear in them instead of swapping fonts after. */
+  function fontsReady(doc) {
+    return fontsLoading.get(doc || document) || Promise.resolve();
+  }
+
+  /* The theme each booking page last showed, so a return visit paints in the
+     property's own colors and fonts straight away (book.js saves it on every
+     load). Keyed by the page's address for the property: host + ?property=. */
+  const SAVED = "sh-booking-themes";
+  function savedKey() {
+    const q = new URLSearchParams(location.search);
+    return location.hostname + "|" + (q.get("property") || q.get("slug") || "");
+  }
+  function savedTheme() {
+    try { return JSON.parse(localStorage.getItem(SAVED) || "{}")[savedKey()] || null; } catch { return null; }
+  }
+  function rememberTheme(raw) {
+    try {
+      const all = JSON.parse(localStorage.getItem(SAVED) || "{}");
+      delete all[savedKey()];
+      all[savedKey()] = raw && typeof raw === "object" ? raw : {};
+      const keys = Object.keys(all);
+      keys.slice(0, Math.max(0, keys.length - 20)).forEach((k) => { delete all[k]; });
+      localStorage.setItem(SAVED, JSON.stringify(all));
+    } catch { /* storage off: the next visit starts in the default theme */ }
   }
 
   /* unitNoun: a UNITS key, "custom" (owner-typed words) or "" (Automatic). */
@@ -210,9 +248,10 @@
   /* "a cabin" / "an RV site" / "an apartment" / "a unit". */
   const withArticle = (word) => ((/^(rv\b|[aeio])/i.test(word) || /^u(?!ni|s[eu])/i.test(word) ? "an " : "a ") + word);
 
-  // book.html loads this with data-apply: paint the default theme right away
-  // (no inline script needed, so the CSP can forbid inline scripts).
-  if (typeof document !== "undefined" && document.currentScript && document.currentScript.hasAttribute("data-apply")) apply({});
+  // book.html loads this with data-apply: paint the property's last-seen
+  // theme (else the default) right away, before the page draws (no inline
+  // script needed, so the CSP can forbid inline scripts).
+  if (typeof document !== "undefined" && document.currentScript && document.currentScript.hasAttribute("data-apply")) apply(savedTheme() || {});
 
   /* Studio font pickers: every allowlisted face, subset to just the letters
      of the font names, so each option can be shown in its own typeface. */
@@ -223,5 +262,5 @@
       "&text=" + encodeURIComponent(text) + "&display=swap";
   }
 
-  window.SHTheme = { FONTS, HEAD_WEIGHT, PRESETS, COLOR_KEYS, RADII, UNITS, UNIT_NOUNS, DEFAULT_PRESET, normalize, apply, contrast, onColor, fontsHref, previewFontsHref, unitWords, withArticle, isHex };
+  window.SHTheme = { FONTS, HEAD_WEIGHT, PRESETS, COLOR_KEYS, RADII, UNITS, UNIT_NOUNS, DEFAULT_PRESET, normalize, apply, contrast, onColor, fontsHref, previewFontsHref, unitWords, withArticle, isHex, fontsReady, rememberTheme };
 })();
