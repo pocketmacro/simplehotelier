@@ -291,11 +291,11 @@ function rxTxnTable() {
     rx.txns.map((t) => {
       const refundable = t.stripe_payment_intent_id && t.amount_cents > 0 && t.status === "paid";
       return `<tr style="cursor:default"><td style="white-space:nowrap">${esc(new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }))}</td>
-        <td>${esc(t.description || "")}${t.note ? `<small class="rx-txn-note">${esc(t.note)}</small>` : ""}</td>
+        <td>${esc(t.description || "")}${t.note ? `<small class="rx-txn-note">${esc(t.note)}</small>` : ""}${t.fee_cents ? `<small class="rx-txn-note">${t.fee_cents < 0 ? "Card fee refunded" : "Guest also paid a card fee of"} ${money(Math.abs(t.fee_cents) / 100)}</small>` : ""}</td>
         <td>${esc(t.method === "card" ? "Card" : t.method || "")}</td>
         <td>${t.status === "paid" ? pill(["paid", "Paid"]) : t.status === "pending" ? pill(["pending", "Pending"]) : t.status === "refunded" ? pill(["neutral", t.amount_cents < 0 ? "Refund" : "Refunded"]) : pill(["cancelled", "Failed"])}</td>
         <td class="num"${t.amount_cents < 0 ? ' style="color:var(--danger)"' : ""}>${t.amount_cents < 0 ? "−" : ""}${money(Math.abs(t.amount_cents) / 100)}</td>
-        <td style="text-align:right">${refundable ? `<button class="btn btn-ghost btn-xs" type="button" data-rx="refund" data-txn="${esc(t.id)}" data-amount="${t.amount_cents}">Refund</button>` : ""}</td></tr>`;
+        <td style="text-align:right">${refundable ? `<button class="btn btn-ghost btn-xs" type="button" data-rx="refund" data-txn="${esc(t.id)}" data-amount="${t.amount_cents}" data-fee="${t.fee_cents || 0}">Refund</button>` : ""}</td></tr>`;
     }).join("")}</tbody></table></div>`;
 }
 
@@ -407,11 +407,13 @@ function rxShowPanel(kind, extra = {}) {
   const row = rx.row || {};
   const card = row.card_last4 ? { brand: row.card_brand, last4: row.card_last4, expMonth: row.card_exp_month, expYear: row.card_exp_year } : null;
   const amount = (id, value) => `<div class="field"><label for="${id}">Amount (${esc(moneyCurrency)})</label><input class="input mono" type="number" min="0.01" step="0.01" id="${id}" value="${value.toFixed(2)}"></div>`;
+  const feeNote = (id) => `<p class="rx-fine rx-fee" id="${id}Fee" aria-live="polite">${rxFeeText(Math.round(due * 100))}</p>`;
   const live = rxLive();
   if (kind === "charge") {
     box.innerHTML = card && live
       ? `<div class="rx-panel"><p class="rx-panel-h">Charge the card on file</p><p class="rx-panel-sub">${esc(rxCardLabel(card))}</p>
           ${amount("rxChargeAmt", due)}
+          ${feeNote("rxChargeAmt")}
           <button class="btn rx-btn-pay" type="button" data-rx="charge-go"${due <= 0 ? " disabled" : ""}>Charge card</button>
           <p class="rx-fine">Charged now through Stripe and paid out to your bank. The guest gets an email receipt.</p></div>`
       : `<div class="rx-panel"><p class="rx-panel-h">No card on file</p><p class="rx-panel-sub">${live ? "Cards are saved when a guest books online or pays a payment request. Send a payment request instead — the guest pays online, and their card is saved for later charges." : "Demo property — sign in to your own property to take real card payments."}</p>
@@ -420,6 +422,7 @@ function rxShowPanel(kind, extra = {}) {
     box.innerHTML = live
       ? `<div class="rx-panel"><p class="rx-panel-h">Payment request</p><p class="rx-panel-sub">A secure Stripe payment page for this booking. Their card is saved for later charges.</p>
           ${amount("rxReqAmt", due)}
+          ${feeNote("rxReqAmt")}
           <label class="check-item"><input type="checkbox" id="rxReqEmail"${(rx.form.email || row.guest_email) ? " checked" : " disabled"}><span>${(rx.form.email || row.guest_email) ? `Email the link to ${esc(rx.form.email || row.guest_email)}` : "Add the guest's email to send the link"}</span></label>
           <button class="btn rx-btn-dark" type="button" data-rx="request-go"${due <= 0 ? " disabled" : ""}>Create payment link</button>
           ${extra.url ? `<div class="field" style="margin-top:12px"><label>Payment link (valid 24 hours)</label><div class="rx-copy"><input class="input mono" readonly value="${esc(extra.url)}" id="rxLinkOut"><button class="btn btn-ghost btn-xs" type="button" data-rx="copy-link">Copy</button></div></div>` : ""}</div>`
@@ -432,12 +435,28 @@ function rxShowPanel(kind, extra = {}) {
         <label class="check-item"><input type="checkbox" id="rxRecRefund"><span>Money returned to the guest (records a refund)</span></label>
         <button class="btn btn-primary" type="button" data-rx="record-go">Record payment</button></div>`;
   } else if (kind === "refund") {
-    box.innerHTML = `<div class="rx-panel"><p class="rx-panel-h">Refund to card</p><p class="rx-panel-sub">Goes back to the guest's card in 5–10 business days and is taken from your Stripe balance.</p>
+    box.innerHTML = `<div class="rx-panel"><p class="rx-panel-h">Refund to card</p><p class="rx-panel-sub">Goes back to the guest's card in 5–10 business days and is taken from your Stripe balance.${extra.fee ? " The guest's card fee is refunded in proportion, as card rules require; Stripe keeps its own fee." : ""}</p>
         ${amount("rxRefundAmt", (extra.max || 0) / 100)}
         <button class="btn btn-danger" type="button" data-rx="refund-go" data-txn="${esc(extra.txn)}">Refund</button></div>`;
   }
 }
 
+/* What a card payment of `cents` (toward the booking) costs, and who pays the
+   fee: the property's card_fee_mode (Settings → Booking page). */
+function rxFeeMode() { return (typeof liveTenant !== "undefined" && liveTenant && liveTenant.card_fee_mode) || "guest"; }
+function rxFeeText(cents) {
+  if (!cents) return "";
+  const c = SHMoney.cardCharge(cents, rxFeeMode());
+  return c.fee_cents > 0
+    ? `The guest pays ${money(c.total_cents / 100)}: ${money(cents / 100)} toward the booking + ${money(c.fee_cents / 100)} card processing fee.`
+    : "You pay Stripe's card fee from this payment (guests pay it if you turn that on in Booking Page settings).";
+}
+document.addEventListener("input", (e) => {
+  const id = e.target && e.target.id;
+  if (id !== "rxChargeAmt" && id !== "rxReqAmt") return;
+  const out = $("#" + id + "Fee");
+  if (out) out.textContent = rxFeeText(rxAmountFrom("#" + id));
+});
 function rxAmountFrom(id) {
   const v = Math.round((parseFloat(($(id) || {}).value) || 0) * 100);
   return v > 0 ? v : 0;
@@ -464,10 +483,10 @@ async function rxCharge() {
   if (!amt) { toast("Enter an amount", "More than $0", "warn"); return; }
   rxBusy(true);
   try {
-    await fnInvoke("charge-guest", { action: "charge_card", tenant_id: SHDB.tenantId(), reservation_id: rx.row.id, amount_cents: amt });
+    const d = await fnInvoke("charge-guest", { action: "charge_card", tenant_id: SHDB.tenantId(), reservation_id: rx.row.id, amount_cents: amt, show_fee: true });
     txns.unshift({ when: "Just now", desc: `${rx.row.confirmation_code} · Card charge`, method: "Card", status: "paid", amount: amt / 100 });
     fnInvoke("send-email", { action: "charge_receipt", reservation_id: rx.row.id }).catch(() => {});
-    toast(`Charged ${money(amt / 100)}`, rxCardLabel({ brand: rx.row.card_brand, last4: rx.row.card_last4 }), "ok");
+    toast(`Charged ${money((d.total_cents || amt) / 100)}`, `${rxCardLabel({ brand: rx.row.card_brand, last4: rx.row.card_last4 })}${d.fee_cents ? ` · includes ${money(d.fee_cents / 100)} card fee` : ""}`, "ok");
     rxShowPanel(null);
     await rxReload(); renderTxns();
   } catch (e) {
@@ -479,8 +498,8 @@ async function rxRequest() {
   if (!amt) { toast("Enter an amount", "More than $0", "warn"); return; }
   rxBusy(true);
   try {
-    const d = await fnInvoke("charge-guest", { action: "payment_request", tenant_id: SHDB.tenantId(), reservation_id: rx.row.id, amount_cents: amt, send_email: !!($("#rxReqEmail") && $("#rxReqEmail").checked) });
-    toast(d.emailed ? "Payment request sent" : "Payment link ready", d.emailed ? `${money(amt / 100)} · emailed to the guest` : "Copy the link and send it to the guest", "ok");
+    const d = await fnInvoke("charge-guest", { action: "payment_request", tenant_id: SHDB.tenantId(), reservation_id: rx.row.id, amount_cents: amt, show_fee: true, send_email: !!($("#rxReqEmail") && $("#rxReqEmail").checked) });
+    toast(d.emailed ? "Payment request sent" : "Payment link ready", d.emailed ? `${money((d.total_cents || amt) / 100)} · emailed to the guest` : "Copy the link and send it to the guest", "ok");
     rxShowPanel("request", { url: d.url });
   } catch (e) {
     toast("Could not create the payment link", e.message || "Try again", "warn");
@@ -514,8 +533,8 @@ async function rxRefund(txnId) {
   if (!amt) { toast("Enter an amount", "More than $0", "warn"); return; }
   rxBusy(true);
   try {
-    await fnInvoke("charge-guest", { action: "refund", tenant_id: SHDB.tenantId(), transaction_id: txnId, amount_cents: amt });
-    toast(`Refunded ${money(amt / 100)}`, "Back to the guest's card in 5–10 business days", "ok");
+    const d = await fnInvoke("charge-guest", { action: "refund", tenant_id: SHDB.tenantId(), transaction_id: txnId, amount_cents: amt });
+    toast(`Refunded ${money((d.total_cents || amt) / 100)}`, d.fee_cents ? `Includes ${money(d.fee_cents / 100)} of the card fee · back on the card in 5–10 business days` : "Back to the guest's card in 5–10 business days", "ok");
     rxShowPanel(null);
     await rxReload(); renderTxns();
   } catch (e) {
@@ -640,7 +659,7 @@ document.addEventListener("click", (e) => {
   else if (a === "charge-go") rxCharge();
   else if (a === "request-go") rxRequest();
   else if (a === "record-go") rxRecord();
-  else if (a === "refund") { rxTab(rx.tab); rxShowPanel("refund", { txn: el.dataset.txn, max: Number(el.dataset.amount) || 0 }); $("#rxPanel")?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+  else if (a === "refund") { rxTab(rx.tab); rxShowPanel("refund", { txn: el.dataset.txn, max: Number(el.dataset.amount) || 0, fee: Number(el.dataset.fee) || 0 }); $("#rxPanel")?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
   else if (a === "refund-go") rxRefund(el.dataset.txn);
   else if (a === "copy-link") { const i = $("#rxLinkOut"); if (i) { i.select(); navigator.clipboard?.writeText(i.value).catch(() => {}); toast("Link copied", "Paste it into a text or email to the guest", "ok"); } }
   else if (a === "save") rxSave();

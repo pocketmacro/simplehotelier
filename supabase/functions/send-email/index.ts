@@ -207,7 +207,10 @@ async function chargeReceipt(body: any) {
       kv([
         ["Confirmation code", r.confirmation_code],
         ["Description", txn.description || "Card charge"],
-        ["Amount paid", money(txn.amount_cents, tenant?.currency)],
+        ...(txn.fee_cents > 0
+          ? [["Toward your booking", money(txn.amount_cents, tenant?.currency)], ["Card processing fee", money(txn.fee_cents, tenant?.currency)],
+            ["Amount paid", money(txn.amount_cents + txn.fee_cents, tenant?.currency)]] as [string, string][]
+          : [["Amount paid", money(txn.amount_cents, tenant?.currency)]] as [string, string][]),
         ["Date", new Date(txn.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })],
         ...(balance > 0 ? [["Remaining balance", money(balance, tenant?.currency)] as [string, string]] : [["Balance", "Paid in full"] as [string, string]])
       ]), brand.replyTo ? "Questions? Just reply to this email." : "", brand)

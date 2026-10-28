@@ -4,9 +4,10 @@
 //   2. Check-out reminders for tomorrow's departures (once per reservation)
 //   3. Sync every Airbnb/Vrbo iCal feed into blocked dates
 //   4. Monday weekly owner report (occupancy, revenue, upcoming arrivals)
+//   5. Settle card fees: Stripe's actual fee vs the application fee charged
 // Deploy: supabase functions deploy daily-jobs  (verify_jwt off: secret-gated)
 // deno-lint-ignore-file no-explicit-any
-import { createClient } from "../_shared/deps.ts";
+import { createClient, Stripe } from "../_shared/deps.ts";
 import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured, propertyBrand } from "../_shared/email.ts";
 import { syncFeed } from "../_shared/sync.js";
 import { computeWeeklyStats } from "../_shared/report.js";
@@ -121,6 +122,63 @@ async function weeklyReports(out: Record<string, number>) {
   out.weeklyReports = sent;
 }
 
+/* Each guest card payment carries an application fee estimated from US card
+   pricing (_shared/card-fee.js); Stripe only reports the actual fee a moment
+   after the charge. Settle the difference with the property so SimpleHotelier
+   never pays for (or keeps a cent of) a guest payment: a foreign card's extra
+   fee comes back from that payment's transfer, an over-estimate is returned.
+   Once a payment is fully refunded its transfer can't cover a shortfall that
+   was already taken, so that rare case stays with the platform. */
+async function settleCardFees(out: Record<string, number>) {
+  const key = Deno.env.get("STRIPE_SECRET_KEY");
+  if (!key) return;
+  const stripe = new Stripe(key, { apiVersion: "2024-06-20" });
+  const since = new Date(Date.now() - 14 * 86400e3).toISOString();
+  // Collect every candidate first: settling flags rows, which would shift pages.
+  const rows = await allRows(() => admin.from("transactions").select("id, stripe_payment_intent_id")
+    .eq("method", "card").neq("kind", "refund").gt("amount_cents", 0).in("status", ["paid", "refunded"])
+    .not("stripe_payment_intent_id", "is", null).is("fee_settled_at", null).gte("created_at", since)
+    .order("id"));
+  let settled = 0, collected = 0, returned = 0;
+  for (const t of rows) {
+    try {
+      const intent: any = await stripe.paymentIntents.retrieve(String(t.stripe_payment_intent_id), {
+        expand: ["latest_charge.balance_transaction", "latest_charge.transfer", "latest_charge.application_fee"],
+      });
+      const ch = intent.latest_charge;
+      if (!ch || ch.status !== "succeeded" || !ch.balance_transaction) continue; // not reported yet: next run
+      const fee = ch.application_fee, bt = ch.balance_transaction, tr = ch.transfer;
+      // Payments from before application fees, or settled in another currency: nothing to compare.
+      if (fee && bt.currency === ch.currency) {
+        const diff = bt.fee - fee.amount;
+        const taken = (tr?.reversals?.data || []).some((r: any) => r.metadata?.kind === "card_fee_shortfall");
+        const take = tr ? Math.min(diff, tr.amount - tr.amount_reversed) : 0;
+        if (diff > 0 && take > 0 && !taken) {
+          await stripe.transfers.createReversal(tr.id, {
+            amount: take,
+            description: "Card fee above the estimate (foreign or premium card)",
+            metadata: { kind: "card_fee_shortfall", payment_intent: intent.id },
+          }, { idempotencyKey: "card-fee-shortfall-" + ch.id });
+          collected += take;
+        } else if (diff < 0 && !fee.amount_refunded) {
+          await stripe.applicationFees.createRefund(fee.id, {
+            amount: -diff,
+            metadata: { kind: "card_fee_overestimate", payment_intent: intent.id },
+          }, { idempotencyKey: "card-fee-over-" + ch.id });
+          returned += -diff;
+        }
+      }
+      await admin.from("transactions").update({ fee_settled_at: new Date().toISOString() }).eq("id", t.id);
+      settled++;
+    } catch (e: any) {
+      await logError("daily-jobs (card fees)", e);
+    }
+  }
+  out.cardFeesSettled = settled;
+  out.cardFeeShortfallCents = collected;
+  out.cardFeeReturnedCents = returned;
+}
+
 Deno.serve(async (req) => {
   try {
     const given = req.headers.get("x-cron-secret") || "";
@@ -142,6 +200,7 @@ Deno.serve(async (req) => {
     out.blocksImported = imported;
 
     await weeklyReports(out);
+    await settleCardFees(out);
     return json({ ok: true, ...out });
   } catch (e: any) {
     console.error("daily-jobs", e); await logError("daily-jobs", e);

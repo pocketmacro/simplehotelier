@@ -545,11 +545,12 @@ select pg_temp.expect('R40 quote_stay is refused to anon and signed-in users',
   array[$q$select public.quote_stay('{tenant_a}'::uuid, '{room_a1}'::uuid, current_date + 10, current_date + 12, 2, '{}'::uuid[], null::text)$q$],
   'error:42501');
 
-select pg_temp.expect('R41 record_stripe_payment (1-arg and 5-arg calls) is refused to browsers',
+select pg_temp.expect('R41 record_stripe_payment (1-, 5- and 6-arg calls) is refused to browsers',
   array['anon', 'a_owner'],
   array[
     $q$select public.record_stripe_payment('pi_rlscheck_a')$q$,
-    $q$select public.record_stripe_payment('pi_rls_new', '{res_a}'::uuid, 100000, 'Free money', 'charge')$q$
+    $q$select public.record_stripe_payment('pi_rls_new', '{res_a}'::uuid, 100000, 'Free money', 'charge')$q$,
+    $q$select public.record_stripe_payment('pi_rls_new', '{res_a}'::uuid, 100000, 'Free money', 'charge', 0)$q$
   ],
   'error:42501');
 

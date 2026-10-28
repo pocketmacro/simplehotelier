@@ -2,7 +2,8 @@
 // Events: checkout.session.completed (subscriptions and guest payment links),
 // customer.subscription.updated/deleted, invoice.payment_failed,
 // payment_intent.succeeded (deposits, front-desk charges, payment links) and
-// charge.refunded (refunds issued in the Stripe Dashboard) and
+// charge.refunded (refunds issued in the Stripe Dashboard; record_stripe_refund
+// splits each amount into booking money and card fee) and
 // setup_intent.succeeded (cards saved to guarantee bookings).
 // Secrets: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET.
 // Deploy: supabase functions deploy stripe-webhook --no-verify-jwt
@@ -20,12 +21,14 @@ const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE
 async function guestPaymentSucceeded(intent: any) {
   const reservationId = intent.metadata?.reservation_id;
   if (!reservationId) return;
+  const fee = Math.max(0, Number(intent.metadata?.fee_cents) || 0); // the guest's card fee isn't booking money
   const { data: recorded, error } = await admin.rpc("record_stripe_payment", {
     p_intent: intent.id,
     p_reservation: reservationId,
-    p_amount_cents: intent.amount_received || intent.amount,
+    p_amount_cents: (intent.amount_received || intent.amount) - fee,
     p_description: intent.description || null,
     p_kind: intent.metadata?.kind || null,
+    p_fee_cents: fee,
   });
   if (error) throw new Error(error.message);
   if (intent.setup_future_usage && intent.customer) await saveCardFromIntent(stripe, admin, reservationId, intent);

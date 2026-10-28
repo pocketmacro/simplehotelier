@@ -439,6 +439,7 @@ table.data .guest span { color: var(--muted); font-size: 12.3px; }
 .rx-link:hover { text-decoration: underline; }
 .rx-link.danger { color: var(--danger); }
 .rx-confirm { font-size: 13px; color: var(--ink); display: inline-flex; align-items: center; gap: 8px; }
+.rx-fee { margin: -4px 0 12px; }
 .rx-notify { font-size: 13px; font-weight: 600; color: var(--ink); display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
 .rx-notify input { width: 16px; height: 16px; margin: 0; accent-color: var(--brand); }
 .rx-status { width: auto; min-width: 150px; font-weight: 650; }

@@ -441,7 +441,10 @@
     if (!t.deposit_enabled) return null;
     const pct = Math.min(100, Math.max(1, parseInt(t.deposit_percent, 10) || 25));
     const collectible = !!(t.stripe_onboarding_complete && t.stripe_account_id && cfg.STRIPE_PUBLISHABLE_KEY);
-    return { pct, due: round2((total || 0) * pct / 100), collectible };
+    const due = round2((total || 0) * pct / 100);
+    // Paid by card today: the property's card processing fee, if it passes it on.
+    const fee = collectible ? SHMoney.cardCharge(Math.round(due * 100), t.card_fee_mode).fee_cents / 100 : 0;
+    return { pct, due, fee, charge: round2(due + fee), collectible };
   }
   async function fnPost(name, body) {
     const res = await fetch(base + "/functions/v1/" + name, {
@@ -585,19 +588,22 @@
     btn.disabled = true; btn.textContent = "Opening secure card form…";
     try {
       const r = await fnPost("charge-guest", deposit
-        ? { tenant_id: state.tenant.id, reservation_id: b.resId }
+        ? { tenant_id: state.tenant.id, reservation_id: b.resId, show_fee: true }
         : { action: "setup", tenant_id: state.tenant.id, reservation_id: b.resId });
       if (!r.client_secret) throw new Error("no client secret");
-      const due = deposit ? (r.amount_cents || b.depositCents) / 100 : 0;
-      state.paying = { mode: deposit ? "deposit" : "setup", clientSecret: r.client_secret, due };
+      // The server decides the amounts: the deposit, plus any card fee on top.
+      const dep = deposit ? (r.amount_cents || b.depositCents) / 100 : 0;
+      const fee = deposit ? (r.fee_cents || 0) / 100 : 0;
+      const due = deposit ? (r.total_cents || r.amount_cents || b.depositCents) / 100 : 0;
+      state.paying = { mode: deposit ? "deposit" : "setup", clientSecret: r.client_secret, due, fee };
       $("#payTitle").textContent = deposit ? "Deposit payment" : "Card to hold your booking";
       $("#payText").textContent = deposit
-        ? `A deposit of ${money(due)} (${b.depositPct}% of ${money(b.total)}) is due today to confirm ${state.selected.name}. The balance is due at the property.`
+        ? `A deposit of ${money(dep)} (${b.depositPct}% of ${money(b.total)})${fee > 0 ? ` plus a ${money(fee)} card processing fee, ${money(due)} in all,` : ""} is due today to confirm ${state.selected.name}. The balance is due at the property.`
         : `${state.tenant.name} requires a card to hold your ${state.selected.name} booking. Nothing is charged now — Stripe keeps the card securely for your balance and the cancellation policy.`;
       $("#payPanel").hidden = false;
       await mountCard();
       btn.disabled = false;
-      btn.textContent = deposit ? "Pay " + money(due) + " deposit" : "Save card & confirm booking";
+      btn.textContent = deposit ? "Pay " + money(due) : "Save card & confirm booking";
       $("#payPanel").scrollIntoView({ behavior: "smooth", block: "center" });
     } catch {
       pErr.textContent = "We couldn't open the secure card form. Please try again — your room is held for 30 minutes.";
@@ -631,12 +637,12 @@
       await fnPost("charge-guest", { action: "confirm", tenant_id: state.tenant.id, payment_intent_id: paymentIntent.id }).catch(() => {});
       fnPost("send-email", { action: "booking_confirmation", reservation_id: b.resId }).catch(() => {});
       fnPost("send-email", { action: "charge_receipt", reservation_id: b.resId, payment_intent_id: paymentIntent.id }).catch(() => {});
-      showSuccess(b.code, b.total, ` Your ${money(pay.due)} deposit is paid — the remaining balance is due at the property.`);
+      showSuccess(b.code, b.total, ` Your ${money(pay.due)} payment${pay.fee > 0 ? " (deposit and card fee)" : " (deposit)"} went through — the remaining balance is due at the property.`);
     } catch (e) {
       pErr.textContent = e.message || "Payment failed. Please check the card and try again.";
       pErr.hidden = false;
       btn.disabled = false;
-      btn.textContent = pay.mode === "setup" ? "Save card & confirm booking" : "Pay " + money(pay.due) + " deposit";
+      btn.textContent = pay.mode === "setup" ? "Save card & confirm booking" : "Pay " + money(pay.due);
       postHeight();
     }
   }
@@ -772,16 +778,17 @@
       (!ap && code ? `<div class="bk-line note"><span>Code ${esc(code)} didn't apply to this stay</span></div>` : "") +
       q.addonLines.map((l) => `<div class="bk-line"><span>${esc(l.name)}</span><b>${money(l.amount)}</b></div>`).join("") +
       q.taxLines.map((l) => `<div class="bk-line"><span>${esc(l.name)}</span><b>${money(l.amount)}</b></div>`).join("") +
-      `<div class="bk-line total"><span>Total</span><b>${money(q.total)}</b></div>` +
-      (dep ? `<div class="bk-line due"><span>Due today (${dep.pct}% deposit)</span><b>${money(dep.due)}</b></div><div class="bk-line"><span>Balance at the property</span><b>${money(round2(q.total - dep.due))}</b></div>`
+      (dep && dep.fee > 0 ? `<div class="bk-line"><span>Card processing fee<small>On today's card payment</small></span><b>${money(dep.fee)}</b></div>` : "") +
+      `<div class="bk-line total"><span>Total</span><b>${money(round2(q.total + (dep ? dep.fee : 0)))}</b></div>` +
+      (dep ? `<div class="bk-line due"><span>Due today (${dep.pct}% deposit${dep.fee > 0 ? " + card fee" : ""})</span><b>${money(dep.charge)}</b></div><div class="bk-line"><span>Balance at the property</span><b>${money(round2(q.total - dep.due))}</b></div>`
         : cardRequired() ? `<div class="bk-line due"><span>Due today · card holds booking</span><b>${money(0)}</b></div>` : "");
-    if (state.paying) { btn.disabled = false; btn.textContent = state.paying.mode === "setup" ? "Save card & confirm booking" : "Pay " + money(state.paying.due) + " deposit"; }
+    if (state.paying) { btn.disabled = false; btn.textContent = state.paying.mode === "setup" ? "Save card & confirm booking" : "Pay " + money(state.paying.due); }
     else if (state.booked) { btn.disabled = false; btn.textContent = "Try the card form again"; }
     else if (termsRequired() && !$("#gTermsAck").checked) { btn.disabled = true; btn.textContent = "Agree to the house rules to continue"; }
     else if (needsAck && !$("#depAck").checked) { btn.disabled = true; btn.textContent = "Tick the deposit box to continue"; }
     else {
       btn.disabled = false;
-      btn.textContent = dep && dep.collectible ? "Book & pay " + money(dep.due) + " deposit"
+      btn.textContent = dep && dep.collectible ? "Book & pay " + money(dep.charge)
         : cardRequired() && !dep ? "Book · add card to hold" : "Request booking · " + money(q.total);
     }
     postHeight();
@@ -900,7 +907,7 @@
       // secrets (ical_token, Stripe customer ids, private notification
       // emails) that the anon key must not be able to read (see the
       // 20261112000000_demo_lockdown migration).
-      const tenantCols = "id,name,slug,contact_email,phone,logo_url,booking_theme,hero_image_url,hero_focus_x,hero_focus_y,booking_headline,booking_subheading,description,address_line1,address_line2,postcode,city,state,country,website_url,facebook_url,instagram_url,twitter_url,youtube_url,star_rated,star_count,gdpr_consent,check_in_time,check_out_time,cancellation_policy,cancellation_policy_text,rental_terms,currency,stripe_account_id,stripe_onboarding_complete,ga_measurement_id,booking_redirect_url,deposit_enabled,deposit_percent,booking_by_type,included_occupants,maximum_total_occupants,maximum_adults,maximum_children,maximum_infants,guest_address_mode,min_room_rate_cents";
+      const tenantCols = "id,name,slug,card_fee_mode,contact_email,phone,logo_url,booking_theme,hero_image_url,hero_focus_x,hero_focus_y,booking_headline,booking_subheading,description,address_line1,address_line2,postcode,city,state,country,website_url,facebook_url,instagram_url,twitter_url,youtube_url,star_rated,star_count,gdpr_consent,check_in_time,check_out_time,cancellation_policy,cancellation_policy_text,rental_terms,currency,stripe_account_id,stripe_onboarding_complete,ga_measurement_id,booking_redirect_url,deposit_enabled,deposit_percent,booking_by_type,included_occupants,maximum_total_occupants,maximum_adults,maximum_children,maximum_infants,guest_address_mode,min_room_rate_cents";
       const tenants = await api("tenants?slug=eq." + encodeURIComponent(slug) + "&select=" + tenantCols);
       state.tenant = tenants && tenants[0];
       if (!state.tenant) { showError("We could not find this property. Check the link and try again."); return; }

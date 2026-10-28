@@ -51,7 +51,7 @@ test("guest emails use the property brand and reply-to; owner and team emails st
   assert.match(send, /replyTo: r\.guest_email/, "the property's new-booking alert replies to the guest");
   const charge = read("supabase/functions/charge-guest/index.ts");
   assert.match(charge, /const brand = propertyBrand\(tenant\);\s+const res = await sendMail\(\{\s+to: resv\.guest_email,\s+fromName: brand\.name,\s+replyTo: brand\.replyTo,/);
-  assert.match(charge, /p\(button\(session\.url, `Pay \$\{money\(amount, tenant\.currency\)\} securely`, brand\)\)/);
+  assert.match(charge, /p\(button\(session\.url, `Pay \$\{money\(split\.total_cents, tenant\.currency\)\} securely`, brand\)\)/);
   const daily = read("supabase/functions/daily-jobs/index.ts");
   assert.match(daily, /to: r\.guest_email,\s+fromName: brand\.name,\s+replyTo: brand\.replyTo,/, "check-in/check-out reminders");
   const email = read("supabase/functions/_shared/email.ts");

@@ -20,14 +20,18 @@
 // Destination charges: Stripe does not allow direct charges on Express accounts
 // for new platforms, so intents live on the platform with
 // transfer_data.destination = the property's account and on_behalf_of = that
-// account (it is the merchant of record). No platform fee: the property
-// receives every cent; SimpleHotelier covers Stripe's processing fee.
+// account (it is the merchant of record). Card fees (_shared/card-fee.js): the
+// property pays Stripe's fee through an application fee that covers exactly
+// that, and by default adds it to the guest's payment as a card processing
+// fee. amount_cents is always the part that pays the booking; fee_cents is
+// the guest's card fee on top, kept in the intent's metadata.
 // Deploy: supabase functions deploy charge-guest
 // deno-lint-ignore-file no-explicit-any
 import { createClient, Stripe } from "../_shared/deps.ts";
 import { withCors } from "../_shared/cors.ts";
 import { appOrigin, callerUser, memberRole } from "../_shared/guard.ts";
 import { ensureCustomer, saveCardFromIntent } from "../_shared/cards.ts";
+import { cardCharge, refundFee } from "../_shared/card-fee.js";
 import { sendMail, emailShell, kv, p, esc, money, fmtDate, emailConfigured, propertyBrand, button } from "../_shared/email.ts";
 import { logError } from "../_shared/errors.ts";
 
@@ -47,15 +51,18 @@ class Refusal extends Error {
   constructor(message: string, public status = 400) { super(message); }
 }
 
-/* Status comes from Stripe itself, never the browser; recording is idempotent. */
+/* Status comes from Stripe itself, never the browser; recording is idempotent.
+   The booking is credited with what was charged minus the guest's card fee. */
 async function recordIfSucceeded(intent: any, reservationId?: string, kind?: string) {
   if (!intent || intent.status !== "succeeded") return false;
+  const fee = Math.max(0, Number(intent.metadata?.fee_cents) || 0);
   const { error } = await admin.rpc("record_stripe_payment", {
     p_intent: intent.id,
     p_reservation: reservationId || intent.metadata?.reservation_id || null,
-    p_amount_cents: intent.amount_received || intent.amount,
+    p_amount_cents: (intent.amount_received || intent.amount) - fee,
     p_description: intent.description || null,
     p_kind: kind || intent.metadata?.kind || null,
+    p_fee_cents: fee,
   });
   if (error) throw new Error(error.message);
   return true; // recorded now, or already recorded earlier
@@ -81,6 +88,13 @@ function outstanding(resv: any) {
   return Math.max(0, (resv.total_cents || 0) - (resv.paid_cents || 0));
 }
 
+/* A guest card fee is only added when the screen asking for the charge shows
+   it (show_fee); an older cached page gets none, so the property absorbs it
+   and no guest is ever charged a fee they weren't shown. */
+function feeMode(tenant: any, body: any) {
+  return body.show_fee === true ? tenant.card_fee_mode : "property";
+}
+
 function checkAmount(raw: unknown, max: number) {
   const amount = Math.round(Number(raw));
   if (!Number.isFinite(amount) || amount < MIN_CARD_CENTS) throw new Refusal("Card payments must be at least $0.50");
@@ -102,6 +116,8 @@ async function deposit(tenant: any, body: any) {
   const pct = Math.min(100, Math.max(1, Number(tenant.deposit_percent) || 25));
   const amount = Math.round(((resv.total_cents || 0) * pct) / 100);
   if (amount < MIN_CARD_CENTS) throw new Refusal("deposit amount is too small to charge by card");
+  const split = cardCharge(amount, feeMode(tenant, body));
+  const reply = (intent: any) => ({ client_secret: intent.client_secret, payment_intent_id: intent.id, amount_cents: amount, fee_cents: split.fee_cents, total_cents: split.total_cents });
 
   // Reuse this booking's open deposit intent (double clicks, page reloads).
   const { data: open } = await admin.from("transactions").select("stripe_payment_intent_id")
@@ -109,28 +125,27 @@ async function deposit(tenant: any, body: any) {
     .order("created_at", { ascending: false }).limit(1);
   if (open && open[0]) {
     const existing = await stripe.paymentIntents.retrieve(String(open[0].stripe_payment_intent_id));
-    if (existing.amount === amount && OPEN_STATUSES.includes(existing.status)) {
-      return { client_secret: existing.client_secret, payment_intent_id: existing.id, amount_cents: amount };
-    }
+    if (existing.amount === split.total_cents && OPEN_STATUSES.includes(existing.status)) return reply(existing);
   }
 
   const customer = await ensureCustomer(stripe, admin, resv, tenant.id);
   const description = `Booking deposit · ${resv.confirmation_code}${resv.rooms?.name ? " · " + resv.rooms.name : ""}`;
   const intent = await stripe.paymentIntents.create({
-    amount,
+    amount: split.total_cents,
     currency: (tenant.currency ?? "usd").toLowerCase(),
     description,
     customer,
     setup_future_usage: "off_session", // the front desk can charge the balance later
     transfer_data: { destination: tenant.stripe_account_id },
     on_behalf_of: tenant.stripe_account_id,
-    metadata: { tenant_id: tenant.id, reservation_id: resv.id, kind: "deposit" },
+    application_fee_amount: split.application_fee_cents,
+    metadata: { tenant_id: tenant.id, reservation_id: resv.id, kind: "deposit", fee_cents: String(split.fee_cents) },
   });
   await admin.from("transactions").insert({
     tenant_id: tenant.id, reservation_id: resv.id, description, method: "card", status: "pending",
-    amount_cents: amount, stripe_payment_intent_id: intent.id, kind: "deposit",
+    amount_cents: amount, fee_cents: split.fee_cents, stripe_payment_intent_id: intent.id, kind: "deposit",
   });
-  return { client_secret: intent.client_secret, payment_intent_id: intent.id, amount_cents: amount };
+  return reply(intent);
 }
 
 async function confirm(tenant: any, body: any) {
@@ -188,11 +203,12 @@ async function chargeCard(req: Request, tenant: any, body: any) {
     throw new Refusal("No card on file for this booking. Send the guest a payment request instead.", 409);
   }
   const amount = checkAmount(body.amount_cents, outstanding(resv));
+  const split = cardCharge(amount, feeMode(tenant, body));
   const description = `${resv.confirmation_code} · Card charge${resv.rooms?.name ? " · " + resv.rooms.name : ""}`;
   let intent: any;
   try {
     intent = await stripe.paymentIntents.create({
-      amount,
+      amount: split.total_cents,
       currency: (tenant.currency ?? "usd").toLowerCase(),
       description,
       customer: resv.stripe_customer_id,
@@ -201,7 +217,8 @@ async function chargeCard(req: Request, tenant: any, body: any) {
       confirm: true,
       transfer_data: { destination: tenant.stripe_account_id },
       on_behalf_of: tenant.stripe_account_id,
-      metadata: { tenant_id: tenant.id, reservation_id: resv.id, kind: "charge", by: user.id },
+      application_fee_amount: split.application_fee_cents,
+      metadata: { tenant_id: tenant.id, reservation_id: resv.id, kind: "charge", by: user.id, fee_cents: String(split.fee_cents) },
     });
   } catch (e: any) {
     // Declines and "authentication required" come back as card errors with
@@ -216,7 +233,7 @@ async function chargeCard(req: Request, tenant: any, body: any) {
   }
   const paid = await recordIfSucceeded(intent, resv.id, "charge");
   if (!paid) throw new Refusal(`The charge did not complete (status: ${intent.status}). Try a payment request.`, 402);
-  return { paid: true, amount_cents: amount, payment_intent_id: intent.id };
+  return { paid: true, amount_cents: amount, fee_cents: split.fee_cents, total_cents: split.total_cents, payment_intent_id: intent.id };
 }
 
 async function paymentRequest(req: Request, tenant: any, body: any) {
@@ -224,30 +241,36 @@ async function paymentRequest(req: Request, tenant: any, body: any) {
   if (!tenant.stripe_onboarding_complete) throw new Refusal("Finish Stripe setup in Settings before requesting card payments");
   const resv = await loadReservation(tenant.id, String(body.reservation_id || ""));
   const amount = checkAmount(body.amount_cents, outstanding(resv));
+  const split = cardCharge(amount, feeMode(tenant, body));
+  const currency = (tenant.currency ?? "usd").toLowerCase();
   const customer = await ensureCustomer(stripe, admin, resv, tenant.id);
   const site = appOrigin(req.headers.get("origin"));
   const back = `${site}/book.html?property=${encodeURIComponent(tenant.slug)}`;
   const description = `${resv.confirmation_code} · Payment request`;
-  const metadata = { tenant_id: tenant.id, reservation_id: resv.id, kind: "payment_request" };
+  const metadata = { tenant_id: tenant.id, reservation_id: resv.id, kind: "payment_request", fee_cents: String(split.fee_cents) };
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     customer,
     line_items: [{
       quantity: 1,
       price_data: {
-        currency: (tenant.currency ?? "usd").toLowerCase(),
+        currency,
         unit_amount: amount,
         product_data: {
           name: `${tenant.name} · Booking ${resv.confirmation_code}`,
           description: `${fmtDate(resv.check_in)} – ${fmtDate(resv.check_out)}${resv.rooms?.name ? " · " + resv.rooms.name : ""}`,
         },
       },
-    }],
+    }, ...(split.fee_cents > 0 ? [{
+      quantity: 1,
+      price_data: { currency, unit_amount: split.fee_cents, product_data: { name: "Card processing fee" } },
+    }] : [])],
     payment_intent_data: {
       description,
       setup_future_usage: "off_session",
       transfer_data: { destination: tenant.stripe_account_id },
       on_behalf_of: tenant.stripe_account_id,
+      application_fee_amount: split.application_fee_cents,
       metadata,
     },
     metadata,
@@ -265,14 +288,17 @@ async function paymentRequest(req: Request, tenant: any, body: any) {
       subject: `Payment request · ${resv.confirmation_code} · ${tenant.name}`,
       html: emailShell("Payment request",
         p(`Hi ${esc(String(resv.guest_name || "").trim().split(/\s+/)[0] || "there")},`) +
-        p(`<strong>${esc(tenant.name)}</strong> has requested a payment of <strong>${esc(money(amount, tenant.currency))}</strong> for your booking.`) +
-        kv([["Confirmation code", resv.confirmation_code], ["Check-in", fmtDate(resv.check_in)], ["Check-out", fmtDate(resv.check_out)], ["Amount", money(amount, tenant.currency)]]) +
-        p(button(session.url, `Pay ${money(amount, tenant.currency)} securely`, brand)),
+        p(`<strong>${esc(tenant.name)}</strong> has requested a payment of <strong>${esc(money(split.total_cents, tenant.currency))}</strong> for your booking.`) +
+        kv([["Confirmation code", resv.confirmation_code], ["Check-in", fmtDate(resv.check_in)], ["Check-out", fmtDate(resv.check_out)],
+          ...(split.fee_cents > 0
+            ? [["Toward your booking", money(amount, tenant.currency)], ["Card processing fee", money(split.fee_cents, tenant.currency)], ["Total", money(split.total_cents, tenant.currency)]] as [string, string][]
+            : [["Amount", money(amount, tenant.currency)]] as [string, string][])]) +
+        p(button(session.url, `Pay ${money(split.total_cents, tenant.currency)} securely`, brand)),
         `Payments are processed securely by Stripe. The link works for 24 hours.${brand.replyTo ? " Questions? Just reply to this email." : ""}`, brand)
     }).catch(() => ({ sent: false }));
     emailed = !!res.sent;
   }
-  return { url: session.url, emailed, amount_cents: amount };
+  return { url: session.url, emailed, amount_cents: amount, fee_cents: split.fee_cents, total_cents: split.total_cents };
 }
 
 async function refund(req: Request, tenant: any, body: any) {
@@ -282,20 +308,24 @@ async function refund(req: Request, tenant: any, body: any) {
   if (!txn || !txn.stripe_payment_intent_id || txn.amount_cents <= 0 || !["paid", "refunded"].includes(txn.status)) {
     throw new Refusal("Only card payments can be refunded here", 409);
   }
-  const { data: done } = await admin.from("transactions").select("amount_cents").eq("parent_id", txn.id).eq("kind", "refund");
-  const refundable = txn.amount_cents + (done || []).reduce((s: number, r: any) => s + (r.amount_cents || 0), 0);
+  const { data: done } = await admin.from("transactions").select("amount_cents, fee_cents").eq("parent_id", txn.id).eq("kind", "refund");
+  const refunded = -(done || []).reduce((s: number, r: any) => s + (r.amount_cents || 0), 0);
+  const feeRefunded = -(done || []).reduce((s: number, r: any) => s + (r.fee_cents || 0), 0);
+  const refundable = txn.amount_cents - refunded;
   if (refundable <= 0) throw new Refusal("This payment has already been refunded", 409);
   const amount = body.amount_cents == null ? refundable : Math.round(Number(body.amount_cents));
   if (!Number.isFinite(amount) || amount < 1 || amount > refundable) throw new Refusal(`Refund between $0.01 and ${money(refundable)}`);
+  // Card rules: the guest's card fee goes back in proportion to the refund.
+  const fee = refundFee(txn, amount, refunded, feeRefunded);
   const r = await stripe.refunds.create({
     payment_intent: txn.stripe_payment_intent_id,
-    amount,
+    amount: amount + fee,
     reverse_transfer: true, // pull the money back from the property's Stripe balance
-    metadata: { tenant_id: tenant.id, reservation_id: txn.reservation_id || "" },
+    metadata: { tenant_id: tenant.id, reservation_id: txn.reservation_id || "", fee_cents: String(fee) },
   });
-  const { error } = await admin.rpc("record_stripe_refund", { p_refund_id: r.id, p_intent: txn.stripe_payment_intent_id, p_amount_cents: amount });
+  const { error } = await admin.rpc("record_stripe_refund", { p_refund_id: r.id, p_intent: txn.stripe_payment_intent_id, p_amount_cents: amount + fee });
   if (error) throw new Error(error.message);
-  return { refunded: true, amount_cents: amount, status: r.status };
+  return { refunded: true, amount_cents: amount, fee_cents: fee, total_cents: amount + fee, status: r.status };
 }
 
 Deno.serve(withCors(async (req) => {
@@ -305,7 +335,7 @@ Deno.serve(withCors(async (req) => {
     const tenantId = String(body.tenant_id || "");
     if (!tenantId) return json({ error: "tenant_id required" }, 400);
     const { data: tenant } = await admin.from("tenants")
-      .select("id, name, slug, currency, stripe_account_id, stripe_onboarding_complete, deposit_enabled, deposit_percent, logo_url, booking_theme, contact_email, booking_email, enquiry_email, contact_phone, phone, address_line1, city, state, postcode, website_url")
+      .select("id, name, slug, currency, card_fee_mode, stripe_account_id, stripe_onboarding_complete, deposit_enabled, deposit_percent, logo_url, booking_theme, contact_email, booking_email, enquiry_email, contact_phone, phone, address_line1, city, state, postcode, website_url")
       .eq("id", tenantId).maybeSingle();
     if (!tenant?.stripe_account_id) return json({ error: "property has not connected Stripe" }, 400);
 

@@ -34,5 +34,23 @@
     return part ? part.value : code(currency);
   }
 
-  window.SHMoney = { CURRENCIES, code, format, symbol };
+  /* Card processing fee on a guest card payment, in cents. Same numbers and
+     rounding as supabase/functions/_shared/card-fee.js, which decides what is
+     actually charged; this copy only previews it. mode "guest": the fee is
+     added on top (capped at 3%); "property": the property absorbs it. */
+  const CARD_FEE = { percent: 2.9, fixedCents: 30, maxPercent: 3 };
+  const stripeFee = (total) => Math.round(total * CARD_FEE.percent / 100 + CARD_FEE.fixedCents);
+  function cardCharge(amountCents, mode) {
+    const amount = Math.max(0, Math.round(Number(amountCents) || 0));
+    let fee = 0;
+    if (mode !== "property" && amount > 0) {
+      let total = Math.ceil((amount + CARD_FEE.fixedCents) / (1 - CARD_FEE.percent / 100));
+      while (total - 1 - stripeFee(total - 1) >= amount) total--;
+      while (total - stripeFee(total) < amount) total++;
+      fee = Math.max(0, Math.min(total - amount, Math.floor(amount * CARD_FEE.maxPercent / 100)));
+    }
+    return { amount_cents: amount, fee_cents: fee, total_cents: amount + fee };
+  }
+
+  window.SHMoney = { CURRENCIES, code, format, symbol, CARD_FEE, cardCharge };
 })();

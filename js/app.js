@@ -2046,8 +2046,9 @@ document.addEventListener("click", (e) => {
         booking_by_type: !!($("#bkByType") && $("#bkByType").checked),
         ...($("#bkAddressMode") ? { guest_address_mode: $("#bkAddressMode").value } : {}),
         deposit_enabled: !!($("#bkDepositOn") && $("#bkDepositOn").checked),
-        deposit_percent: Math.min(100, Math.max(1, parseInt($("#bkDepositPct") ? $("#bkDepositPct").value : "25", 10) || 25))
-      }).then(() => { if (liveTenant) { liveTenant.booking_headline = $("#bkHead").value.trim() || liveTenant.booking_headline; liveTenant.deposit_enabled = !!($("#bkDepositOn") && $("#bkDepositOn").checked); } renderSetupUI(); updateEmbed({ slug: slugVal }); toast("Booking page published", "Settings saved to Supabase", "ok"); })
+        deposit_percent: Math.min(100, Math.max(1, parseInt($("#bkDepositPct") ? $("#bkDepositPct").value : "25", 10) || 25)),
+        ...($("#bkCardFee") ? { card_fee_mode: $("#bkCardFee").checked ? "guest" : "property" } : {})
+      }).then(() => { if (liveTenant) { if ($("#bkCardFee")) liveTenant.card_fee_mode = $("#bkCardFee").checked ? "guest" : "property"; liveTenant.booking_headline = $("#bkHead").value.trim() || liveTenant.booking_headline; liveTenant.deposit_enabled = !!($("#bkDepositOn") && $("#bkDepositOn").checked); } renderSetupUI(); updateEmbed({ slug: slugVal }); toast("Booking page published", "Settings saved to Supabase", "ok"); })
         .catch(() => toast("Could not save settings", "Apply the booking migration (20261027000000), then retry", "warn"));
     } else {
       toast("Booking page published", $("#bkUrl").value, "ok");
@@ -2744,6 +2745,7 @@ function loadLiveIntoUI() {
     if (live.tenant.hero_focus_y != null) studioHeroFocus.y = Math.min(100, Math.max(0, Number(live.tenant.hero_focus_y) || 0));
     applyStudioPreview();
     if ($("#bkDepositOn")) $("#bkDepositOn").checked = !!live.tenant.deposit_enabled;
+    if ($("#bkCardFee")) $("#bkCardFee").checked = live.tenant.card_fee_mode !== "property";
     if ($("#bkByType")) $("#bkByType").checked = live.tenant.booking_by_type !== false;
     if ($("#bkAddressMode")) $("#bkAddressMode").value = live.tenant.guest_address_mode || "off";
     if ($("#bkDepositPct") && live.tenant.deposit_percent) $("#bkDepositPct").value = live.tenant.deposit_percent;

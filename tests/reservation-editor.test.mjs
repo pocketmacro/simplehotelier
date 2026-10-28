@@ -54,8 +54,10 @@ test("card charges use the card on file through charge-guest; cash is recorded, 
   assert.match(rxjs, /no card is charged/i);
 });
 
-test("charge-guest: card on file, payment links, refunds; no platform fee", () => {
-  assert.doesNotMatch(charge, /application_fee_amount/, "properties keep every cent");
+test("charge-guest: card on file, payment links, refunds; the property pays Stripe's fee", () => {
+  // Every guest charge carries an application fee that covers Stripe's fee
+  // and nothing more (tests/card-fees.test.mjs checks the amounts).
+  assert.equal((charge.match(/application_fee_amount: split\.application_fee_cents/g) || []).length, 3, "deposit, card on file, payment link");
   assert.match(charge, /setup_future_usage: "off_session"/);
   assert.match(charge, /off_session: true,\s*confirm: true/);
   assert.match(charge, /checkAmount\(body\.amount_cents, outstanding\(resv\)\)/, "staff amounts capped at the balance");
