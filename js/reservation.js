@@ -140,8 +140,8 @@ function rxRender() {
 
   <div class="rx-top" data-pane="details"${rx.tab === "details" ? "" : " hidden"}>
     <div class="rx-dates">
-      <div class="field"><label for="rx-checkIn">Check in</label><input class="input" type="date" id="rx-checkIn" data-rx-field="checkIn" value="${esc(f.checkIn)}"${dis}></div>
-      <div class="field"><label for="rx-checkOut">Check out</label><input class="input" type="date" id="rx-checkOut" data-rx-field="checkOut" value="${esc(f.checkOut)}"${dis}></div>
+      <div class="field"><label for="rx-checkIn">Check in</label><input class="input" type="date" id="rx-checkIn" data-rx-field="checkIn" data-pk-end="rx-checkOut" value="${esc(f.checkIn)}"${dis}></div>
+      <div class="field"><label for="rx-checkOut">Check out</label><input class="input" type="date" id="rx-checkOut" data-rx-field="checkOut" data-pk-start="rx-checkIn" data-pk-gap="1" value="${esc(f.checkOut)}"${dis}></div>
       ${isNew ? "" : `<label class="check-item rx-keep"><input type="checkbox" data-rx-field="keepRates"${f.keepRates ? " checked" : ""}${dis}><span>Keep rates for existing dates</span></label>`}
       <div class="rx-stay"><span>Length of stay <b id="rxNightsText"></b></span><span>Booking status <b id="rxStatusText"></b></span></div>
     </div>

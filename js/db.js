@@ -76,7 +76,10 @@
       err.details = (data && data.details) || "";
       throw err;
     }
-    return res.status === 204 ? null : res.json();
+    // No body to read: 204, or a 201 for a write that asked for none
+    // (Prefer: return=minimal, e.g. bulk rate updates). It succeeded.
+    const minimal = /return=minimal/.test((opts.headers && opts.headers.Prefer) || "");
+    return res.status === 204 || (res.status === 201 && minimal) ? null : res.json();
   }
 
   /* PostgREST answers at most 1000 rows per request (the project's max_rows)

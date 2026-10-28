@@ -392,9 +392,9 @@
               <option value="month">This month</option><option value="lastmonth">Last month</option><option value="next30">Next 30 days</option>
               <option value="year">This year</option><option value="lastyear">Last year</option><option value="all">All time</option><option value="custom">Custom dates</option>
             </select>
-            <input class="input" type="date" id="repFrom" aria-label="From">
+            <input class="input" type="date" id="repFrom" aria-label="From" data-pk-end="repTo">
             <span class="rep-to" aria-hidden="true">to</span>
-            <input class="input" type="date" id="repTo" aria-label="To">
+            <input class="input" type="date" id="repTo" aria-label="To" data-pk-start="repFrom" data-pk-gap="0">
           </div>
           <div class="rep-range" id="repDayBar" hidden><input class="input" type="date" id="repDay" aria-label="Day"></div>
           <button class="btn btn-ghost" type="button" data-action="export">Export CSV</button>
@@ -615,8 +615,8 @@
               </div>
               <div class="field"><label>Number of stars</label><select class="select" id="pfStars"><option value="">Not set</option><option value="1">1 ★</option><option value="2">2 ★★</option><option value="3">3 ★★★</option><option value="4">4 ★★★★</option><option value="5">5 ★★★★★</option></select></div>
               <div class="form-2">
-                <div class="field"><label>Check-in</label><input class="input" id="pfCheckIn" value="3:00 PM"></div>
-                <div class="field"><label>Check-out</label><input class="input" id="pfCheckOut" value="11:00 AM"></div>
+                <div class="field"><label for="pfCheckIn">Check-in</label><input class="input" id="pfCheckIn" data-picker="time" autocomplete="off" value="3:00 PM"></div>
+                <div class="field"><label for="pfCheckOut">Check-out</label><input class="input" id="pfCheckOut" data-picker="time" autocomplete="off" value="11:00 AM"></div>
               </div>
               <div class="field"><label>Cancellation policy</label><select class="select" id="pfPolicy"><option>Moderate — full refund to 7 days</option><option>Flexible — full refund to 48 hours</option><option>Strict — 50% refund to 14 days</option><option>Custom — write your own</option></select></div>
               <div class="field" id="pfPolicyCustomWrap" hidden><label>Your cancellation policy</label><textarea class="textarea" id="pfPolicyText" rows="3" placeholder="e.g. You can cancel your reservation up to 30 days before your stay, but you won't receive a refund if you cancel after that."></textarea><span class="help">Shown word-for-word on your booking page before guests book.</span></div>
@@ -776,6 +776,7 @@
 <script src="js/app.js"></script>
 <script src="js/reservation.js"></script>
 <script src="js/reports.js"></script>
+<script src="js/pickers.js"></script>
 <script src="js/support.js"></script>
 </body>
 </html>

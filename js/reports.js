@@ -710,7 +710,7 @@ function repPaymentRows(a) {
 let repSeq = 0, repLast = null;
 const repActive = () => !!document.querySelector("#view-reports.active");
 function repSubtitle(meta) {
-  if (meta.range === "range") return `${meta.sub} · ${dstr(new Date(repState.from + "T12:00:00"))} – ${dstr(new Date(repState.to + "T12:00:00"))}${repState.preset === "all" || repState.from.slice(0, 4) !== repState.to.slice(0, 4) ? `, ${repState.to.slice(0, 4)}` : ""}`;
+  if (meta.range === "range") return `${meta.sub} · ${dstr(new Date(repState.from + "T12:00:00"))} – ${dstr(new Date(repState.to + "T12:00:00"))}${repState.preset === "all" || repState.from.slice(0, 4) !== repState.to.slice(0, 4) || repState.to.slice(0, 4) !== String(TODAY.getFullYear()) ? `, ${repState.to.slice(0, 4)}` : ""}`;
   if (meta.range === "day") return `${meta.sub} · ${new Date(repState.day + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`;
   return meta.sub;
 }

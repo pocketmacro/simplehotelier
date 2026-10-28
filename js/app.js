@@ -1171,8 +1171,8 @@ function openBulkUpdater() {
       <div class="bulk-grid">
         <div class="bulk-col">
           <h4>When?</h4>
-          <div class="field"><label>From</label><input class="input" id="buFrom" type="date" value="${todayIso}"></div>
-          <div class="field"><label>To</label><input class="input" id="buTo" type="date" value="${todayIso}"></div>
+          <div class="field"><label for="buFrom">From</label><input class="input" id="buFrom" type="date" value="${todayIso}" data-pk-end="buTo"></div>
+          <div class="field"><label for="buTo">To</label><input class="input" id="buTo" type="date" value="${todayIso}" data-pk-start="buFrom" data-pk-gap="0"></div>
           <h4 style="margin-top:14px">Which days?</h4>
           <div id="buDays">${dow.map((d, i) => `<label class="check-item"><input type="checkbox" class="bu-dow" value="${i}" checked><span>${d}</span></label>`).join("")}</div>
           <div style="display:flex;gap:6px;margin-top:10px">
