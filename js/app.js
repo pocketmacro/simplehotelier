@@ -2325,6 +2325,11 @@ $("#globalSearch").addEventListener("keydown", (e) => {
 });
 
 /* ---------------- Boot ---------------- */
+/* A real account never sees the sample property: its data starts empty and
+   the page keeps its loading state (body.booting, set in app.html) until
+   loadLiveIntoUI() has the property. Demo mode and a copy without a backend
+   show the sample data straight away. */
+if (!demoMode() && window.SHDB && SHDB.configured()) clearAllData();
 renderToday(); renderMiniRooms(); renderReservations(); renderCalendar();
 renderRooms(); renderHK(); renderMaintenance(); renderIcal(); renderFolios(); renderTxns();
 renderAddons(); renderTaxes(); renderReports(); renderOverview(); renderRateMgmt();
@@ -2676,30 +2681,49 @@ document.addEventListener("click", (e) => {
   try { sessionStorage.removeItem("sh_demo"); } catch { /* no storage */ }
   location.reload();
 });
+/* Leave the loading state: the screen now shows what it should. */
+function endBoot() { document.body.classList.remove("booting"); }
+/* No property loaded (signed out, signed in without one yet, or a failed
+   load): the page's sample names (Pinecrest Cabins, Maya Keller) must not
+   show either. Demo mode reloads the page, which brings them back. */
+function clearSamplePlaceholders(user) {
+  const set = (id, text) => { const el = $(id); if (el) el.textContent = text; };
+  set("#propNameSide", "No property yet"); set("#propSubSide", "");
+  set("#userName", user ? user.email : "Not signed in"); set("#userRole", user ? "Set up your property" : "");
+  set("#userAvatar", ((user && user.email) || "?").slice(0, 2).toUpperCase());
+  ["#pfName", "#bkName", "#bkUrl"].forEach((id) => { const el = $(id); if (el) el.value = ""; });
+}
 /* Live Supabase data for the signed-in member's property only. */
 function loadLiveIntoUI() {
   const statusEl = $("#dbStatus");
   renderDemoBanner();
   if (demoMode()) {
     if (statusEl) statusEl.textContent = "Data source: demo data (sample property — nothing here is real, saved, or connected to an account)";
+    endBoot();
     return;
   }
   if (!window.SHDB || !SHDB.configured()) {
     if (statusEl) statusEl.textContent = "Data source: demo data (add your Supabase keys in js/config.js)";
+    endBoot();
     return;
   }
+  document.body.classList.add("booting"); // also after signing in: no half-filled screen
   SHDB.loadLiveData().then((live) => {
     if (!live) {
       // Configured backend failed: show nothing rather than sample data on
       // what may be a real account's screen.
       clearAllData();
+      clearSamplePlaceholders(null);
       renderAll();
       if (statusEl) statusEl.textContent = "Could not load your property data — check your connection and reload. No sample data is shown on a real account.";
+      endBoot();
       return;
     }
     if (!live.tenant) {
       clearAllData();
+      clearSamplePlaceholders(live.user);
       renderAll();
+      endBoot();
       if (!live.user) {
         // Anonymous: the login gate handles sign-in / explicit demo entry.
         if (statusEl) statusEl.textContent = "Sign in to load your property.";
@@ -2831,6 +2855,12 @@ function loadLiveIntoUI() {
         setTimeout(() => toast("One step left: start your free trial", `Add a card in Settings → Plan and billing · ${SITE.plan.trialDays} days free, then ${planPrice()}`, "warn"), 900);
       }
     }
+    endBoot(); // after routing, so the first screen shown is the right one
+  }).catch((e) => {
+    // A bug while filling the screen: never stay stuck on "Loading". The
+    // sample data was cleared at boot, so whatever shows is the property's.
+    endBoot();
+    if (window.SHReportError) window.SHReportError(e, "dashboard load");
   });
 }
 /* Refresh / bookmark: show the screen named in the URL straight away; its

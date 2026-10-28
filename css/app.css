@@ -157,6 +157,16 @@ button { font-family: inherit; }
 .menu-btn { display: none; }
 
 .content { padding: 26px 28px 60px; max-width: 1240px; width: 100%; margin: 0 auto; }
+/* Opening the app: until the signed-in property has loaded (endBoot() in
+   js/app.js), its data areas stay hidden, so neither the sample property nor
+   the page's placeholders flash before the real figures. */
+.boot-loader { display: none; }
+body.booting .content { position: relative; }
+body.booting .content > .view, body.booting .prop-text, body.booting .user-chip, body.booting .onboard-mini { visibility: hidden; }
+body.booting .boot-loader { display: flex; align-items: center; justify-content: center; gap: 10px; position: absolute; inset: 0 0 auto; padding-top: 18vh; color: var(--muted); font-size: 14px; }
+.boot-spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--brand); animation: boot-spin .8s linear infinite; }
+@keyframes boot-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .boot-spin { animation: none; } }
 .view { display: none; }
 .view.active { display: block; }
 .view-head { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
