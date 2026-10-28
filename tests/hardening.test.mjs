@@ -43,7 +43,7 @@ test("every response gets the baseline security headers", () => {
 });
 
 test("each page (and its pretty URL) has a CSP; no inline script is allowed anywhere", () => {
-  for (const [a, b] of [["/book.html", "/book"], ["/app.html", "/app"], ["/index.html", "/"]]) {
+  for (const [a, b] of [["/book.html", "/book"], ["/app.html", "/app"], ["/index.html", "/"], ["/terms.html", "/terms"], ["/privacy.html", "/privacy"]]) {
     assert.deepEqual(csp(a), csp(b), `${a} and ${b} must match`);
     const p = csp(a);
     assert.ok(!p["script-src"].includes("'unsafe-inline'") && !p["script-src"].includes("'unsafe-eval'"), `${a}: inline/eval script allowed`);
@@ -53,7 +53,7 @@ test("each page (and its pretty URL) has a CSP; no inline script is allowed anyw
 });
 
 test("the dashboard and marketing site cannot be framed; the booking page can (embeds)", () => {
-  for (const path of ["/app.html", "/app", "/index.html", "/"]) {
+  for (const path of ["/app.html", "/app", "/index.html", "/", "/terms", "/terms.html", "/privacy", "/privacy.html"]) {
     assert.deepEqual(csp(path)["frame-ancestors"], ["'none'"], path);
     assert.equal(rules[path]["X-Frame-Options"], "DENY", path);
   }
@@ -74,7 +74,7 @@ test("CSPs allow exactly what each page talks to", () => {
 });
 
 test("HTML pages carry no inline executable scripts or inline event handlers", () => {
-  for (const page of ["index.html", "app.html", "book.html"]) {
+  for (const page of ["index.html", "app.html", "book.html", "terms.html", "privacy.html"]) {
     const html = read(page);
     const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)([^>]*)>/g)].filter((m) => !/application\/ld\+json/.test(m[1]));
     assert.equal(inline.length, 0, `${page}: inline <script>`);

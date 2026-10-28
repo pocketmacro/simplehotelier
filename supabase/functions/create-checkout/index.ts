@@ -1,5 +1,7 @@
-// SimpleHotelier — start the $30/mo subscription for a property (Stripe Checkout).
-// POST { tenant_id, origin } with the user's JWT -> { url }
+// SimpleHotelier — the property's $30/mo subscription.
+// POST { tenant_id, origin } with the user's JWT -> { url } (Stripe Checkout)
+// POST { action: "portal", tenant_id, origin } -> { url } (Stripe Customer
+//   Portal: change card, download invoices, cancel at the end of the period)
 // Secrets: STRIPE_SECRET_KEY, STRIPE_PRICE_ID (recurring $30/mo price).
 // Deploy: supabase functions deploy create-checkout
 // deno-lint-ignore-file no-explicit-any
@@ -10,11 +12,48 @@ import { logError } from "../_shared/errors.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2024-06-20" });
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+const SITE = (Deno.env.get("SITE_URL") || "https://simplehotelier.com").replace(/\/$/, "");
 
 const CORS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+// A subscription in one of these states is still billing: never start a second.
+const LIVE_STATUSES = ["trialing", "active", "past_due", "unpaid"];
+
+/* The portal needs a saved configuration in each Stripe mode (test, live).
+   Ours is created on first use, tagged with a version, so going live needs
+   no dashboard step. Bump PORTAL_VERSION to roll out changed settings. */
+const PORTAL_VERSION = "1";
+let portalConfig: string | null = null;
+async function portalConfiguration() {
+  if (portalConfig) return portalConfig;
+  const list = await stripe.billingPortal.configurations.list({ active: true, limit: 100 });
+  const found = list.data.find((c: any) => c.metadata?.simplehotelier === PORTAL_VERSION);
+  if (found) return (portalConfig = found.id);
+  const made = await stripe.billingPortal.configurations.create({
+    business_profile: {
+      headline: "SimpleHotelier · $30/month, everything included",
+      privacy_policy_url: SITE + "/privacy",
+      terms_of_service_url: SITE + "/terms",
+    },
+    default_return_url: SITE + "/app#settings",
+    features: {
+      customer_update: { enabled: true, allowed_updates: ["email", "name", "address"] },
+      invoice_history: { enabled: true },
+      payment_method_update: { enabled: true },
+      subscription_cancel: {
+        enabled: true,
+        mode: "at_period_end", // keeps working until the paid month (or trial) runs out
+        proration_behavior: "none",
+        cancellation_reason: { enabled: true, options: ["too_expensive", "missing_features", "switched_service", "unused", "other"] },
+      },
+    },
+    metadata: { simplehotelier: PORTAL_VERSION },
+  });
+  return (portalConfig = made.id);
+}
 
 Deno.serve(withCors(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -26,10 +65,8 @@ Deno.serve(withCors(async (req) => {
     const { data: { user } } = await userClient.auth.getUser();
     if (!user) return json({ error: "not signed in" }, 401);
 
-    const { tenant_id, origin } = await req.json();
+    const { tenant_id, origin, action } = await req.json();
     if (!tenant_id) return json({ error: "tenant_id required" }, 400);
-    const price = Deno.env.get("STRIPE_PRICE_ID");
-    if (!price) return json({ error: "billing not configured (STRIPE_PRICE_ID)" }, 501);
 
     // RLS on the user client proves membership; service client writes billing ids.
     const { data: member } = await userClient
@@ -38,8 +75,26 @@ Deno.serve(withCors(async (req) => {
     if (member.role !== "owner" && member.role !== "admin") return json({ error: "Only the property owner or an admin can manage billing" }, 403);
 
     const { data: tenant } = await admin
-      .from("tenants").select("id, name, contact_email, stripe_customer_id").eq("id", tenant_id).single();
+      .from("tenants").select("id, name, contact_email, stripe_customer_id, stripe_subscription_id, subscription_status")
+      .eq("id", tenant_id).single();
     if (!tenant) return json({ error: "property not found" }, 404);
+    const base = appOrigin(origin || req.headers.get("origin"));
+    const hasLiveSub = !!tenant.stripe_subscription_id && LIVE_STATUSES.includes(tenant.subscription_status);
+
+    if (action === "portal") {
+      if (!tenant.stripe_customer_id) return json({ error: "Start your subscription first" }, 409);
+      const session = await stripe.billingPortal.sessions.create({
+        customer: tenant.stripe_customer_id,
+        configuration: await portalConfiguration(),
+        return_url: base + "/app.html?billing=updated#settings",
+      });
+      return json({ url: session.url });
+    }
+
+    const price = Deno.env.get("STRIPE_PRICE_ID");
+    if (!price) return json({ error: "billing not configured (STRIPE_PRICE_ID)" }, 501);
+    // Already subscribed: send them to the portal instead of a second subscription.
+    if (hasLiveSub) return json({ error: "This property already has a subscription", portal: true }, 409);
 
     let customerId = tenant.stripe_customer_id as string | null;
     if (!customerId) {
@@ -52,7 +107,6 @@ Deno.serve(withCors(async (req) => {
       await admin.from("tenants").update({ stripe_customer_id: customerId }).eq("id", tenant.id);
     }
 
-    const base = appOrigin(origin || req.headers.get("origin"));
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
@@ -60,11 +114,15 @@ Deno.serve(withCors(async (req) => {
       success_url: base + "/app.html?checkout=success",
       cancel_url: base + "/app.html?checkout=cancelled",
       metadata: { tenant_id: tenant.id },
-      // Card is required up front; billing starts after a 30-day free trial.
+      // Card is required up front. The 30-day free trial is for a property's
+      // first subscription only, not for each re-subscribe after cancelling.
       payment_method_collection: "always",
-      subscription_data: { trial_period_days: 30, metadata: { tenant_id: tenant.id } },
+      subscription_data: {
+        ...(tenant.stripe_subscription_id ? {} : { trial_period_days: 30 }),
+        metadata: { tenant_id: tenant.id },
+      },
     });
-    return json({ url: session.url });
+    return json({ url: session.url, trial: !tenant.stripe_subscription_id });
   } catch (e: any) {
     console.error("create-checkout", e); await logError("create-checkout", e);
     return json({ error: "create-checkout failed" }, 500);

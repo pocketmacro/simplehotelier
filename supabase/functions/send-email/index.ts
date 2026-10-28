@@ -8,6 +8,9 @@
 //      dashboard's "Email confirmation" button).
 // POST { action: "charge_receipt", reservation_id, payment_intent_id? }
 //   -> emails the guest a receipt for their latest paid transaction.
+// POST { action: "booking_update", reservation_id, change: "cancelled" | "changed" }
+//   -> tells the guest their booking was cancelled, or shows the new details
+//      after a date or room change. Front-desk users only (their JWT).
 // Deploy: supabase functions deploy send-email
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "../_shared/deps.ts";
@@ -64,23 +67,8 @@ async function bookingConfirmation(reservationId: string, force = false) {
 
   const pending = r.status === "pending";
   const property = tenant?.name || "Your property";
-  const balance = (r.total_cents || 0) - (r.paid_cents || 0);
-  const policy = tenant?.cancellation_policy === "custom"
-    ? (tenant?.cancellation_policy_text || "")
-    : (POLICY_TEXT[tenant?.cancellation_policy || "moderate"] || "");
-  const rows: [string, string][] = [
-    ["Confirmation code", r.confirmation_code],
-    ["Property", property],
-    ["Room", room ? `${room.code} · ${room.name}` : ""],
-    ["Check-in", fmtDate(r.check_in)],
-    ["Check-out", fmtDate(r.check_out)],
-    ["Guests", [`${r.adults || 1} adult${(r.adults || 1) === 1 ? "" : "s"}`,
-      r.children ? `${r.children} ${r.children === 1 ? "child" : "children"}` : "",
-      r.infants ? `${r.infants} infant${r.infants === 1 ? "" : "s"}` : ""].filter(Boolean).join(", ")],
-    ...(r.arrival_time ? [["Estimated arrival", String(r.arrival_time)] as [string, string]] : []),
-    ["Total", money(r.total_cents, tenant?.currency)],
-    ...(balance > 0 ? [["Balance due at property", money(balance, tenant?.currency)] as [string, string]] : [["Payment", "Paid in full"] as [string, string]])
-  ];
+  const policy = policyText(tenant);
+  const rows = stayRows(r, tenant, room);
   // Guests see the property (its brand, its contact details) and reply to it.
   const brand = propertyBrand(tenant);
   const guestHtml = emailShell(
@@ -92,9 +80,7 @@ async function bookingConfirmation(reservationId: string, force = false) {
     kv(rows) +
     (policy ? p(`<strong>Cancellation policy:</strong> ${esc(policy)}`) : "") +
     (tenant?.rental_terms ? p(`<strong>Good to know:</strong> ${esc(String(tenant.rental_terms).slice(0, 600))}`) : ""),
-    brand.replyTo || brand.phone
-      ? `Questions about your stay? ${brand.replyTo ? "Just reply to this email" : `Call ${esc(property)}`}${brand.phone ? `${brand.replyTo ? " or call" : " at"} ${esc(brand.phone)}` : ""}.`
-      : "",
+    guestFooter(brand, property),
     brand
   );
   const guest = await sendMail({
@@ -120,6 +106,79 @@ async function bookingConfirmation(reservationId: string, force = false) {
     ownerSent = !!res.sent;
   }
   return json({ sent: guest.sent, ownerNotified: ownerSent });
+}
+
+function policyText(tenant: any) {
+  return tenant?.cancellation_policy === "custom"
+    ? (tenant?.cancellation_policy_text || "")
+    : (POLICY_TEXT[tenant?.cancellation_policy || "moderate"] || "");
+}
+
+// The stay as the guest sees it: dates, room, party and money.
+function stayRows(r: any, tenant: any, room: any): [string, string][] {
+  const property = tenant?.name || "Your property";
+  const balance = (r.total_cents || 0) - (r.paid_cents || 0);
+  return [
+    ["Confirmation code", r.confirmation_code],
+    ["Property", property],
+    ["Room", room ? `${room.code} · ${room.name}` : ""],
+    ["Check-in", fmtDate(r.check_in)],
+    ["Check-out", fmtDate(r.check_out)],
+    ["Guests", [`${r.adults || 1} adult${(r.adults || 1) === 1 ? "" : "s"}`,
+      r.children ? `${r.children} ${r.children === 1 ? "child" : "children"}` : "",
+      r.infants ? `${r.infants} infant${r.infants === 1 ? "" : "s"}` : ""].filter(Boolean).join(", ")],
+    ...(r.arrival_time ? [["Estimated arrival", String(r.arrival_time)] as [string, string]] : []),
+    ["Total", money(r.total_cents, tenant?.currency)],
+    ...(balance > 0 ? [["Balance due at property", money(balance, tenant?.currency)] as [string, string]] : [["Payment", "Paid in full"] as [string, string]])
+  ];
+}
+
+function guestFooter(brand: any, property: string) {
+  return brand.replyTo || brand.phone
+    ? `Questions about your stay? ${brand.replyTo ? "Just reply to this email" : `Call ${esc(property)}`}${brand.phone ? `${brand.replyTo ? " or call" : " at"} ${esc(brand.phone)}` : ""}.`
+    : "";
+}
+
+/* The front desk cancelled the booking, or moved its dates or room: tell the
+   guest, from the property, with the booking as it now stands. */
+async function bookingUpdate(reservationId: string, change: string) {
+  const loaded = await loadReservation(reservationId);
+  if (!loaded) return json({ error: "reservation not found" }, 404);
+  const { r, tenant, room } = loaded;
+  if (!r.guest_email) return json({ sent: false, reason: "guest has no email" });
+  if (!emailConfigured()) return json({ sent: false, reason: "email not configured" }, 503);
+  // Only news that matches the booking as saved: no "cancelled" email for a
+  // live booking, no "new details" for a cancelled one.
+  if ((change === "cancelled") !== (r.status === "cancelled")) return json({ sent: false, reason: "booking status doesn't match" }, 409);
+
+  const property = tenant?.name || "Your property";
+  const brand = propertyBrand(tenant);
+  const cancelled = change === "cancelled";
+  const paid = r.paid_cents || 0;
+  const policy = policyText(tenant);
+  const body = cancelled
+    ? p(`Hi ${esc(firstName(r.guest_name))},`) +
+      p(`Your booking at <strong>${esc(property)}</strong> has been cancelled.`) +
+      kv([
+        ["Confirmation code", r.confirmation_code],
+        ["Room", room ? `${room.code} · ${room.name}` : ""],
+        ["Check-in", fmtDate(r.check_in)],
+        ["Check-out", fmtDate(r.check_out)],
+        ...(paid > 0 ? [["Paid so far", money(paid, tenant?.currency)] as [string, string]] : [])
+      ]) +
+      (paid > 0 ? p(`Any refund follows the property's cancellation policy${policy ? `: ${esc(policy)}` : "."} Refunds to a card usually take 5–10 business days to appear.`) : "") +
+      p(`If you didn't expect this, please contact ${esc(property)} right away.`)
+    : p(`Hi ${esc(firstName(r.guest_name))},`) +
+      p(`<strong>${esc(property)}</strong> has updated your booking. Here are the details as they stand now. Please check the dates, and get in touch if anything looks wrong.`) +
+      kv(stayRows(r, tenant, room));
+  const res = await sendMail({
+    to: r.guest_email,
+    subject: `${cancelled ? "Booking cancelled" : "Booking updated"} · ${r.confirmation_code} · ${property}`,
+    html: emailShell(cancelled ? "Booking cancelled" : "Your booking has changed", body, guestFooter(brand, property), brand),
+    fromName: brand.name,
+    replyTo: brand.replyTo
+  });
+  return json({ sent: res.sent });
 }
 
 async function chargeReceipt(body: any) {
@@ -216,8 +275,15 @@ Deno.serve(withCors(async (req) => {
       return await bookingConfirmation(String(body.reservation_id), true);
     }
     if (body.action === "charge_receipt" && body.reservation_id) return await chargeReceipt(body);
+    if (body.action === "booking_update" && body.reservation_id && ["cancelled", "changed"].includes(body.change)) {
+      const user = await callerUser(admin, req);
+      const { data: resv } = await admin.from("reservations").select("tenant_id").eq("id", String(body.reservation_id)).maybeSingle();
+      const role = user && resv ? await memberRole(admin, resv.tenant_id, user.id) : null;
+      if (!role || !["owner", "admin", "staff"].includes(role)) return json({ error: "Only the front desk team can email guests about their booking" }, 403);
+      return await bookingUpdate(String(body.reservation_id), body.change);
+    }
     if (body.action === "team_invite") return await teamInvite(req, body);
-    return json({ error: "action booking_confirmation, charge_receipt or team_invite required" }, 400);
+    return json({ error: "action booking_confirmation, charge_receipt, booking_update or team_invite required" }, 400);
   } catch (e: any) {
     console.error("send-email", e); await logError("send-email", e);
     return json({ error: "send-email failed" }, 500);

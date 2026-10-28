@@ -244,6 +244,7 @@ textarea.bk-input { height: auto; padding: 12px 14px; resize: vertical; }
 .bk-contact a { color: var(--footer-ink); }
 .bk-socials { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .bk-socials a { font-size: 13px; font-weight: 600; color: var(--footer-ink); border: 1px solid color-mix(in srgb, var(--footer-ink) 30%, transparent); border-radius: 999px; padding: 4px 12px; text-decoration: none; }
+.bk-powered a { color: inherit; text-underline-offset: 2px; }
 .bk-powered { max-width: 1200px; margin: 0 auto; padding: 16px 24px 28px; font-size: 13px; color: var(--footer-muted); border-top: 1px solid color-mix(in srgb, var(--footer-ink) 14%, var(--footer)); }
 
 /* Embed mode: compact chrome inside the property's own website */

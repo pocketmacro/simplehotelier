@@ -242,21 +242,6 @@
   }
 
   /* Billing (Stripe Checkout via Edge Function) */
-  async function startCheckout() {
-    if (!window.SHDB || !SHDB.hasLive()) { toast("Sign in first", "Billing is tied to your property account", "warn"); return; }
-    try {
-      const token = localStorage.getItem("sh_access_token") || cfg.SUPABASE_ANON_KEY;
-      const res = await fetch((cfg.SUPABASE_URL || "").replace(/\/$/, "") + "/functions/v1/create-checkout", {
-        method: "POST",
-        headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },
-        body: JSON.stringify({ tenant_id: SHDB.tenantId(), origin: location.origin })
-      });
-      const d = await res.json().catch(() => ({}));
-      if (res.ok && d.url) { location.href = d.url; return; }
-      toast("Billing is not switched on yet", "Deploy create-checkout and set STRIPE_PRICE_ID (supabase/functions/README.md)", "warn");
-    } catch { toast("Billing is not switched on yet", "Deploy the Stripe functions to enable checkout", "warn"); }
-  }
-
   /* Wire */
   function applySupportGate() {
     if (!isDemo()) return;
@@ -309,7 +294,6 @@
   if (refresh) refresh.addEventListener("click", loadAdmin);
   document.addEventListener("click", (e) => {
     const act = e.target.closest("[data-action]");
-    if (act && act.dataset.action === "billing-checkout") { startCheckout(); return; }
     if (act && act.dataset.action === "billing-help") { goto("support"); $("#caseCategory").value = "billing"; }
   });
   // Any way onto these screens (nav, buttons, Back/Forward, a refresh) loads them.
@@ -323,9 +307,6 @@
     if (b && typeof goto === "function") goto(b.dataset.gotoView);
   });
   window.addEventListener("sh-auth", () => { checkAdmin(); loadMyCases(); });
-  if (new URLSearchParams(location.search).get("checkout") === "success") {
-    setTimeout(() => toast("Welcome aboard", "Your $30/month subscription is active", "ok"), 600);
-  }
   checkAdmin();
   loadMyCases();
 })();

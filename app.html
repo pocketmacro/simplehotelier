@@ -542,10 +542,12 @@
               <div class="kv">
                 <dt>Plan</dt><dd>SimpleHotelier · $30 / month</dd>
                 <dt>Status</dt><dd id="billStatus">-</dd>
-                <dt>Renews / ends</dt><dd id="billPeriod">-</dd>
+                <dt id="billPeriodLabel">Renews</dt><dd id="billPeriod">-</dd>
               </div>
+              <p class="hint" id="billNote" role="status" style="margin-top:10px" hidden></p>
               <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-                <button class="btn btn-brass btn-sm" type="button" data-action="billing-checkout">Subscribe or renew</button>
+                <button class="btn btn-brass btn-sm" type="button" data-action="billing-checkout" id="billCheckout">Start 30-day free trial</button>
+                <button class="btn btn-ghost btn-sm" type="button" data-action="billing-portal" id="billPortal" hidden>Manage billing</button>
                 <button class="btn btn-ghost btn-sm" type="button" data-action="billing-help">Billing question</button>
               </div>
               <p class="hint" style="margin-top:10px">Guest payments use your connected Stripe account and are separate from this subscription.</p>
@@ -698,6 +700,7 @@
         <div class="field"><label for="suEmail">Work email</label><input class="input" id="suEmail" type="email" autocomplete="email" required placeholder="you@yourproperty.com"></div>
         <div class="field"><label for="suPassword">Password</label><input class="input" id="suPassword" type="password" autocomplete="new-password" required minlength="6" placeholder="6+ characters"><span class="help">Creates your account and your property in one step.</span></div>
         <button class="btn btn-primary" id="suSubmit" type="submit" style="width:100%;justify-content:center">Create property &amp; log in</button>
+        <p class="auth-legal">By creating an account, you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
         <p class="auth-alt">Already have an account? <button class="drawer-link" id="toLogin" type="button">Log in →</button></p>
       </form>
 

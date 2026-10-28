@@ -1,0 +1,50 @@
+/* SimpleHotelier — Terms and Privacy pages. Builds on css/landing.css (nav,
+   buttons, footer); this file only sets the long-form reading layout. */
+.legal-head { padding: 54px 0 34px; border-bottom: 1px solid var(--line); }
+.legal-head .eyebrow { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--brass); margin: 0 0 10px; }
+.legal-head h1 { font-size: clamp(32px, 4vw, 46px); line-height: 1.08; font-weight: 800; }
+.legal-head .meta { color: var(--muted); font-size: 14.5px; margin: 14px 0 0; }
+
+.legal { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 56px; padding: 40px 0 72px; align-items: start; }
+.legal-toc { position: sticky; top: 92px; font-size: 14px; }
+.legal-toc strong { display: block; font-family: var(--font-d); color: var(--ink); font-size: 13px; letter-spacing: .02em; margin-bottom: 10px; }
+.legal-toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: toc; }
+.legal-toc li { counter-increment: toc; }
+.legal-toc a { display: flex; gap: 8px; padding: 5px 0; color: var(--muted); text-decoration: none; line-height: 1.35; }
+.legal-toc a::before { content: counter(toc) "."; min-width: 1.4em; color: var(--sh-ink-400); font-variant-numeric: tabular-nums; }
+.legal-toc a:hover { color: var(--pine); }
+
+.legal-body { max-width: 72ch; }
+.legal-body section { scroll-margin-top: 92px; }
+.legal-body section + section { margin-top: 38px; }
+.legal-body h2 { font-size: 22px; line-height: 1.25; margin-bottom: 12px; }
+.legal-body h3 { font-size: 16.5px; margin: 22px 0 8px; }
+.legal-body p, .legal-body li { font-size: 16px; line-height: 1.7; }
+.legal-body p { margin: 0 0 12px; }
+.legal-body ul { margin: 0 0 14px; padding-left: 1.2em; }
+.legal-body li { margin-bottom: 6px; }
+.legal-body li::marker { color: var(--brass-light); }
+.legal-body strong { color: var(--ink); }
+.legal-body a { color: var(--pine-2); font-weight: 600; }
+
+/* "The short version": plain-language summary before the full text. */
+.legal-summary { background: var(--paper); border: 1px solid var(--line); border-left: 4px solid var(--brass); border-radius: 14px; padding: 22px 26px; margin-bottom: 40px; }
+.legal-summary h2 { font-size: 18px; margin-bottom: 10px; }
+.legal-summary ul { margin: 0; }
+.legal-summary li { font-size: 15.5px; }
+
+.legal-table { width: 100%; border-collapse: collapse; margin: 6px 0 16px; font-size: 15px; }
+.legal-table th, .legal-table td { text-align: left; vertical-align: top; padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); line-height: 1.55; }
+.legal-table th { font-family: var(--font-d); color: var(--ink); font-size: 13.5px; font-weight: 700; }
+.legal-table td:first-child { font-weight: 600; color: var(--ink); white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .legal { grid-template-columns: minmax(0, 1fr); gap: 28px; padding-top: 28px; }
+  .legal-toc { position: static; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .legal-toc ol { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); column-gap: 18px; }
+}
+@media (max-width: 560px) {
+  .legal-head { padding: 36px 0 26px; }
+  .legal-table td:first-child { white-space: normal; }
+  .legal-summary { padding: 18px 18px; }
+}

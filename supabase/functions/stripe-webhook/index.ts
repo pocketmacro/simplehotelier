@@ -62,6 +62,7 @@ Deno.serve(async (req) => {
           stripe_subscription_id: sub.id,
           subscription_status: mapStatus(sub.status),
           current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+          subscription_cancel_at: cancelAt(sub),
         }).eq("id", tenantId);
       }
     } else if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
@@ -70,6 +71,7 @@ Deno.serve(async (req) => {
         stripe_subscription_id: sub.id,
         subscription_status: event.type.endsWith("deleted") ? "canceled" : mapStatus(sub.status),
         current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        subscription_cancel_at: event.type.endsWith("deleted") ? null : cancelAt(sub),
       };
       const tenantId = sub.metadata?.tenant_id;
       if (tenantId) await admin.from("tenants").update(patch).eq("id", tenantId);
@@ -103,6 +105,13 @@ Deno.serve(async (req) => {
   }
   return new Response(JSON.stringify({ received: true }), { headers: { "Content-Type": "application/json" } });
 });
+
+/* When a subscription cancelled in the portal stops (end of the paid month or
+   trial), or null while it keeps renewing. */
+function cancelAt(sub: any) {
+  const at = sub.cancel_at || (sub.cancel_at_period_end ? sub.current_period_end : null);
+  return at ? new Date(at * 1000).toISOString() : null;
+}
 
 function mapStatus(s: string) {
   return ({ trialing: "trialing", active: "active", past_due: "past_due", canceled: "canceled", unpaid: "unpaid" } as any)[s] || "incomplete";

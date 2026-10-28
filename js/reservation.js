@@ -205,6 +205,7 @@ function rxRender() {
 </div>`,
     foot: `
       <div class="rx-foot-left">
+        ${isNew || rx.readOnly || !rxLive() ? "" : `<label class="rx-notify" id="rxNotify" hidden><input type="checkbox" data-rx-field="notify"${f.notify === false ? "" : " checked"}> <span id="rxNotifyText"></span></label>`}
         ${isNew || rx.readOnly ? "" : (rx.confirmCancel
           ? `<span class="rx-confirm">Cancel this booking? <button class="btn btn-danger btn-xs" type="button" data-rx="cancel-yes">Cancel booking</button> <button class="btn btn-ghost btn-xs" type="button" data-rx="cancel-no">Keep it</button></span>`
           : `<button class="rx-link danger" type="button" data-rx="cancel">✕ Cancel booking</button>`)}
@@ -233,6 +234,11 @@ function rxRefresh() {
   const set = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
   set("#rxNightsText", n > 0 ? `${n} night${n > 1 ? "s" : ""}` : "—");
   set("#rxStatusText", (RX_STATUSES.find(([v]) => v === f.status) || ["", f.status])[1]);
+  const news = rxGuestNews(rx.confirmCancel ? "cancelled" : null), notify = $("#rxNotify");
+  if (notify) {
+    notify.hidden = !news;
+    set("#rxNotifyText", { cancelled: "Email the guest that it's cancelled", confirmed: "Email the guest their confirmation", changed: "Email the guest the new details" }[news] || "");
+  }
   const st = $("#rxStatusText"); if (st) st.className = "rx-st-" + f.status;
   const s = rxSummaryNumbers();
   set("#rxRoomOut", s ? money(s.room) : "—");
@@ -518,9 +524,33 @@ async function rxRefund(txnId) {
 }
 
 /* ---------------------------------------------------------------- save / cancel / print / email */
+/* What the guest should hear if the booking is saved as it stands in the
+   form: "cancelled", "confirmed" (a request accepted, or a cancelled booking
+   reinstated) or "changed" (new dates or room). Null for new bookings, other
+   edits, the demo, or a guest without an email address. */
+function rxGuestNews(statusOverride) {
+  const f = rx.form, row = rx.row;
+  if (!row || !rxLive() || !String(f.email || "").trim()) return null;
+  const was = row.status, now = rxStatusDb(statusOverride || f.status);
+  if (now === "cancelled") return was === "cancelled" ? null : "cancelled";
+  if (now === "confirmed" && (was === "pending" || was === "cancelled")) return "confirmed";
+  if (now === "pending" || was === "cancelled") return null;
+  const room = roomByCode(f.roomCode);
+  const moved = f.checkIn !== String(row.check_in).slice(0, 10) || f.checkOut !== String(row.check_out).slice(0, 10) || (room && room.id !== row.room_id);
+  return moved ? "changed" : null;
+}
+async function rxTellGuest(news, row) {
+  try {
+    const d = await fnInvoke("send-email", news === "confirmed"
+      ? { action: "booking_confirmation", reservation_id: row.id, force: true }
+      : { action: "booking_update", reservation_id: row.id, change: news });
+    toast(d.sent ? "Guest emailed" : "Guest not emailed", d.sent ? row.guest_email : (d.reason || "Email is not configured"), d.sent ? "ok" : "warn");
+  } catch (e) { toast("Guest not emailed", e.message || "Try again", "warn"); }
+}
 async function rxSave(statusOverride) {
   const f = rx.form;
   if (statusOverride) f.status = statusOverride;
+  const news = f.notify === false ? null : rxGuestNews(); // decided before the save replaces rx.row
   const name = [f.first.trim(), f.last.trim()].filter(Boolean).join(" ");
   if (!name) { toast("Add the guest's name", "First or last name is required", "warn"); rxTab("details"); return; }
   const room = roomByCode(f.roomCode);
@@ -542,9 +572,11 @@ async function rxSave(statusOverride) {
     else Object.assign(rx.base, mapped);
     rx.row = row; rx.dirtyPrice = false; rx.quote = null; rx.confirmCancel = false;
     rx.form.plan = row.rate_plan_id || "standard";
+    rx.form.notify = true; // the next change asks again
     renderReservations(); renderToday(); renderFolios(); renderCalendar(); renderMiniRooms();
     toast(isNew ? `Reservation ${row.confirmation_code} created` : `${row.confirmation_code} saved`, `${name} · ${money(row.total_cents / 100)}`, "ok");
     rxRender();
+    if (news) rxTellGuest(news, row);
   } catch (e) {
     toast("Could not save", e.message || "Supabase rejected the change", "warn");
   } finally { if (rx) rxBusy(false); }

@@ -1748,26 +1748,46 @@ document.addEventListener("click", (e) => {
   else if (a === "charge") { if (ref) openReservationEditor(ref, { panel: "charge" }); else openReservationPicker("charge"); }
   else if (a === "confirm-res") {
     const r = reservations.find((x) => x.ref === ref); r.status = "confirmed";
-    if (window.SHDB && r.id) SHDB.setReservationStatus(r.id, "confirmed").catch(() => toast("Status saved locally only", "Supabase write failed", "warn"));
+    if (window.SHDB && r.id) SHDB.setReservationStatus(r.id, "confirmed").then(() => {
+      // The guest is waiting on this request: send their confirmation.
+      if (r.email) fnInvoke("send-email", { action: "booking_confirmation", reservation_id: r.id, force: true })
+        .then((d) => { if (d.sent) toast("Guest emailed", `Confirmation sent to ${r.email}`, "ok"); })
+        .catch(() => toast("Confirmation not emailed", "Send it from the booking's Email confirmation link", "warn"));
+    }, () => toast("Status saved locally only", "Supabase write failed", "warn"));
     closeModal(); renderReservations(); renderToday(); toast(`${ref} confirmed`, r.guest, "ok");
   }
   else if (a === "record-cash") openReservationPicker("record");
+  else if (a === "billing-checkout") openBilling("checkout");
+  else if (a === "billing-portal") openBilling("portal");
   else if (a === "export") {
     const activeView = document.querySelector(".view.active")?.id || "";
-    const csvCell = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+    // Guest names and emails come from the public booking page: a leading
+    // = + - @ would run as a spreadsheet formula, so text cells get a ' first.
+    const csvCell = (v) => {
+      let s = String(v == null ? "" : v);
+      if (typeof v === "string" && /^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) s = "'" + s;
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+    const stamp = isoLocal(new Date());
     let rows, fname;
     if (activeView === "view-reports") {
       const rep = computeReports(reportDays);
       rows = [["Metric", "Value"], ["Window (days)", rep.days], ["Reservations", rep.count], ["Revenue booked", rep.revenue.toFixed(2)], ["Collected", rep.collected.toFixed(2)], ["Estimated tax liability", rep.taxTotal.toFixed(2)], ["", ""], ["Top unit", "Revenue"]]
         .concat(rep.top.map(([n, v]) => [n, v.toFixed(2)]))
         .concat([["", ""], ["Tax rule", "Estimated amount"]], rep.taxRows.map(([n, v]) => [n, v.toFixed(2)]));
-      fname = "simplehotelier-report.csv";
+      fname = `simplehotelier-report-${stamp}.csv`;
     } else {
-      rows = [["Guest", "Confirmation", "Room", "Check-in offset", "Check-out offset", "Status", "Total", "Paid", "Balance"]]
-        .concat(reservations.filter(resMatches).map((r) => [r.guest, r.ref, r.room, r.inN, r.outN, r.status, r.total.toFixed(2), r.paid.toFixed(2), balance(r).toFixed(2)]));
-      fname = "simplehotelier-reservations.csv";
+      // Live rows carry real dates; demo rows only day offsets from today.
+      const day = (iso, n) => iso || isoLocal(addDays(n));
+      const email = (r) => r.email != null ? r.email : (/@/.test(r.contact || "") ? r.contact : "");
+      const phone = (r) => r.phone != null ? r.phone : (r.contact && !/@|—/.test(r.contact) ? r.contact : "");
+      rows = [["Confirmation", "Guest", "Email", "Phone", "Room", "Check-in", "Check-out", "Nights", "Status", "Source", "Total", "Paid", "Balance"]]
+        .concat(reservations.filter(resMatches).map((r) => [r.ref, r.guest, email(r), phone(r), r.room, day(r.checkIn, r.inN), day(r.checkOut, r.outN),
+          Math.max(0, r.outN - r.inN), r.status, r.source || "direct", r.total.toFixed(2), r.paid.toFixed(2), balance(r).toFixed(2)]));
+      fname = `simplehotelier-reservations-${stamp}.csv`;
     }
-    const blob = new Blob([rows.map((r) => r.map(csvCell).join(",")).join("\n")], { type: "text/csv" });
+    // BOM so Excel reads accented names as UTF-8.
+    const blob = new Blob(["\uFEFF" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
     const aEl = document.createElement("a");
     aEl.href = URL.createObjectURL(blob); aEl.download = fname; aEl.click();
     setTimeout(() => URL.revokeObjectURL(aEl.href), 2000);
@@ -2437,6 +2457,51 @@ async function startTrialCheckout(tenantId) {
   } catch { toast("Property created", "Finish your trial setup anytime from Settings → Plan and billing", "warn"); }
   return false;
 }
+/* Settings → Plan and billing. "checkout" starts the subscription (Stripe
+   Checkout); "portal" opens Stripe's billing page, where owners change the
+   card, download invoices or cancel. */
+async function openBilling(action) {
+  if (!window.SHDB || !SHDB.hasLive()) { toast("Sign in first", "Billing is tied to your property account", "warn"); return; }
+  const btn = $(action === "portal" ? "#billPortal" : "#billCheckout");
+  if (btn) btn.disabled = true;
+  try {
+    const c = window.SH_CONFIG || {};
+    const res = await fetch((c.SUPABASE_URL || "").replace(/\/$/, "") + "/functions/v1/create-checkout", {
+      method: "POST",
+      headers: { apikey: c.SUPABASE_ANON_KEY, Authorization: "Bearer " + await SHDB.freshToken(), "Content-Type": "application/json" },
+      body: JSON.stringify({ action, tenant_id: SHDB.tenantId(), origin: location.origin })
+    });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok && d.url) { location.href = d.url; return; }
+    if (d.portal) { openBilling("portal"); return; } // already subscribed
+    toast("Billing didn't open", d.error && res.status < 500 ? d.error : "Try again in a minute, or send a billing question", "warn");
+  } catch { toast("Billing didn't open", "Check your connection and try again", "warn"); }
+  if (btn) btn.disabled = false;
+}
+const BILL_STATUS = {
+  trialing: ["progress", "Free trial"], active: ["paid", "Active"], past_due: ["dirty", "Payment failed"],
+  unpaid: ["dirty", "Unpaid"], canceled: ["cancelled", "Cancelled"], incomplete: ["neutral", "Not started"]
+};
+function renderBilling(t) {
+  if (!$("#billStatus")) return;
+  const day = (iso) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const started = !!t.stripe_subscription_id; // set once the first checkout completes
+  const status = started && BILL_STATUS[t.subscription_status] ? t.subscription_status : "incomplete";
+  const live = ["trialing", "active", "past_due", "unpaid"].includes(status);
+  const ending = live && t.subscription_cancel_at;
+  $("#billStatus").innerHTML = pill(ending ? ["pending", "Cancels " + day(t.subscription_cancel_at)] : BILL_STATUS[status]);
+  $("#billPeriodLabel").textContent = !started ? "Free trial" : ending ? "Ends" : status === "canceled" ? "Ended" : status === "trialing" ? "Trial ends" : "Renews";
+  $("#billPeriod").textContent = !started ? "30 days" : ending ? day(t.subscription_cancel_at) : t.current_period_end ? day(t.current_period_end) : "-";
+  $("#billNote").textContent = !started ? "30 days free, then $30/month. Cancel anytime from this page."
+    : status === "past_due" || status === "unpaid" ? "Your last payment didn't go through. Update your card in Manage billing to keep your account running."
+    : ending ? "Your plan is cancelled and stops on " + day(t.subscription_cancel_at) + ". Changed your mind? Renew it in Manage billing."
+    : status === "canceled" ? "Your subscription has ended. Subscribe again to keep using SimpleHotelier."
+    : "Change your card, download invoices or cancel in Manage billing.";
+  $("#billNote").hidden = false;
+  $("#billCheckout").hidden = live;
+  $("#billCheckout").textContent = started ? "Subscribe again" : "Start 30-day free trial";
+  $("#billPortal").hidden = !t.stripe_customer_id;
+}
 let checkoutToastShown = false, billingReminderShown = false;
 
 /* Pending invites, shown in the invite modal and the Settings team card. */
@@ -2726,8 +2791,7 @@ function loadLiveIntoUI() {
     }
     if (live.tenant.logo_url && $("#logoPreview")) { $("#logoPreview").src = live.tenant.logo_url; $("#logoPreview").hidden = false; const le = $("#logoEmpty"); if (le) le.style.display = "none"; }
     renderRates();
-    if ($("#billStatus")) $("#billStatus").textContent = live.tenant.subscription_status || "trialing";
-    if ($("#billPeriod")) $("#billPeriod").textContent = live.tenant.current_period_end ? new Date(live.tenant.current_period_end).toLocaleDateString() : "-";
+    renderBilling(live.tenant);
     if (statusEl) statusEl.textContent = "Data source: Supabase · " + live.tenant.name + " (live" + (live.user ? " · " + live.user.email : "") + ")";
     toast("Connected to Supabase", live.tenant.name + " loaded live", "ok");
     showFlash();
@@ -2744,9 +2808,14 @@ function loadLiveIntoUI() {
     }
     if (!checkoutToastShown) {
       checkoutToastShown = true;
-      const co = new URLSearchParams(location.search).get("checkout");
-      if (co === "success") setTimeout(() => toast("Your 30-day free trial is active", "$30/month after the trial · manage it in Settings", "ok"), 600);
+      const qs = new URLSearchParams(location.search);
+      const co = qs.get("checkout");
+      if (co || qs.get("billing")) { // shown once: a refresh shouldn't repeat it
+        try { history.replaceState(history.state, "", location.pathname + location.hash); } catch { /* sandboxed */ }
+      }
+      if (co === "success") setTimeout(() => toast("You're subscribed", "Manage your card, invoices or plan in Settings → Plan and billing", "ok"), 600);
       else if (co === "cancelled") setTimeout(() => toast("Checkout not finished", "Start your free trial anytime from Settings → Plan and billing", "warn"), 600);
+      else if (qs.get("billing") === "updated") setTimeout(() => toast("Back from billing", "Changes can take a minute to show here", "ok"), 600);
       else if (!ROLE_VIEWS[liveRole] && !live.tenant.stripe_customer_id && !billingReminderShown) {
         billingReminderShown = true;
         setTimeout(() => toast("One step left: start your free trial", "Add a card in Settings → Plan and billing · 30 days free, then $30/month", "warn"), 900);
