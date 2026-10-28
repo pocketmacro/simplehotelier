@@ -164,7 +164,7 @@ test("the email goes out after a successful save, and staff can opt out", () => 
   assert.match(rxjs, /const news = f\.notify === false \? null : rxGuestNews\(\);/);
   assert.match(rxjs, /rxRender\(\);\s+if \(news\) rxTellGuest\(news, row\);/);
   assert.match(rxjs, /data-rx-field="notify"/);
-  assert.match(app, /SHDB\.setReservationStatus\(r\.id, "confirmed"\)\.then\(\(\) => \{[\s\S]{0,200}action: "booking_confirmation", reservation_id: r\.id, force: true/, "quick confirm emails the guest");
+  assert.match(app, /if \(to === "confirmed" && live && r\.email\) \{\s+fnInvoke\("send-email", \{ action: "booking_confirmation", reservation_id: r\.id, force: true \}\)/, "quick confirm emails the guest");
 });
 
 test("booking_update is front-desk only and must match the saved booking", () => {

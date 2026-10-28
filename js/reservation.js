@@ -54,7 +54,7 @@ async function openReservationEditor(ref, opts = {}) {
   if (ref && !base) return;
   if (!ref && !rooms.length) { toast("Add a room first", "Reservations need at least one room or cabin", "warn"); return; }
   rx = { base, row: null, txns: [], addonIds: new Set(), tab: opts.tab || "details", panel: opts.panel || null,
-    quote: null, quoteError: "", dirtyPrice: false, confirmCancel: false, busy: false, link: "" };
+    quote: null, quoteError: "", dirtyPrice: false, confirmCancel: false, confirmCheckout: !!opts.checkout, busy: false, link: "" };
   if (base && base.id && rxLive()) {
     openModal({ title: `${base.ref} · ${base.guest}`, sub: "Loading booking…", body: `<p class="hint">Loading the latest details…</p>`, xl: true });
     try {
@@ -118,6 +118,10 @@ function rxRender() {
   const code = rx.base ? rx.base.ref : "New reservation";
   const guestName = [f.first, f.last].filter(Boolean).join(" ");
   const dis = rx.readOnly ? " disabled" : "";
+  // Confirm / Check in / Check out from the saved booking, as in the lists.
+  const step = isNew || rx.readOnly ? null : nextStep(rx.base);
+  const owed = rx.confirmCheckout ? rxOutstanding() : 0;
+  if (owed <= 0.004) rx.confirmCheckout = false;
   const field = (key, label, attrs = "") => `<div class="field"><label for="rx-${key}">${label}</label><input class="input" id="rx-${key}" data-rx-field="${key}" value="${esc(f[key])}"${attrs}${dis}></div>`;
   const g = rxGroup(f.typeId);
   const card = rx.row && rx.row.card_last4 ? { brand: rx.row.card_brand, last4: rx.row.card_last4, expMonth: rx.row.card_exp_month, expYear: rx.row.card_exp_year } : null;
@@ -206,13 +210,16 @@ function rxRender() {
     foot: `
       <div class="rx-foot-left">
         ${isNew || rx.readOnly || !rxLive() ? "" : `<label class="rx-notify" id="rxNotify" hidden><input type="checkbox" data-rx-field="notify"${f.notify === false ? "" : " checked"}> <span id="rxNotifyText"></span></label>`}
-        ${isNew || rx.readOnly ? "" : (rx.confirmCancel
+        ${isNew || rx.readOnly ? "" : rx.confirmCheckout
+          ? `<span class="rx-confirm" role="status"><b>${money(owed)}</b> still owed. Take payment to check out. <button class="btn btn-ghost btn-xs" type="button" data-rx="checkout-anyway">Check out anyway</button> <button class="btn btn-ghost btn-xs" type="button" data-rx="checkout-no">Not now</button></span>`
+          : (rx.confirmCancel
           ? `<span class="rx-confirm">Cancel this booking? <button class="btn btn-danger btn-xs" type="button" data-rx="cancel-yes">Cancel booking</button> <button class="btn btn-ghost btn-xs" type="button" data-rx="cancel-no">Keep it</button></span>`
           : `<button class="rx-link danger" type="button" data-rx="cancel">✕ Cancel booking</button>`)}
         ${isNew ? "" : `<button class="rx-link" type="button" data-rx="print">Print</button>
         <button class="rx-link" type="button" data-rx="email">Email confirmation</button>`}
       </div>
       <select class="select rx-status" data-rx-field="status" aria-label="Booking status"${dis}>${rxOptions(RX_STATUSES, f.status)}</select>
+      ${step ? `<button class="btn btn-sm rx-btn-dark" type="button" data-rx="step" data-step="${step[0]}">${step[1]}</button>` : ""}
       <button class="btn btn-ghost btn-sm" data-close type="button">Close</button>
       ${rx.readOnly ? "" : `<button class="btn btn-primary btn-sm" type="button" data-rx="save">${isNew ? "Create reservation" : "Save"}</button>`}`
   });
@@ -463,7 +470,7 @@ function rxAmountFrom(id) {
 }
 function rxBusy(on) {
   rx.busy = on;
-  $$("#modal [data-rx$='-go'], #modal [data-rx='save']").forEach((b) => { b.disabled = on; });
+  $$("#modal [data-rx$='-go'], #modal [data-rx='save'], #modal [data-rx='step'], #modal [data-rx='checkout-anyway']").forEach((b) => { b.disabled = on; });
 }
 
 /* Reload the booking after money moved, and reflect it in the lists. */
@@ -471,11 +478,20 @@ async function rxReload() {
   if (!rx || !rx.row) return;
   const bundle = await SHDB.reservationBundle(rx.row.id);
   if (!bundle || !rx) return;
+  const was = rx.row.status;
   rx.row = bundle.row; rx.txns = bundle.txns;
   if (rx.base) Object.assign(rx.base, bundle.mapped);
+  // Money confirms a pending booking (the database does it): follow along,
+  // so a later Save doesn't set it back.
+  const moved = bundle.row.status !== was;
+  if (moved && rx.form.status === rxStatusApp(was)) rx.form.status = rxStatusApp(bundle.row.status);
+  if (moved && bundle.row.status === "confirmed") toast(`${bundle.row.confirmation_code} confirmed`, "Paid bookings are confirmed automatically", "ok");
+  renderStays();
+  // Checking out waited for the balance: paid in full finishes it.
+  if (rx.confirmCheckout && rxOutstanding() <= 0.004) { await rxSave("checked-out"); return; }
+  if (moved || rx.confirmCheckout) { rxRender(); return; }
   const t = $("#rxTxns"); if (t) t.innerHTML = rxTxnTable();
   rxRefresh();
-  renderReservations(); renderFolios(); renderToday();
 }
 
 async function rxCharge() {
@@ -515,6 +531,8 @@ async function rxRecord() {
     txns.unshift({ when: "Just now", desc: `${rx.base.ref} · ${method}${signed < 0 ? " refund" : ""}`, method, status: signed < 0 ? "refunded" : "paid", amount: signed / 100 });
     toast(signed < 0 ? "Refund recorded" : "Payment recorded", `${money(amt / 100)} · ${method} (demo)`, "ok");
     rxShowPanel(null); rxRefresh(); renderReservations(); renderFolios(); renderTxns();
+    if (rx.confirmCheckout && rxOutstanding() <= 0.004) rxSave("checked-out");
+    else if (rx.confirmCheckout) rxRender();
     return;
   }
   rxBusy(true);
@@ -576,6 +594,7 @@ async function rxSave(statusOverride) {
   if (!room) { toast("Pick a room", "Choose a room type and room number", "warn"); return; }
   if (rxNights(f.checkIn, f.checkOut) < 1) { toast("Check your dates", "Check-out must be after check-in", "warn"); return; }
   if (!rxLive()) return rxSaveDemo(name, room);
+  const was = rx.base ? rx.base.status : null;
   rxBusy(true);
   try {
     const { row, mapped } = await SHDB.saveReservation({
@@ -589,16 +608,31 @@ async function rxSave(statusOverride) {
     const isNew = !rx.base;
     if (isNew) { reservations.unshift(mapped); rx.base = mapped; }
     else Object.assign(rx.base, mapped);
-    rx.row = row; rx.dirtyPrice = false; rx.quote = null; rx.confirmCancel = false;
+    rx.row = row; rx.dirtyPrice = false; rx.quote = null; rx.confirmCancel = false; rx.confirmCheckout = false;
     rx.form.plan = row.rate_plan_id || "standard";
     rx.form.notify = true; // the next change asks again
-    renderReservations(); renderToday(); renderFolios(); renderCalendar(); renderMiniRooms();
-    toast(isNew ? `Reservation ${row.confirmation_code} created` : `${row.confirmation_code} saved`, `${name} · ${money(row.total_cents / 100)}`, "ok");
+    if (mapped.status === "checked-out" && was !== "checked-out") turnRoom(room.code);
+    renderStays();
+    toast(isNew ? `Reservation ${row.confirmation_code} created` : `${row.confirmation_code} ${mapped.status !== was && STEP_DONE[mapped.status] || "saved"}`, `${name} · ${money(row.total_cents / 100)}`, "ok");
     rxRender();
     if (news) rxTellGuest(news, row);
   } catch (e) {
     toast("Could not save", e.message || "Supabase rejected the change", "warn");
   } finally { if (rx) rxBusy(false); }
+}
+/* Confirm / Check in / Check out. Money still owed at check-out opens the
+   payment panel instead; once it's paid in full the check-out finishes. */
+function rxStep(step) {
+  const to = STEP_STATUS[step];
+  if (!to) return;
+  if (step === "checkout" && rxOutstanding() > 0.004) {
+    rx.confirmCheckout = true;
+    rx.panel = (rx.row ? rx.row.card_last4 : rx.base.card) ? "charge" : "record";
+    rxRender();
+    $("#rxPanel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return;
+  }
+  rxSave(to);
 }
 function rxSaveDemo(name, room) {
   const f = rx.form;
@@ -610,11 +644,13 @@ function rxSaveDemo(name, room) {
     status: f.status, source: f.source, notes: f.notes, adults: parseInt(f.adults, 10) || 1
   };
   if (q) fields.total = q.total_cents / 100;
+  const was = rx.base ? rx.base.status : null;
   if (!rx.base) { rx.base = { ref: newRef("R-"), paid: 0, total: 0, ...fields }; reservations.unshift(rx.base); }
   else Object.assign(rx.base, fields);
-  rx.dirtyPrice = false; rx.quote = null; rx.confirmCancel = false;
-  renderReservations(); renderToday(); renderFolios(); renderCalendar(); renderMiniRooms();
-  toast(`${rx.base.ref} saved`, `${name} · demo data, this browser only`, "ok");
+  rx.dirtyPrice = false; rx.quote = null; rx.confirmCancel = false; rx.confirmCheckout = false;
+  if (f.status === "checked-out" && was !== "checked-out") turnRoom(room.code);
+  renderStays();
+  toast(`${rx.base.ref} ${was && f.status !== was && STEP_DONE[f.status] || "saved"}`, `${name} · demo data, this browser only`, "ok");
   rxRender();
 }
 function rxTab(tab) {
@@ -666,6 +702,9 @@ document.addEventListener("click", (e) => {
   else if (a === "cancel") { rx.confirmCancel = true; rxRender(); }
   else if (a === "cancel-no") { rx.confirmCancel = false; rxRender(); }
   else if (a === "cancel-yes") rxSave("cancelled");
+  else if (a === "step") rxStep(el.dataset.step);
+  else if (a === "checkout-anyway") rxSave("checked-out");
+  else if (a === "checkout-no") { rx.confirmCheckout = false; rxRender(); }
   else if (a === "print") rxPrint();
   else if (a === "email") rxEmail();
 });

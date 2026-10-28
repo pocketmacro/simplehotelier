@@ -266,6 +266,34 @@ const pill = ([cls, label]) => `<span class="pill ${cls}"><i></i>${label}</span>
 const resDates = (r) => `${dstr(addDays(r.inN))} → ${dstr(addDays(r.outN))}`;
 const roomByCode = (c) => rooms.find((r) => r.code === c);
 const balance = (r) => Math.max(0, r.total - r.paid);
+/* An online booking still waiting for the guest's card isn't a request to
+   confirm: it is released after 30 minutes if no card comes. */
+const statusPill = (r) => pill(r.awaitingCard ? ["pending", "Awaiting card"] : ST[r.status] || ST.confirmed);
+/* The front desk's next step for a booking: confirm a request, check the
+   guest in once their stay has started, check them out. Calendar imports
+   (Airbnb, Vrbo) are blocks that the next sync replaces, so they have none. */
+function nextStep(r) {
+  if (!r || r.icalFeedId || r.awaitingCard) return null;
+  if (r.status === "pending") return ["confirm", "Confirm"];
+  if (r.status === "confirmed" && r.inN <= 0 && r.outN >= 0) return ["checkin", "Check in"];
+  if (r.status === "checked-in") return ["checkout", "Check out"];
+  return null;
+}
+const stepButton = (r) => {
+  const s = nextStep(r);
+  return s ? `<button class="btn btn-primary btn-xs" data-action="res-step" data-step="${s[0]}" data-ref="${esc(r.ref)}" type="button">${s[1]}</button>` : "";
+};
+/* Rooms show who is in them: occupied while a guest is checked in, reserved
+   while an arrival is due, otherwise vacant. */
+function syncRoomOccupancy() {
+  rooms.forEach((room) => {
+    const here = reservations.filter((r) => r.room === room.code);
+    const inHouse = here.find((r) => r.status === "checked-in");
+    const due = here.find((r) => (r.status === "confirmed" || r.status === "pending") && r.inN <= 0 && r.outN > 0);
+    room.status = inHouse ? "occupied" : due ? "reserved" : "vacant";
+    room.guest = inHouse ? inHouse.guest : "";
+  });
+}
 
 /* ---------------- Overview ---------------- */
 function renderDateCtx() {
@@ -285,7 +313,7 @@ function renderToday() {
   const item = (r, tag) => `
     <div class="row-item"><span class="room-code">${esc(r.room)}</span>
       <div class="ri-main"><strong>${esc(r.guest)} · ${tag}${tag === "Arriving" && r.arrival ? " " + esc(r.arrival) : ""}</strong><span>${esc(resDates(r))} · ${money(r.total)}</span></div>
-      <div class="ri-right">${pill(ST[r.status] || ST.confirmed)}</div></div>`;
+      <div class="ri-right">${statusPill(r)}${stepButton(r)}</div></div>`;
   $("#todayList").innerHTML =
     arr.map((r) => item(r, "Arriving")).join("") + dep.map((r) => item(r, "Departing")).join("") ||
     `<div class="empty">No movement today.</div>`;
@@ -402,7 +430,7 @@ function renderOverview() {
   });
   const dirtyRooms = rooms.filter((r) => r.hk === "dirty");
   if (dirtyRooms.length) items.push(`<div class="row-item"><span class="pill progress"><i></i>Dirty</span><div class="ri-main"><strong>${dirtyRooms.length} room${dirtyRooms.length > 1 ? "s" : ""} to clean</strong><span>${dirtyRooms.map((r) => esc(r.code)).join(", ")}</span></div><div class="ri-right"><button class="btn btn-ghost btn-xs" data-goto="housekeeping" type="button">Open board</button></div></div>`);
-  const pend = active.filter((r) => r.status === "pending");
+  const pend = active.filter((r) => r.status === "pending" && !r.awaitingCard);
   if (pend.length) items.push(`<div class="row-item"><span class="pill pending"><i></i>Pending</span><div class="ri-main"><strong>${pend.length} request${pend.length > 1 ? "s" : ""} await confirmation</strong><span>${pend.map((r) => esc(r.guest)).slice(0, 2).join(", ")}</span></div><div class="ri-right"><button class="btn btn-ghost btn-xs" data-goto="reservations" type="button">Review</button></div></div>`);
   $("#attentionList").innerHTML = items.join("") || `<div class="empty">All caught up. Nothing needs attention.</div>`;
   renderSetupUI();
@@ -421,6 +449,7 @@ function renderOverview() {
 }
 
 function renderMiniRooms() {
+  syncRoomOccupancy();
   $("#miniRooms").innerHTML = rooms.map((r) => `
     <div style="border:1px solid var(--line);border-radius:10px;padding:10px 11px;background:var(--surface-2)">
       <div style="display:flex;align-items:center;gap:7px"><strong style="color:var(--ink);font-size:13px">${esc(r.code)}</strong>${pill(RSTAT[r.status])}</div>
@@ -445,10 +474,11 @@ function renderReservations() {
       <td class="mono">${esc(r.ref)}</td>
       <td><span class="room-code">${esc(r.room)}</span></td>
       <td style="white-space:nowrap">${esc(resDates(r))}${r.arrival && (r.status === "pending" || r.status === "confirmed") ? `<small class="res-arrival">Arrives ${esc(r.arrival)}</small>` : ""}</td>
-      <td>${pill(ST[r.status])}</td>
+      <td>${statusPill(r)}</td>
       <td class="num">${money(r.total)}</td>
       <td class="num" style="${balance(r) > 0 ? "color:var(--danger)" : "color:var(--success)"}">${money(balance(r))}</td>
       <td style="white-space:nowrap;text-align:right">
+        ${stepButton(r)}
         ${balance(r) > 0 ? `<button class="btn btn-ghost btn-xs" data-action="charge" data-ref="${esc(r.ref)}" type="button">Charge</button>` : ""}
         <button class="btn btn-ghost btn-xs" data-action="res-detail" data-ref="${esc(r.ref)}" type="button">Open</button>
       </td>
@@ -515,6 +545,7 @@ function renderRoomTypeTabs() {
   tabs.innerHTML = btn("all", "All rooms", rooms.length) + roomTypes.map((t) => btn(t.id, t.name, rooms.filter((r) => roomMatchesType(r, t)).length)).join("");
 }
 function renderRooms() {
+  syncRoomOccupancy();
   renderRoomTypeTabs();
   const visible = roomTypeFilter === "all" ? rooms : rooms.filter((r) => { const t = roomTypes.find((x) => x.id === roomTypeFilter); return t && roomMatchesType(r, t); });
   if (!rooms.length) {
@@ -1640,13 +1671,58 @@ function openNewTicket() {
   const inp = $("#tkTitle"); if (inp) inp.focus();
 }
 
+/* ---------------- Confirm, check in, check out ---------------- */
+const STEP_STATUS = { confirm: "confirmed", checkin: "checked-in", checkout: "checked-out" };
+const STEP_DONE = { confirmed: "confirmed", "checked-in": "checked in", "checked-out": "checked out", cancelled: "cancelled" };
+function renderStays() {
+  renderReservations(); renderToday(); renderOverview(); renderCalendar(); renderRooms(); renderMiniRooms(); renderFolios();
+}
+/* A guest who has left leaves a room to clean. */
+function turnRoom(code) {
+  const room = roomByCode(code);
+  if (!room || room.hk === "dirty") return;
+  room.hk = "dirty";
+  if (window.SHDB) SHDB.updateHK(room);
+  renderHK();
+}
+/* One click from the lists. Checking out with money still owed opens the
+   booking on its payment panel first; paying in full finishes the check-out. */
+const stepping = new Set();
+async function resStep(ref, step) {
+  const r = reservations.find((x) => x.ref === ref);
+  const to = STEP_STATUS[step];
+  if (!r || !to || stepping.has(ref)) return;
+  if (step === "checkout" && balance(r) > 0) {
+    openReservationEditor(ref, { panel: r.card ? "charge" : "record", checkout: true });
+    return;
+  }
+  const live = !!(r.id && window.SHDB && SHDB.hasLive());
+  stepping.add(ref);
+  try {
+    if (live) await SHDB.setReservationStatus(r.id, to);
+  } catch (e) {
+    toast("Could not save", e.message || "Check your connection and try again", "warn");
+    return;
+  } finally { stepping.delete(ref); }
+  r.status = to;
+  if (to === "checked-out") turnRoom(r.room);
+  renderStays();
+  toast(`${r.guest} ${STEP_DONE[to]}`, `${r.ref} · ${r.room}`, "ok");
+  // The guest is waiting on their request: send the confirmation.
+  if (to === "confirmed" && live && r.email) {
+    fnInvoke("send-email", { action: "booking_confirmation", reservation_id: r.id, force: true })
+      .then((d) => { if (d.sent) toast("Guest emailed", `Confirmation sent to ${r.email}`, "ok"); })
+      .catch(() => toast("Confirmation not emailed", "Send it from the booking's Email confirmation link", "warn"));
+  }
+}
+
 /* ---------------- Global action dispatch ---------------- */
 document.addEventListener("click", (e) => {
   const el = e.target.closest("[data-action]");
   // notification bell (no data-action)
   if (e.target.closest("#notifBtn")) {
     const items = [];
-    reservations.filter((r) => r.status === "pending").slice(0, 3).forEach((r) => {
+    reservations.filter((r) => r.status === "pending" && !r.awaitingCard).slice(0, 3).forEach((r) => {
       items.push(`<div class="row-item"><span class="pill pending"><i></i>New</span><div class="ri-main"><strong>Booking request: ${esc(r.guest)}</strong><span>${esc(r.room)} · ${esc(resDates(r))} · ${money(r.total)}</span></div><div class="ri-right"><button class="btn btn-ghost btn-xs" data-action="res-detail" data-ref="${esc(r.ref)}" type="button">Review</button></div></div>`);
     });
     reservations.filter((r) => balance(r) > 0 && r.status !== "cancelled").slice(0, 3).forEach((r) => {
@@ -1755,16 +1831,7 @@ document.addEventListener("click", (e) => {
   }
   else if (a === "res-detail") openResDetail(ref);
   else if (a === "charge") { if (ref) openReservationEditor(ref, { panel: "charge" }); else openReservationPicker("charge"); }
-  else if (a === "confirm-res") {
-    const r = reservations.find((x) => x.ref === ref); r.status = "confirmed";
-    if (window.SHDB && r.id) SHDB.setReservationStatus(r.id, "confirmed").then(() => {
-      // The guest is waiting on this request: send their confirmation.
-      if (r.email) fnInvoke("send-email", { action: "booking_confirmation", reservation_id: r.id, force: true })
-        .then((d) => { if (d.sent) toast("Guest emailed", `Confirmation sent to ${r.email}`, "ok"); })
-        .catch(() => toast("Confirmation not emailed", "Send it from the booking's Email confirmation link", "warn"));
-    }, () => toast("Status saved locally only", "Supabase write failed", "warn"));
-    closeModal(); renderReservations(); renderToday(); toast(`${ref} confirmed`, r.guest, "ok");
-  }
+  else if (a === "res-step") resStep(ref, el.dataset.step);
   else if (a === "record-cash") openReservationPicker("record");
   else if (a === "billing-checkout") openBilling("checkout");
   else if (a === "billing-portal") openBilling("portal");

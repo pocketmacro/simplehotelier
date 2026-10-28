@@ -585,13 +585,19 @@
   }
   $("#cardLabel").addEventListener("click", () => { if (state.cardEl) state.cardEl.focus(); });
   function showSuccess(code, total, extra) {
-    // The property still confirms every online booking, so never say "confirmed" here.
-    const mode = state.paying && state.paying.mode;
-    $("#successPanel h2").textContent = mode === "deposit" ? "Deposit received" : mode === "setup" ? "Booking received" : "Request received";
+    // A deposit paid or a card saved confirms the booking (the database does
+    // it as the money or card arrives); without either it's a request the
+    // property confirms.
+    const paid = !!(state.paying && state.paying.mode);
+    const first = $("#gName").value.trim().split(" ")[0];
+    $("#successPanel h2").textContent = paid ? "Booking confirmed" : "Request received";
     document.querySelector(".bk-layout").style.display = "none";
     $("#searchForm").style.display = "none";
     $("#availNote").hidden = true;
-    $("#successText").textContent = "Thanks " + $("#gName").value.trim().split(" ")[0] + " — " + state.tenant.name + " will confirm your " + state.selected.name + " stay by email shortly." + (state.tenant.check_out_time ? " Check-out is by " + state.tenant.check_out_time + "." : "") + (extra || "");
+    $("#successText").textContent = (paid
+      ? "Thanks " + first + " — your " + state.selected.name + " stay at " + state.tenant.name + " is confirmed. Your confirmation email is on its way."
+      : "Thanks " + first + " — " + state.tenant.name + " will confirm your " + state.selected.name + " stay by email shortly.") +
+      (state.tenant.check_out_time ? " Check-out is by " + state.tenant.check_out_time + "." : "") + (extra || "");
     $("#successCode").textContent = "Confirmation " + code + " · Total " + money(total);
     const panel = $("#successPanel");
     panel.hidden = false;

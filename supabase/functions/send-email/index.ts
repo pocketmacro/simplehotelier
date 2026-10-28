@@ -5,7 +5,7 @@
 //      it only ever writes to addresses stored on the reservation/tenant, and
 //      only once per reservation (confirmation_email_sent_at is claimed first).
 //      With force: true and a front-desk user's JWT, it is sent again (the
-//      dashboard's "Email confirmation" button).
+//      dashboard's "Email confirmation" and Confirm buttons), to the guest only.
 // POST { action: "charge_receipt", reservation_id, payment_intent_id? }
 //   -> emails the guest a receipt for their latest paid transaction.
 // POST { action: "booking_update", reservation_id, change: "cancelled" | "changed" }
@@ -92,15 +92,19 @@ async function bookingConfirmation(reservationId: string, force = false) {
     replyTo: brand.replyTo
   });
 
-  // Notify the property (best effort).
-  const ownerTo = tenant?.booking_email || tenant?.contact_email;
+  // Notify the property (best effort) of a new booking, not of the front
+  // desk's own resends and confirmations. A request (nothing paid, no card)
+  // waits for them to confirm it.
+  const ownerTo = force ? "" : tenant?.booking_email || tenant?.contact_email;
   let ownerSent = false;
   if (ownerTo) {
     const res = await sendMail({
       to: ownerTo,
-      subject: `New booking ${r.confirmation_code} · ${r.guest_name} · ${fmtDate(r.check_in)}`,
-      html: emailShell("New booking received",
-        p(`<strong>${esc(r.guest_name)}</strong> just booked through your booking page. Reply to this email to write to them.`) +
+      subject: `${pending ? "Booking request" : "New booking"} ${r.confirmation_code} · ${r.guest_name} · ${fmtDate(r.check_in)}`,
+      html: emailShell(pending ? "New booking request" : "New booking received",
+        p(pending
+          ? `<strong>${esc(r.guest_name)}</strong> sent a booking request through your booking page. Open Reservations and choose Confirm to accept it, and they get their confirmation email. Reply to this email to write to them.`
+          : `<strong>${esc(r.guest_name)}</strong> just booked through your booking page. Reply to this email to write to them.`) +
         kv([...rows, ["Guest email", r.guest_email], ...(r.guest_phone ? [["Guest phone", r.guest_phone] as [string, string]] : [])])),
       replyTo: r.guest_email
     }).catch(() => ({ sent: false }));

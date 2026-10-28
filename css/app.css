@@ -233,6 +233,7 @@ body.booting .boot-loader { display: flex; align-items: center; justify-content:
 .row-item .ri-main strong { display: block; color: var(--ink); font-size: 13.8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-item .ri-main span { font-size: 12.5px; color: var(--muted); }
 .row-item .ri-right { margin-left: auto; text-align: right; flex: none; }
+#todayList .ri-right { display: flex; align-items: center; gap: 8px; }
 .room-code { font-family: var(--font-mono); font-size: 12px; font-weight: 600; background: var(--surface-3); border: 1px solid var(--line); padding: 3px 8px; border-radius: 7px; color: var(--ink); white-space: nowrap; }
 
 /* Pills / status */

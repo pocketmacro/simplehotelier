@@ -173,7 +173,9 @@
       inN: dayOff(r.check_in), outN: dayOff(r.check_out),
       status: mapStatus(r.status), source: r.source || "direct", icalFeedId: r.ical_feed_id || null, arrival: r.arrival_time || "",
       total: (r.total_cents || 0) / 100, paid: (r.paid_cents || 0) / 100, notes: r.notes || "",
-      card: r.card_last4 ? { brand: r.card_brand || "card", last4: r.card_last4 } : null
+      card: r.card_last4 ? { brand: r.card_brand || "card", last4: r.card_last4 } : null,
+      // Booked online, card step not finished (released after 30 minutes).
+      awaitingCard: r.status === "pending" && !!r.card_required && !r.stripe_payment_method_id && !(r.paid_cents > 0)
     };
   }
 
