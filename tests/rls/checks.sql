@@ -585,7 +585,7 @@ select pg_temp.expect('R45 release_abandoned_holds is refused to browsers',
 -- Catches a re-created or leftover overload (e.g. the old 14-arg
 -- create_booking or 1-arg record_stripe_payment) that browsers could call.
 select pg_temp.rec('R46 no overload of an internal function is executable by anon/authenticated',
-  count(distinct p.proname) = 6 and count(*) filter (where x.exposed) = 0,
+  count(distinct p.proname) = 7 and count(*) filter (where x.exposed) = 0,
   format('%s overloads of %s functions; browser-executable: %s', count(*), count(distinct p.proname),
     coalesce(string_agg(p.oid::regprocedure::text, ', ') filter (where x.exposed), 'none')))
 from pg_proc p
@@ -594,7 +594,7 @@ cross join lateral (select has_function_privilege('anon', p.oid, 'execute')
                         or has_function_privilege('authenticated', p.oid, 'execute') as exposed) x
 where n.nspname = 'public'
   and p.proname in ('quote_stay', 'record_stripe_payment', 'record_stripe_refund', 'bump_ai_usage',
-                    'create_booking', 'release_abandoned_holds');
+                    'create_booking', 'release_abandoned_holds', 'ari_snapshot');
 
 -- Supabase grants EXECUTE on new functions to anon/authenticated by default,
 -- so a new SECURITY DEFINER function is browser-callable unless revoked.
@@ -627,7 +627,8 @@ select pg_temp.expect('R48 service_role can run the internal functions (control)
     $q$select public.record_stripe_payment('pi_rls_unknown')$q$,
     $q$select public.record_stripe_refund('re_rls_check', 'pi_rls_unknown', 100)$q$,
     $q$select public.bump_ai_usage('{a_owner}'::uuid)$q$,
-    $q$select public.release_abandoned_holds('{tenant_a}'::uuid)$q$
+    $q$select public.release_abandoned_holds('{tenant_a}'::uuid)$q$,
+    $q$select public.ari_snapshot('{tenant_a}'::uuid, current_date, current_date + 7)$q$
   ],
   'rows=1');
 
@@ -1228,6 +1229,51 @@ select pg_temp.expect('R106b the invite function can (control)',
   array['service'],
   array[$q$select confirmed::text as v from public.auth_user_by_email('A-Owner@rls-check.invalid')$q$],
   'value~^true$');
+
+-- ============================================================ R107 ARI snapshot (20261201000000)
+select pg_temp.expect('R107 ari_snapshot (the channel feed) is refused to browsers',
+  array['anon', 'a_owner'],
+  array[$q$select public.ari_snapshot('{tenant_a}'::uuid, current_date, current_date + 7)$q$],
+  'error:42501');
+
+-- Nights d, d+1, d+2: A1 is booked on d+1; d+2 has a Rate Calendar override
+-- (rate, closed to arrival, 2-night minimum). The feed's nightly rates must
+-- be exactly quote_stay()'s standard rates; a room without a type is its own product.
+do $$
+declare
+  v_a uuid := pg_temp.id('tenant_a');
+  d date := current_date + 500;
+  s jsonb;
+  p jsonb;
+  u jsonb;
+  q jsonb;
+  got text;
+begin
+  insert into public.reservations (tenant_id, room_id, guest_name, confirmation_code, check_in, check_out, status)
+  values (v_a, pg_temp.id('room_a1'), 'Ari Guest', 'RLS-ARI-1', d + 1, d + 2, 'confirmed');
+  insert into public.room_rate_overrides (tenant_id, room_type_id, date, rate_cents, cta, min_stay)
+  values (v_a, pg_temp.id('type_a'), d + 2, 15500, true, 2);
+  insert into public.rooms (tenant_id, code, name, rate_cents, sort_order) values (v_a, 'U1', 'Untyped U1', 8000, 9);
+  perform pg_temp.act_as('service');
+  s := public.ari_snapshot(v_a, d, d + 3);
+  reset role;
+  select e.p into p from jsonb_array_elements(s -> 'products') as e(p) where e.p ->> 'room_type_id' = pg_temp.id('type_a')::text;
+  select e.p into u from jsonb_array_elements(s -> 'products') as e(p) where e.p ->> 'name' = 'Untyped U1';
+  q := public.quote_stay(v_a, pg_temp.id('room_a2'), d, d + 3, 2, '{}', null, p_plan => 'standard', p_staff => true);
+  got := format('products=%s units=%s rates=%s quote=%s free=%s cta=%s min=%s plans=%s untyped=%s/%s',
+    jsonb_array_length(s -> 'products'), p ->> 'units',
+    (select string_agg(n ->> 'rate_cents', ',' order by n ->> 'date') from jsonb_array_elements(p -> 'nights') n),
+    (select string_agg(c::text, ',' order by o) from jsonb_array_elements(q -> 'nightly_cents') with ordinality as x(c, o)),
+    (select string_agg(n ->> 'free', ',' order by n ->> 'date') from jsonb_array_elements(p -> 'nights') n),
+    (select string_agg(n ->> 'cta', ',' order by n ->> 'date') from jsonb_array_elements(p -> 'nights') n),
+    p -> 'nights' -> 2 ->> 'min_stay',
+    (select string_agg(e ->> 'id', ',') from jsonb_array_elements(p -> 'rate_plans') e),
+    u -> 'nights' -> 0 ->> 'rate_cents', u -> 'nights' -> 0 ->> 'free');
+  perform pg_temp.verdict(got = 'products=2 units=2 rates=12000,12000,15500 quote=12000,12000,15500 free=2,1,2'
+    || ' cta=false,false,true min=2 plans=open untyped=8000/1', got);
+exception when others then
+  perform pg_temp.caught('R107b ARI nights: quote_stay rates, free units, restrictions, public plans only', sqlstate, sqlerrm);
+end $$;
 
 -- ============================================================ R00 run integrity (recorded last, sorted first)
 select pg_temp.rec('R00 one transaction, fixtures in place (the final raise rolls all of it back)',

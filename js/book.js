@@ -943,10 +943,13 @@
       presentTenant(); // unit words can now come from the room types
       renderTurnstile();
       presentGuestFields();
-      setGuests(guestsCount());
+      // A linked party (see linkParty): split when the page asks for children, else one guest count.
+      if (linkParty && splitParty()) setParty(linkParty);
+      else setGuests(linkParty ? linkParty.adults + linkParty.children : guestsCount());
       renderTerms();
       renderRooms(); renderAddons(); renderSummary(); postHeight();
       if (paidRef) showPaidThanks();
+      else if (linkStay) checkAvailability(); // linked dates: show what's free right away
       if (isPreview && window.parent !== window) window.parent.postMessage({ type: "simplehotelier:preview-ready" }, location.origin);
     } catch (e) {
       showError("Booking is temporarily unavailable. Please contact the property directly.");
@@ -1030,10 +1033,29 @@
     });
   }
 
-  /* Defaults: a week out, two nights. */
-  const d = (off) => { const x = new Date(Date.now() + off * 864e5); return x.toISOString().slice(0, 10); };
-  $("#inDate").value = d(7);
-  $("#outDate").value = d(9);
+  /* Defaults: a week out, two nights. A link can set the stay instead (search
+     ads, channel landing pages), e.g.
+     book.html?property=you&checkin=2026-12-01&checkout=2026-12-03&adults=2&children=1
+     (&nights=2 works in place of checkout). Anything invalid is ignored.
+     Days are the guest's local calendar days, so "today" is today for them. */
+  const d = (off) => {
+    const x = new Date(); x.setDate(x.getDate() + off);
+    return x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0");
+  };
+  const linkDay = (v) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v || "")) return "";
+    const t = Date.parse(v + "T00:00:00Z");
+    return !isNaN(t) && new Date(t).toISOString().slice(0, 10) === v ? v : "";
+  };
+  const linkIn = linkDay(params.get("checkin"));
+  const linkNights = parseInt(params.get("nights"), 10);
+  const linkOut = linkDay(params.get("checkout"))
+    || (linkIn && linkNights > 0 && linkNights <= 365 ? new Date(Date.parse(linkIn + "T00:00:00Z") + linkNights * 864e5).toISOString().slice(0, 10) : "");
+  const linkStay = linkIn >= d(0) && linkOut > linkIn && (Date.parse(linkOut) - Date.parse(linkIn)) / 864e5 <= 365;
+  const linkAdults = parseInt(params.get("adults"), 10);
+  const linkParty = linkAdults > 0 ? { adults: linkAdults, children: Math.max(0, parseInt(params.get("children"), 10) || 0), infants: 0 } : null;
+  $("#inDate").value = linkStay ? linkIn : d(7);
+  $("#outDate").value = linkStay ? linkOut : d(9);
 
   $("#roomsList").addEventListener("click", (e) => {
     const tb = e.target.closest("[data-type]");
