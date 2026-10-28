@@ -39,8 +39,11 @@ Also yours to change:
 - Colors: `css/tokens.css` (site) and the email shells in
   `supabase/functions/_shared/email.ts` and `scripts/set-auth-emails.mjs`.
 - After `site.config.json`: `node scripts/setup-platform.mjs phase1` creates
-  the Stripe product and price for your plan; `node scripts/set-auth-emails.mjs`
-  brands the sign-in emails; redeploy the Edge Functions.
+  the Stripe product and price for your plan (after a later price change,
+  `node scripts/setup-platform.mjs price` makes the new price and points
+  checkout at it); `node scripts/set-auth-emails.mjs` brands the sign-in
+  emails; redeploy the Edge Functions. Existing subscriptions keep their old
+  price until you move them in Stripe (give owners notice first).
 
 ## Run locally
 - `index.html` is the public marketing landing page.

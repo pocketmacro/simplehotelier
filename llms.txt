@@ -1,12 +1,12 @@
 # SimpleHotelier
 
-> SimpleHotelier is a hotel management and rental system for cabins, resorts, lodges, inns and boutique hotels with roughly 2-40 rooms. It replaces spreadsheets and paper cleaning lists with reservations, housekeeping, guest charges and a direct booking page. One flat price: $30/month after a 30-day free trial (card required, nothing charged during the trial).
+> SimpleHotelier is a hotel management and rental system for cabins, resorts, lodges, inns and boutique hotels with roughly 2-40 rooms. It replaces spreadsheets and paper cleaning lists with reservations, housekeeping, guest charges and a direct booking page. One flat price: $45/month after a 30-day free trial (card required, nothing charged during the trial).
 
 SimpleHotelier is for owners who want to rent their cabins, rent their rooms, or run a small resort and take direct bookings without marketplace commissions on those stays. Guests pay through the property's own Stripe account; SimpleHotelier never holds guest money.
 
 ## Product facts
 
-- Price: $30/month, everything included. No per-room fees, no commissions on direct bookings, cancel anytime.
+- Price: $45/month, everything included. No per-room fees, no commissions on direct bookings, cancel anytime.
 - Trial: 30 days free, credit card required up front.
 - Who it is for: cabin resorts, vacation cabins, lodges, inns, boutique hotels, small resorts, lake houses and multi-unit short-term rental properties.
 - Setup: sign up, name the property, add rooms and rates, publish the booking page. Most properties are live the same day.
@@ -24,7 +24,7 @@ SimpleHotelier is for owners who want to rent their cabins, rent their rooms, or
 
 ## Pages
 
-- [Home](https://simplehotelier.com/): what SimpleHotelier is, features, pricing ($30/month), FAQ.
+- [Home](https://simplehotelier.com/): what SimpleHotelier is, features, pricing ($45/month), FAQ.
 - [Create account](https://simplehotelier.com/app.html#signup): start the 30-day free trial.
 - [Log in](https://simplehotelier.com/app.html): the property dashboard (reservations, calendar, rooms, housekeeping, payments, reports, settings).
 - [Example booking page](https://simplehotelier.com/book.html?property=pinecrest): what a property's public booking page looks like to guests.

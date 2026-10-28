@@ -2,6 +2,8 @@
 // Usage:
 //   node scripts/setup-platform.mjs phase1   # migration + admin + Stripe product/price
 //   node scripts/setup-platform.mjs phase2   # Stripe webhook + webhook secret
+//   node scripts/setup-platform.mjs price    # after changing site.config.json's plan:
+//                                            # Stripe price + STRIPE_PRICE_ID secret
 // Reads .env; never prints secrets (Stripe key type only, price/product IDs are safe).
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { normalize } from "./site.mjs";
@@ -77,6 +79,12 @@ async function phase1() {
 
   // 2) Stripe product + the plan's monthly price (reuse if present).
   if (!stripeKey) { console.log("STRIPE_API_KEY missing: skipping Stripe"); return; }
+  await ensurePrice();
+}
+
+/* The Stripe product and recurring monthly price for site.config.json's plan
+   (reused when they already exist); saves their ids to .env. */
+async function ensurePrice() {
   const kind = stripeKey.startsWith("sk_test_") ? "test secret" : stripeKey.startsWith("sk_live_") ? "LIVE secret" : stripeKey.startsWith("rk_") ? "restricted" : "unknown";
   console.log("Stripe key type:", kind);
   const account = await stripe("GET", "/account");
@@ -98,6 +106,17 @@ async function phase1() {
   env.STRIPE_PRICE_ID = price.id;
   saveEnv(env);
   console.log("saved STRIPE_PRODUCT_ID / STRIPE_PRICE_ID to .env");
+  return price.id;
+}
+
+/* New subscriptions use the plan's price from now on. Existing ones keep the
+   price they started with until moved in Stripe (give owners notice first). */
+async function priceOnly() {
+  if (!stripeKey) { console.error("STRIPE_API_KEY missing"); process.exit(1); }
+  const id = await ensurePrice();
+  const status = await mgmtSecrets([["STRIPE_PRICE_ID", id]]);
+  console.log("STRIPE_PRICE_ID function secret set: HTTP", status);
+  if (status >= 300) process.exit(1);
 }
 
 async function phase2() {
@@ -123,5 +142,6 @@ async function phase2() {
 const phase = process.argv[2];
 if (phase === "phase1") await phase1();
 else if (phase === "phase2") await phase2();
-else { console.error("usage: node scripts/setup-platform.mjs phase1|phase2"); process.exit(1); }
+else if (phase === "price") await priceOnly();
+else { console.error("usage: node scripts/setup-platform.mjs phase1|phase2|price"); process.exit(1); }
 console.log("DONE", phase);

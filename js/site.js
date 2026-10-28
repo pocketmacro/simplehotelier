@@ -12,11 +12,11 @@ window.SH_SITE = {
   "supportEmail": "support@simplehotelier.com",
   "emailFrom": "noreply@simplehotelier.com",
   "plan": {
-    "priceCents": 3000,
+    "priceCents": 4500,
     "currency": "USD",
     "trialDays": 30
   },
-  "priceLabel": "$30",
+  "priceLabel": "$45",
   "logoMark": "assets/logo-mark.svg",
   "favicon": "assets/favicon.svg",
   "sourceUrl": "https://github.com/pocketmacro/simplehotelier"

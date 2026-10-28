@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdirSync, cpSync, mkdtempSync, rmSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { plan, normalize, rebrand } from "../scripts/site.mjs";
+import { plan, normalize, rebrand, priceLabel } from "../scripts/site.mjs";
 import { SITE } from "../supabase/functions/_shared/site.js";
 import { isOwnOrigin, safeOrigin } from "../supabase/functions/_shared/origin.js";
 import { wordmark } from "../supabase/functions/_shared/brand.js";
@@ -47,7 +47,8 @@ test("the repo matches site.config.json (run node scripts/site.mjs after editing
   assert.deepEqual(plan(root).map((c) => c.path), []);
   assert.equal(SITE.name, config.name);
   assert.equal(SITE.siteUrl, "https://" + config.domain);
-  assert.equal(SITE.priceLabel, "$30");
+  assert.equal(SITE.priceLabel, priceLabel(config.plan.priceCents, config.plan.currency));
+  assert.deepEqual([priceLabel(4500, "USD"), priceLabel(2950, "EUR"), priceLabel(3000, "GBP")], ["$45", "€29.50", "£30"]);
 });
 
 test("a rebrand reaches every static page and round-trips back exactly", () => {
@@ -86,7 +87,8 @@ test("rebrand is one pass: new values are never replaced again", () => {
   const prev = normalize(config, root);
   const next = normalize({ ...config, name: "SimpleHotelier Plus", domain: "simplehotelier.com.example" }, root);
   assert.equal(rebrand("SimpleHotelier at simplehotelier.com", prev, next), "SimpleHotelier Plus at simplehotelier.com.example");
-  assert.equal(rebrand("$30 and $300 and $30.50 and $30.", prev, normalize({ ...config, plan: { ...config.plan, priceCents: 2500 } }, root)),
+  const at = (priceCents) => normalize({ ...config, plan: { ...config.plan, priceCents } }, root);
+  assert.equal(rebrand("$30 and $300 and $30.50 and $30.", at(3000), at(2500)),
     "$25 and $300 and $30.50 and $25.");
 });
 

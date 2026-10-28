@@ -26,8 +26,9 @@ const LIVE_STATUSES = ["trialing", "active", "past_due", "unpaid"];
 
 /* The portal needs a saved configuration in each Stripe mode (test, live).
    Ours is created on first use, tagged with a version, so going live needs
-   no dashboard step. Bump PORTAL_VERSION to roll out changed settings. */
-const PORTAL_VERSION = "1";
+   no dashboard step. Bump PORTAL_VERSION to roll out changed settings
+   (including the headline's price after changing the plan). */
+const PORTAL_VERSION = "2";
 let portalConfig: string | null = null;
 async function portalConfiguration() {
   if (portalConfig) return portalConfig;
