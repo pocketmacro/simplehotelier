@@ -10,7 +10,10 @@
    when the end must be at least a night later, like check-out).
    data-pk-short drops this year's year from the field ("Wed, Nov 4").
    The booking page uses it too, themed by css/book.css; it hears
-   "sh-picker" events to grow its embed frame around an open picker. */
+   "sh-picker" events to grow its embed frame around an open picker.
+   input.pkDay = (iso, startIso) => ({ off, label }) lets the page cross
+   out days of its own (sold out, no arrivals); they stay reachable by
+   keyboard, announce why, and can't be picked. */
 (function () {
   "use strict";
   const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -184,6 +187,11 @@
     if (cur && cur.startDate && input.dataset.pkGap && d < addDays(cur.startDate, +input.dataset.pkGap)) return false;
     return true;
   }
+  /* The page's own word on a day (input.pkDay), if it has one. */
+  function dayInfo(input, key) {
+    if (typeof input.pkDay !== "function") return null;
+    try { return input.pkDay(key, cur && cur.startDate ? iso(cur.startDate) : null) || null; } catch { return null; }
+  }
   function render() {
     if (!pop || !cur) return;
     if (cur.kind === "time") return renderTime();
@@ -207,14 +215,17 @@
       if (sel && +d === +sel) cls.push("sel");
       if (start && +d === +start) cls.push("edge");
       if (start && end && d > start && d < end) cls.push("range");
-      const ok = inRange(d, input);
-      return `<button type="button" class="${cls.join(" ")}" data-pk-date="${key}" tabindex="${+d === +focus ? 0 : -1}" aria-label="${esc(longDate(d))}"${sel && +d === +sel ? ' aria-pressed="true"' : ""}${ok ? "" : " disabled"}>${d.getDate()}</button>`;
+      const info = dayInfo(input, key);
+      const ok = inRange(d, input) && !(info && info.off);
+      if (info && info.off) cls.push("full");
+      const why = !ok ? (info && info.off && info.label) || "unavailable" : "";
+      return `<button type="button" class="${cls.join(" ")}" data-pk-date="${key}" tabindex="${+d === +focus ? 0 : -1}" aria-label="${esc(longDate(d) + (why ? ", " + why : ""))}"${why ? ` title="${esc(why.replace(/^./, (c) => c.toUpperCase()))}"` : ""}${sel && +d === +sel ? ' aria-pressed="true"' : ""}${ok ? "" : ' aria-disabled="true"'}>${d.getDate()}</button>`;
     }).join("");
     const n = start && sel ? nightsBetween(start, sel) : null;
     pop.innerHTML = head(`${MONTHS[view.getMonth()]} ${view.getFullYear()}`, "month") +
       `<div class="pk-dow" aria-hidden="true">${DOW.map((d) => `<span>${d}</span>`).join("")}</div>
       <div class="pk-grid">${days}</div>
-      <div class="pk-foot"><button type="button" class="pk-link" data-pk="today"${inRange(today, input) ? "" : " disabled"}>Today</button>
+      <div class="pk-foot"><button type="button" class="pk-link" data-pk="today"${inRange(today, input) && !((dayInfo(input, iso(today)) || {}).off) ? "" : " disabled"}>Today</button>
         <span class="pk-note">${n != null && n > 0 ? `${n} night${n === 1 ? "" : "s"}` : start ? `From ${esc(fmtDate(iso(start)))}` : ""}</span></div>`;
   }
   function renderTime() {
@@ -232,7 +243,7 @@
   function focusInside() {
     if (!pop) return;
     const el = cur.kind === "time" ? pop.querySelector(".pk-opt.sel, .pk-opt[tabindex='0']")
-      : pop.querySelector(".pk-day[tabindex='0']:not([disabled])") || pop.querySelector(".pk-day:not([disabled]):not(.out)") || pop.querySelector(".pk-month.sel, .pk-month");
+      : pop.querySelector(".pk-day[tabindex='0']") || pop.querySelector(".pk-day:not([aria-disabled]):not(.out)") || pop.querySelector(".pk-month.sel, .pk-month");
     if (el) el.focus({ preventScroll: true });
   }
   function moveFocus(to) {
@@ -267,7 +278,7 @@
     }
     if (!pop || !pop.contains(e.target)) return;
     const b = e.target.closest("button");
-    if (!b || b.disabled) return;
+    if (!b || b.disabled || b.getAttribute("aria-disabled") === "true") return;
     if (b.dataset.pkDate) pickDate(b.dataset.pkDate);
     else if (b.dataset.pkTime) pickTime(+b.dataset.pkTime);
     else if (b.dataset.pkMonth) { cur.view = new Date(cur.view.getFullYear(), +b.dataset.pkMonth, 1); cur.focus = new Date(cur.view); cur.mode = "days"; render(); place(); focusInside(); }

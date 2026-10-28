@@ -982,6 +982,7 @@
       const assets = pageAssets(); // loads alongside the rooms and rates
       setupGA();
       const tid = "tenant_id=eq." + t.id;
+      loadCalendar(); // booked nights for the date picker; nothing waits for it
       // Everything else in one round: rooms, extras, taxes, types, rates, plans.
       const [rooms, addons, taxes, typeRows, overrideRows, planRows] = await Promise.all([
         api("rooms?" + tid + "&select=id,tenant_id,room_type_id,code,name,sleeps,rate_cents,weekend_rate_cents,photos,sort_order&order=sort_order.asc"),
@@ -1029,6 +1030,72 @@
       if (window.SHReportError) window.SHReportError(e, "booking page load");
     }
   }
+
+  /* Calendar: cross out dates nobody can book. booking_calendar gives each
+     room's taken nights for 18 months; with the Rate Calendar's rules
+     (closed, no arrivals, no departures, stay limits) a check-in is open
+     when a room that fits the party is free that night and takes arrivals,
+     and a check-out when one such room is free every night from check-in to
+     it. Until it loads, or if it can't, nothing is crossed out: the booking
+     itself is still checked when it's made. */
+  const CAL_DAYS = 548;
+  let cal = null, reachMemo = null;
+  const isoAdd = (iso, n) => new Date(Date.parse(iso + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+  function loadCalendar() {
+    const from = d(0), to = isoAdd(from, CAL_DAYS);
+    return api("rpc/booking_calendar", { method: "POST", body: JSON.stringify({ p_tenant: state.tenant.id, p_from: from, p_to: to }) })
+      .then((rows) => {
+        const busy = new Map();
+        (Array.isArray(rows) ? rows : []).forEach((r) => {
+          const nights = new Set();
+          (r.busy || []).forEach(([a, b]) => { for (let x = a; x < b; x = isoAdd(x, 1)) nights.add(x); });
+          busy.set(r.room, nights);
+        });
+        cal = { from, to, busy };
+        reachMemo = null;
+      })
+      .catch(() => { cal = null; });
+  }
+  const dayRuleFor = (room, iso) => (room.room_type_id && state.overrides[room.room_type_id + "|" + iso]) || {};
+  const nightOpen = (room, iso) => !(cal.busy.get(room.id) || new Set()).has(iso) && !dayRuleFor(room, iso).closed;
+  function roomFits(room) {
+    const type = room.room_type_id ? state.types[room.room_type_id] : null;
+    const cap = (type && type.max_occupants) || room.sleeps || 0;
+    return (!cap || guestsCount() <= cap) && !partyProblem(party, type, state.tenant);
+  }
+  const calKnows = (iso) => !!cal && iso >= cal.from && iso < cal.to;
+  function arrivalDay(iso) {
+    if (!calKnows(iso)) return null;
+    const rooms = state.rooms.filter(roomFits);
+    if (!rooms.length) return null; // the party fits nowhere: the room list says so
+    if (rooms.some((u) => nightOpen(u, iso) && !dayRuleFor(u, iso).cta)) return null;
+    return { off: true, label: rooms.some((u) => nightOpen(u, iso)) ? "no arrivals on this day" : "sold out" };
+  }
+  /* For a check-in: each fitting room that takes arrivals then, and the
+     last day it could check out (the first night it's taken or closed). */
+  function reach(startIso) {
+    const key = startIso + "|" + guestsCount() + "|" + party.adults + "|" + party.children;
+    if (reachMemo && reachMemo.key === key) return reachMemo.rooms;
+    const rooms = state.rooms.filter((u) => roomFits(u) && !dayRuleFor(u, startIso).cta).map((u) => {
+      let x = startIso;
+      while (x < cal.to && nightOpen(u, x)) x = isoAdd(x, 1);
+      return { u, last: x };
+    });
+    reachMemo = { key, rooms };
+    return rooms;
+  }
+  function departureDay(iso, startIso) {
+    if (!startIso || iso <= startIso || !calKnows(startIso)) return null;
+    const nights = Math.round((Date.parse(iso) - Date.parse(startIso)) / 864e5);
+    const ok = reach(startIso).some(({ u, last }) => {
+      const rule = dayRuleFor(u, startIso);
+      return (iso <= last || last >= cal.to) && !dayRuleFor(u, iso).ctd &&
+        !(rule.minStay && nights < rule.minStay) && !(rule.maxStay && nights > rule.maxStay);
+    });
+    return ok ? null : { off: true, label: "not available from your check-in" };
+  }
+  $("#inDate").pkDay = (iso) => arrivalDay(iso);
+  $("#outDate").pkDay = (iso, startIso) => departureDay(iso, startIso);
 
   /* Guests: a −/+ stepper over the hidden #guests input, capped by the property. */
   function setGuests(v) {

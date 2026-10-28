@@ -610,7 +610,9 @@ with exposed as (
 ), unexpected as (
   select * from exposed
   where not (proname = any (array['member_tenant_ids', 'is_tenant_member', 'has_tenant_role', 'can_claim_tenant',
-                                  'is_system_admin', 'get_available_room_ids', 'get_rate_plans', 'log_client_error']))
+                                  'is_system_admin', 'get_available_room_ids', 'get_rate_plans', 'log_client_error',
+                                  -- busy nights per room, no guest details (20261203000000_booking_calendar)
+                                  'booking_calendar']))
     and not (rolname = 'authenticated' and proname = any (array['staff_quote', 'save_reservation', 'record_manual_payment',
                                                                 'housekeeping_turnovers', 'member_tenant', 'can_see_support_case',
                                                                 'team_members']))
