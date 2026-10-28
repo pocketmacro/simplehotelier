@@ -60,7 +60,7 @@
         <p><strong id="setupPctText">Setup 0% complete</strong><br><span id="setupNextText">Start setup to go live.</span></p>
         <div class="progress"><i id="setupBar" style="width:0%"></i></div>
       </button>
-      <div class="user-chip"><div class="avatar" id="userAvatar">MK</div><div class="user-meta"><strong id="userName">Maya Keller</strong><span id="userRole">Owner · Pinecrest</span></div><button class="btn btn-ghost btn-xs" id="signOutBtn" type="button" hidden>Sign out</button></div>
+      <div class="user-chip"><div class="avatar" id="userAvatar">MK</div><button class="user-meta" type="button" data-goto="account" title="Your account: name, email and password"><strong id="userName">Maya Keller</strong><span id="userRole">Owner · Pinecrest</span></button><button class="btn btn-ghost btn-xs" id="signOutBtn" type="button" hidden>Sign out</button></div>
       <a class="side-source" href="https://github.com/pocketmacro/simplehotelier" target="_blank" rel="noopener">Source code · free software (AGPL)</a>
     </div>
   </aside>
@@ -525,6 +525,7 @@
       <section class="view" id="view-settings">
         <div class="view-head">
           <div><h1>Settings</h1><p class="sub">Property profile, team, payouts and policies.</p></div>
+          <button class="btn btn-ghost btn-sm" type="button" data-goto="account">Your account</button>
         </div>
         <div class="grid g-2">
           <div>
@@ -663,6 +664,41 @@
             <button class="btn btn-primary" type="button" data-action="save-settings">Save property details</button>
             <span class="hint" id="dbStatus">Data source: checking…</span>
           </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-account">
+        <div class="view-head">
+          <div><h1>Your account</h1><p class="sub">Your name, login email and password. They're yours alone and go with you to every property you're on.</p></div>
+        </div>
+        <p class="acct-demo" id="acctDemo" hidden><strong>Demo mode:</strong> log in with your own account to change these.</p>
+        <div class="acct-grid">
+          <form class="card card-pad acct-card" id="acctNameForm" novalidate>
+            <h3>Display name</h3>
+            <p class="hint">Shown to your team in place of your email.</p>
+            <div class="field"><label for="acctName">Name</label><input class="input" id="acctName" autocomplete="name" maxlength="60" placeholder="e.g. Sam Williams"></div>
+            <p class="acct-error" role="alert" hidden></p>
+            <button class="btn btn-primary btn-sm" type="submit">Save name</button>
+          </form>
+          <form class="card card-pad acct-card" id="acctEmailForm" novalidate>
+            <h3>Login email</h3>
+            <p class="hint">You log in with <strong id="acctEmailNow">maya@pinecrest.example</strong>. Account emails go here too.</p>
+            <div class="field"><label for="acctEmail">New email</label><input class="input" id="acctEmail" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com"></div>
+            <p class="acct-pending" id="acctEmailPending" role="status" hidden></p>
+            <p class="acct-error" role="alert" hidden></p>
+            <button class="btn btn-primary btn-sm" type="submit">Change email</button>
+          </form>
+          <form class="card card-pad acct-card" id="acctPasswordForm" novalidate>
+            <h3>Password</h3>
+            <p class="hint">Enter your current password to set a new one.</p>
+            <input id="acctPwUser" type="email" autocomplete="username" hidden readonly>
+            <div class="field"><label for="acctPwCurrent">Current password</label><input class="input" id="acctPwCurrent" type="password" autocomplete="current-password"></div>
+            <div class="field"><label for="acctPwNew">New password</label><input class="input" id="acctPwNew" type="password" autocomplete="new-password" maxlength="72"><span class="help">8 to 72 characters.</span></div>
+            <div class="field"><label for="acctPwConfirm">Confirm new password</label><input class="input" id="acctPwConfirm" type="password" autocomplete="new-password" maxlength="72"></div>
+            <p class="acct-error" role="alert" hidden></p>
+            <button class="btn btn-primary btn-sm" type="submit">Change password</button>
+            <p class="hint acct-foot">Forgot your current password? Sign out, then choose “Forgot password?” on the login screen.</p>
+          </form>
         </div>
       </section>
 

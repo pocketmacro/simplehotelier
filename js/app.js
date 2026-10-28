@@ -217,6 +217,7 @@ function goto(view, history = "push") {
   if (view === "ratemgmt") renderRateMgmt();
   if (view === "setup") renderSetupUI();
   if (view === "booking") loadFontPreviews(); // theme cards and font pickers show each face
+  if (view === "account") openAccount();
   document.body.classList.remove("nav-open");
   if (location.hash !== "#" + view && history !== "none") {
     try { window.history[history === "replace" ? "replaceState" : "pushState"](null, "", "#" + view); } catch { /* sandboxed or file:// */ }
@@ -302,7 +303,7 @@ const ROLE_VIEWS = {
   maintenance: ["maintenance"]
 };
 const ROLE_LABELS = { owner: "Owner", admin: "Admin", staff: "Front desk", cleaner: "Housekeeping", maintenance: "Maintenance" };
-const canSee = (view) => !ROLE_VIEWS[liveRole] || ROLE_VIEWS[liveRole].includes(view) || view === "admin";
+const canSee = (view) => !ROLE_VIEWS[liveRole] || ROLE_VIEWS[liveRole].includes(view) || view === "admin" || view === "account";
 let turnovers = [];
 /* One source of truth for setup progress — sidebar, Settings checklist and
    the Setup screen all read from here, so the % is always accurate. */
@@ -2664,6 +2665,119 @@ function openPropertySwitcher() {
   });
 }
 
+/* ---------------- Your account (every role: name, login email, password) ----------------
+   The login is the person, not the property: these change the Auth user
+   (js/auth.js updateUser), so they follow them to every property. The
+   display name is user_metadata.full_name, which team_members() shows. */
+let liveUser = null; // the signed-in login, fresh from Auth
+const displayName = (user) => String((user && user.user_metadata && user.user_metadata.full_name) || "").trim();
+/* "Sam Williams" -> "SW"; no name: the email's first two letters. */
+function initials(user) {
+  const words = displayName(user).split(/\s+/).filter(Boolean);
+  const text = words.length > 1 ? words[0][0] + words[words.length - 1][0] : (words[0] || (user && user.email) || "?").slice(0, 2);
+  return text.toUpperCase();
+}
+function showUser(user) {
+  $("#userName").textContent = displayName(user) || user.email;
+  $("#userAvatar").textContent = initials(user);
+}
+function renderAccount() {
+  const demo = demoMode();
+  const user = demo ? { email: "maya@pinecrest.example", user_metadata: { full_name: "Maya Keller" } } : liveUser;
+  $("#acctDemo").hidden = !demo;
+  $$("#view-account input, #view-account button").forEach((el) => { el.disabled = demo || !liveUser; });
+  if (document.activeElement !== $("#acctName")) $("#acctName").value = displayName(user);
+  $("#acctEmailNow").textContent = user ? user.email : "…";
+  $("#acctPwUser").value = (user && user.email) || "";
+  const pending = !demo && liveUser && liveUser.new_email;
+  $("#acctEmailPending").hidden = !pending;
+  if (pending) {
+    $("#acctEmailPending").textContent = `Waiting for you to confirm ${liveUser.new_email}. We emailed a link to it and to ${liveUser.email}: open both to finish. Until then you log in with ${liveUser.email}.`;
+  }
+}
+/* Opening the page: show what we have, then the latest (an email change may
+   have been confirmed in another tab). */
+function openAccount() {
+  renderAccount();
+  if (!liveUser || demoMode() || !window.SHAuth) return;
+  SHAuth.currentUser().then((user) => { liveUser = user; showUser(user); renderAccount(); }).catch(() => { /* keep what's shown */ });
+}
+const ACCT_ERRORS = {
+  current_password_mismatch: "That isn't your current password.",
+  current_password_required: "Enter your current password.",
+  same_password: "That's already your password. Choose a new one.",
+  weak_password: "Choose a longer, less common password.",
+  email_exists: "That email already has an account. Use a different one.",
+  email_address_invalid: "That doesn't look like an email address.",
+  over_email_send_rate_limit: "We just sent confirmation emails. Wait a minute, then try again."
+};
+function acctError(form, msg) {
+  const el = form.querySelector(".acct-error");
+  el.textContent = msg || "";
+  el.hidden = !msg;
+}
+/* Save one card: busy button, the reason inline if it fails, the returned
+   login shown everywhere if it works. */
+async function acctSave(form, busy, work) {
+  const btn = form.querySelector('button[type="submit"]');
+  const label = btn.textContent;
+  acctError(form, "");
+  btn.disabled = true; btn.textContent = busy;
+  try {
+    liveUser = await work();
+    showUser(liveUser);
+    return true;
+  } catch (e) {
+    const known = ACCT_ERRORS[e && e.code] || (/rate limit|security purposes/i.test((e && e.message) || "") && ACCT_ERRORS.over_email_send_rate_limit);
+    acctError(form, known || "That didn't save. Check your connection and try again.");
+    if (!known && window.SHReportError) window.SHReportError(e, "account update");
+    return false;
+  } finally {
+    btn.disabled = false; btn.textContent = label;
+  }
+}
+$("#acctNameForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.currentTarget;
+  const name = $("#acctName").value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+  if (await acctSave(form, "Saving…", () => SHAuth.updateUser({ data: { full_name: name } }))) {
+    $("#acctName").value = name;
+    toast(name ? "Name saved" : "Name removed", name ? "Your team sees " + name : "Your team sees your email", "ok");
+    renderTeamInvites();
+  }
+});
+$("#acctEmailForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.currentTarget;
+  const email = $("#acctEmail").value.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { acctError(form, "Enter your new email address."); $("#acctEmail").focus(); return; }
+  if (email === String(liveUser.email).toLowerCase()) { acctError(form, "That's already your login email."); return; }
+  if (await acctSave(form, "Sending…", () => SHAuth.updateUser({ email }))) {
+    $("#acctEmail").value = "";
+    renderAccount();
+    toast("Check both inboxes", `Open the links we sent to ${liveUser.email} and ${email} to finish`, "ok");
+  }
+});
+$("#acctPasswordForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.currentTarget;
+  const current = $("#acctPwCurrent").value, password = $("#acctPwNew").value;
+  if (!current) { acctError(form, "Enter your current password."); $("#acctPwCurrent").focus(); return; }
+  if (password.length < 8 || password.length > 72) { acctError(form, "Use a new password of 8 to 72 characters."); $("#acctPwNew").focus(); return; }
+  if (password !== $("#acctPwConfirm").value) { acctError(form, "The two new passwords don't match."); $("#acctPwConfirm").focus(); return; }
+  if (await acctSave(form, "Saving…", () => SHAuth.updateUser({ password, current_password: current }))) {
+    ["#acctPwCurrent", "#acctPwNew", "#acctPwConfirm"].forEach((id) => { $(id).value = ""; });
+    toast("Password changed", "Use your new password next time you log in", "ok");
+  }
+});
+/* After an emailed link (js/auth.js takeAuthReturn): say what it did. */
+function announceAuthReturn() {
+  const back = window.SHAuth && SHAuth.authReturn();
+  if (!back) return;
+  if (back.type === "email_change") setTimeout(() => toast("Login email changed", "You now log in with " + liveUser.email, "ok"), 600);
+  else if (back.type === "email_change_halfway") setTimeout(() => toast("One more link", "To finish, open the link we sent to your other email address", "ok"), 600);
+}
+
 /* Demo mode is explicit and local-only: it is entered only via the
    "Explore the demo first" button (sessionStorage flag, set in js/auth.js),
    shows the built-in sample data, and never reads or writes a real
@@ -2729,6 +2843,9 @@ function loadLiveIntoUI() {
         if (statusEl) statusEl.textContent = "Sign in to load your property.";
         return;
       }
+      liveUser = live.user;
+      renderAccount();
+      announceAuthReturn();
       // Signed in but no property yet. An invited teammate joins their
       // property here instead of creating one (no card, no trial).
       if (statusEl) statusEl.textContent = "Signed in as " + live.user.email + " — set up your property to get started.";
@@ -2764,9 +2881,10 @@ function loadLiveIntoUI() {
     renderTeamInvites();
     syncStripeStatus();
     if (live.user) {
-      $("#userName").textContent = live.user.email;
+      liveUser = live.user;
+      showUser(live.user);
       $("#userRole").textContent = ROLE_LABELS[liveRole] + " · " + live.tenant.name;
-      $("#userAvatar").textContent = (live.user.email || "U").slice(0, 2).toUpperCase();
+      renderAccount();
     }
     if ($("#bkGa")) $("#bkGa").value = live.tenant.ga_measurement_id || "";
     if ($("#bkRedirect")) $("#bkRedirect").value = live.tenant.booking_redirect_url || "";
@@ -2856,6 +2974,7 @@ function loadLiveIntoUI() {
       }
     }
     endBoot(); // after routing, so the first screen shown is the right one
+    announceAuthReturn();
   }).catch((e) => {
     // A bug while filling the screen: never stay stuck on "Loading". The
     // sample data was cleared at boot, so whatever shows is the property's.

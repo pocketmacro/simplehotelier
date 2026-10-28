@@ -99,7 +99,11 @@
     else if (!headers.Authorization) headers.Authorization = "Bearer " + anon;
     const res = await fetch(base + "/auth/v1/" + path, { ...opts, headers });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.msg || data.message || data.error_description || ("Auth " + res.status));
+    if (!res.ok) {
+      const err = new Error(data.msg || data.message || data.error_description || ("Auth " + res.status));
+      err.code = data.error_code || ""; // e.g. current_password_mismatch, email_exists
+      throw err;
+    }
     return data;
   }
 
@@ -138,17 +142,27 @@
   /* Emailed links land back here with the session, or an error, in the URL
      fragment: #access_token=…&refresh_token=…&type=recovery, or
      #error=access_denied&error_code=otp_expired&error_description=…
-     Read once and strip it so tokens never sit in the address bar or history. */
+     A login email change needs links opened at both addresses: the first
+     lands with #message=… (no session), the second with type=email_change.
+     Read once and strip it so tokens never sit in the address bar or history;
+     an email change lands on Your account. */
   function takeAuthReturn() {
     const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
     const query = new URLSearchParams(location.search);
     const error = hash.get("error_code") || hash.get("error") || query.get("error_code");
-    if (!hash.get("access_token") && !error) return null;
+    const halfway = !hash.get("access_token") && !error && hash.has("message");
+    if (!hash.get("access_token") && !error && !halfway) return null;
     ["error", "error_code", "error_description"].forEach((k) => query.delete(k));
-    try { history.replaceState(null, "", location.pathname + (query.toString() ? "?" + query : "")); } catch { /* old browser */ }
+    const type = halfway ? "email_change_halfway" : hash.get("type") || "";
+    const view = /^email_change/.test(type) ? "#account" : "";
+    try { history.replaceState(null, "", location.pathname + (query.toString() ? "?" + query : "") + view); } catch { /* old browser */ }
     if (error) return { error };
-    return { type: hash.get("type") || "", access_token: hash.get("access_token"), refresh_token: hash.get("refresh_token") || "" };
+    if (halfway) return { type };
+    return { type, access_token: hash.get("access_token"), refresh_token: hash.get("refresh_token") || "" };
   }
+  // What an emailed link just did, for js/app.js to tell the user once signed in.
+  let returned = null;
+  const authReturn = () => { const r = returned; returned = null; return r; };
   // A reset link's session, held until the new password is saved (the app
   // never loads on it before then).
   let recovery = null;
@@ -156,6 +170,24 @@
   async function logout() {
     try { await authFetch("logout", { method: "POST" }, true); } catch { /* token may be dead */ }
     clearSession();
+  }
+
+  /* Your account (js/app.js): the signed-in login, fresh from Auth. */
+  async function currentUser() {
+    await freshAccessToken();
+    return authFetch("user", {}, true);
+  }
+  /* Change the signed-in login's name ({ data: { full_name } }), email or
+     password. A new email takes effect once the links sent to both the old
+     and the new address are opened (they come back here). A new password
+     needs current_password: the Auth setting
+     security_update_password_require_current_password (set-auth-emails.mjs);
+     reset links are exempt. */
+  async function updateUser(patch) {
+    await freshAccessToken();
+    const user = await authFetch("user" + (patch.email ? redirectParam() : ""), { method: "PUT", body: JSON.stringify(patch) }, true);
+    localStorage.setItem("sh_user", JSON.stringify({ id: user.id, email: user.email || "" }));
+    return user;
   }
 
   async function validateSession() {
@@ -455,6 +487,10 @@
     }
     // Email confirmation (and other emailed sign-in links): that's a session.
     if (back && back.access_token) saveSession(back);
+    if (back && /^email_change/.test(back.type)) {
+      returned = { type: back.type };
+      if (!accessToken()) showNote("Link accepted. To finish changing your login email, open the link we sent to your other address too.");
+    }
 
     // Demo was explicitly chosen: skip the gate (app.js renders sample data).
     if (demoChosen() && !accessToken()) { gate().hidden = true; return; }
@@ -470,6 +506,6 @@
     }
   }
 
-  window.SHAuth = { configured, sessionUser, logout, validateSession, wire, createProperty };
+  window.SHAuth = { configured, sessionUser, logout, validateSession, wire, createProperty, currentUser, updateUser, authReturn };
   wire();
 })();

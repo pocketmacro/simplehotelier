@@ -46,13 +46,13 @@ const shell = (heading, intro, buttonLabel, footnote) => `
         <tr><td style="padding:28px 30px 8px">
           <h1 style="font-family:Arial,Helvetica,sans-serif;font-size:21px;line-height:1.25;color:#101f1e;margin:0 0 12px">${heading}</h1>
           <p style="font-family:Arial,Helvetica,sans-serif;font-size:14.5px;line-height:1.6;color:#33413f;margin:0 0 8px">${intro}</p>
-        </td></tr>
+        </td></tr>${buttonLabel ? `
         <tr><td style="padding:14px 30px 6px">
           <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#96621e;color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:14.5px;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:10px">${buttonLabel}</a>
-        </td></tr>
+        </td></tr>` : ""}
         <tr><td style="padding:14px 30px 26px">
-          <p style="font-family:Arial,Helvetica,sans-serif;font-size:12.5px;line-height:1.6;color:#5f7a73;margin:0 0 6px">${footnote}</p>
-          <p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#5f7a73;margin:0;word-break:break-all">{{ .ConfirmationURL }}</p>
+          <p style="font-family:Arial,Helvetica,sans-serif;font-size:12.5px;line-height:1.6;color:#5f7a73;margin:0 0 6px">${footnote}</p>${buttonLabel ? `
+          <p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#5f7a73;margin:0;word-break:break-all">{{ .ConfirmationURL }}</p>` : ""}
         </td></tr>
         <tr><td style="background:#f6f8f7;border-top:1px solid #e8eeec;padding:16px 30px">
           <p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#5f7a73;margin:0">${NAME} · ${SITE.priceLabel}/month, everything included · <a href="${SITE.siteUrl}" style="color:#115152">${SITE.domain}</a></p>
@@ -97,6 +97,22 @@ const templates = {
     `Follow the button below to confirm {{ .NewEmail }} as the new email address for your ${NAME} account.`,
     "Confirm new email",
     "If you did not request this change, contact support right away. The button does not work? Copy and paste this link into your browser:"
+  ),
+  // Security notices (no button): a changed password or login email is
+  // reported, so a change the owner didn't make doesn't go unnoticed.
+  mailer_subjects_password_changed_notification: `Your ${NAME} password was changed`,
+  mailer_templates_password_changed_notification_content: shell(
+    "Your password was changed",
+    `The password for your ${NAME} account was just changed.`,
+    null,
+    `If this was you, there's nothing to do. If it wasn't, use "Forgot password?" on the ${NAME} login page right away and tell ${SITE.supportEmail}.`
+  ),
+  mailer_subjects_email_changed_notification: `Your ${NAME} login email was changed`,
+  mailer_templates_email_changed_notification_content: shell(
+    "Your login email was changed",
+    `The login email for your ${NAME} account was changed from {{ .OldEmail }} to {{ .Email }}.`,
+    null,
+    `If this was you, there's nothing to do. If it wasn't, contact ${SITE.supportEmail} right away.`
   )
 };
 
@@ -113,6 +129,11 @@ const body = {
   // resets share it). Supabase's default of 2 is meant for its own test
   // mailer; with SES behind it, 100 leaves room for real traffic.
   rate_limit_email_sent: 100,
+  // Your account (dashboard): a new password needs the current one (reset
+  // links are exempt), and the notices above go out.
+  security_update_password_require_current_password: true,
+  mailer_notifications_password_changed_enabled: true,
+  mailer_notifications_email_changed_enabled: true,
   ...templates
 };
 
