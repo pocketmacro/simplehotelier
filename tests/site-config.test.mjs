@@ -127,6 +127,13 @@ test("every page people use links the source code", () => {
   assert.ok(app.includes(`<a class="side-source" ${link}`), "dashboard sidebar");
   assert.ok(app.includes(`<p class="auth-side-note auth-source"><a ${link}`), "sign-in screen");
   assert.match(read("LICENSE"), /^\s+GNU AFFERO GENERAL PUBLIC LICENSE\n\s+Version 3, 19 November 2007\n/);
+  // Embedded on a property's site the footer folds to "Privacy · Source code";
+  // the link must not sit inside anything embed mode hides.
+  const powered = read("book.html").match(/<p class="bk-powered">([\s\S]*?)<\/p>/)[1];
+  assert.ok(powered.replace(/<span class="bk-powered-by">[\s\S]*?<\/span>/, "").includes(link), "source link outside the hidden part");
+  const css = read("css/book.css");
+  assert.match(css, /body\.embed \.bk-foot-in, body\.embed \.bk-powered-by \{ display: none; \}/);
+  assert.doesNotMatch(css, /body\.embed[^{]*\.bk-(foot|powered)\s*[,{][^}]*display: none/, "embed mode keeps the footer line");
 });
 
 test("pages load js/site.js before the scripts that read it", () => {

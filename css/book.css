@@ -249,7 +249,12 @@ textarea.bk-input { height: auto; padding: 12px 14px; resize: vertical; }
 
 /* Embed mode: compact chrome inside the property's own website */
 body.embed { background: var(--bg); }
-body.embed .bk-nav, body.embed .bk-foot { display: none; }
+body.embed .bk-nav { display: none; }
+/* Embedded on the property's site: no footer, only a quiet Privacy · Source
+   code line (guests still get both; the AGPL source offer). */
+body.embed .bk-foot { background: none; color: var(--muted); margin-top: 0; }
+body.embed .bk-foot-in, body.embed .bk-powered-by { display: none; }
+body.embed .bk-powered { border-top: 0; padding: 0 16px 14px; font-size: 12px; color: var(--muted); text-align: center; }
 body.embed .bk-top { padding: 14px 16px; }
 body.embed .bk-hero-wrap { padding: 0 16px; }
 body.embed .bk-hero { min-height: 300px; }
