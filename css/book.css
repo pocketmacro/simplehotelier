@@ -241,7 +241,7 @@ textarea.bk-input { height: auto; padding: 12px 14px; resize: vertical; }
 .bk-term-list { margin: 0; padding: 12px 28px 22px 52px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; color: var(--ink-2); }
 .bk-term-list li.extra { display: none; }
 .bk-rules.open .bk-term-list li.extra { display: list-item; }
-.bk-rules-toggle { width: 100%; min-height: 52px; padding: 0 28px; border: 0; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 55%, var(--bg)); display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.bk-rules-toggle { width: 100%; min-height: 52px; padding: 0 28px; border: 0; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--ink) 4%, var(--surface)); display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: 600; color: var(--ink); cursor: pointer; }
 .bk-rules-toggle svg { transition: transform .2s; }
 .bk-rules.open .bk-rules-toggle svg { transform: rotate(180deg); }
 .bk-agree { padding: 18px 28px; border-top: 1px solid var(--line); }
@@ -291,7 +291,8 @@ textarea.bk-input { height: auto; padding: 12px 14px; resize: vertical; }
 .bk-success h2 { font-size: 40px; margin-bottom: 10px; }
 .bk-success p { color: var(--ink-2); max-width: 520px; margin: 0 auto 14px; }
 .bk-check { width: 60px; height: 60px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; margin: 0 auto 16px; }
-.bk-conf { font-weight: 600; color: var(--ink); background: var(--bg); border: 1px dashed var(--field-line); border-radius: var(--r-input); padding: 10px 16px; display: inline-block; }
+/* Tinted from the card, not the page: a dark page can have light cards. */
+.bk-conf { font-weight: 600; color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, var(--surface)); border: 1px dashed var(--field-line); border-radius: var(--r-input); padding: 10px 16px; display: inline-block; }
 
 /* Footer */
 .bk-foot { background: var(--footer); color: var(--footer-ink); margin-top: auto; }
