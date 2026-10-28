@@ -76,13 +76,24 @@ export function normalize(cfg, root = ROOT) {
   };
 }
 
-/* The footer's operator line, written whole from the config on every run
-   (and kept, hidden, when there is no operator, so it can come back). */
+/* Written whole from the config on every run, so they read right with or
+   without an operator. */
+const amp = (s) => s.replace(/&/g, "&amp;");
+/* The footer's operator line (kept, hidden, when there is no operator, so it
+   can come back). */
 const OPERATOR_LINE = /<p class="foot-operator" data-site="operator"(?: hidden)?>[^<]*<\/p>/g;
 export function operatorLine(site) {
   return site.operator
-    ? `<p class="foot-operator" data-site="operator">${`${site.name} is owned and operated by ${site.operator}`.replace(/&/g, "&amp;")}</p>`
+    ? `<p class="foot-operator" data-site="operator">${amp(`${site.name} is owned and operated by ${site.operator}`)}</p>`
     : `<p class="foot-operator" data-site="operator" hidden></p>`;
+}
+/* Who "we" are on the Terms and Privacy pages: the operator, the business
+   customers actually deal with, when there is one. */
+const PARTY = /<span data-site="party">[^<]*<\/span>/g;
+export function party(site) {
+  return `<span data-site="party">${amp(site.operator
+    ? `${site.operator} ("we", "us"), which owns and operates ${site.name},`
+    : `${site.name} ("we", "us")`)}</span>`;
 }
 
 /* What js/site.js says the pages carry now (null on a first run). */
@@ -140,7 +151,10 @@ export function plan(root = ROOT, config = JSON.parse(readFileSync(root + "site.
   const prev = recorded(read(root, BROWSER_FILE)) || next;
   const out = [];
   const put = (path, after) => { const before = read(root, path); if (before !== after) out.push({ path, before, after }); };
-  for (const path of staticFiles(root)) put(path, rebrand(read(root, path), prev, next).replace(OPERATOR_LINE, operatorLine(next)));
+  for (const path of staticFiles(root)) {
+    put(path, rebrand(read(root, path), prev, next)
+      .replace(OPERATOR_LINE, () => operatorLine(next)).replace(PARTY, () => party(next)));
+  }
   const supabaseUrl = (read(root, "js/config.js") || "").match(/SUPABASE_URL:\s*"(https:\/\/[a-z0-9-]+\.supabase\.co)\/?"/);
   const headers = read(root, "_headers");
   if (supabaseUrl && headers) put("_headers", headers.replace(/https:\/\/[a-z0-9-]+\.supabase\.co\b/g, supabaseUrl[1]));

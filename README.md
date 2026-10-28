@@ -21,7 +21,7 @@ Everything that says who runs the platform lives in `site.config.json`:
 | `plan` | `priceCents`, `currency` and `trialDays` of the monthly subscription |
 | `logoMark`, `favicon` | Logo files (replace the SVGs in `assets/`, or point at your own) |
 | `sourceUrl` | Link to your copy's source code, shown in every footer (the AGPL requires offering it to your users) |
-| `operator` | Optional: the business running your copy. The site footer then says "{name} is owned and operated by {operator}"; leave it empty for no line |
+| `operator` | Optional: the business running your copy. The site footer then says "{name} is owned and operated by {operator}", and the Terms and Privacy pages name it as "we" (the party customers deal with). Empty: no footer line, and "we" is `name` |
 
 Then run `node scripts/site.mjs`. It rewrites `js/site.js` (the browser's
 copy), `supabase/functions/_shared/site.js` (the functions' copy) and the

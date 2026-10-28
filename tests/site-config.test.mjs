@@ -49,6 +49,9 @@ test("the repo matches site.config.json (run node scripts/site.mjs after editing
   assert.equal(SITE.name, config.name);
   assert.equal(SITE.siteUrl, "https://" + config.domain);
   assert.equal(SITE.priceLabel, priceLabel(config.plan.priceCents, config.plan.currency));
+  if (config.operator) {
+    for (const page of ["terms.html", "privacy.html"]) assert.ok(read(page).includes(`<span data-site="party">${config.operator} ("we", "us"), which owns and operates ${config.name},</span>`), page);
+  }
   assert.deepEqual([priceLabel(4500, "USD"), priceLabel(2950, "EUR"), priceLabel(3000, "GBP")], ["$45", "€29.50", "£30"]);
 });
 
@@ -76,6 +79,11 @@ test("a rebrand reaches every static page and round-trips back exactly", () => {
     for (const page of ["index.html", "terms.html", "privacy.html"]) {
       assert.match(readFileSync(dir + page, "utf8"), /<p class="foot-operator" data-site="operator">Lakeside Stays is owned and operated by Lakeside Holdings &amp; Sons<\/p>\n  <\/div>\n<\/footer>/, page + " footer names the operator");
     }
+    // The legal pages' "we" is the operator: the business customers deal with.
+    assert.match(readFileSync(dir + "terms.html", "utf8"),
+      /agreement between you and <span data-site="party">Lakeside Holdings &amp; Sons \("we", "us"\), which owns and operates Lakeside Stays,<\/span> for the Lakeside Stays dashboard/);
+    assert.match(readFileSync(dir + "privacy.html", "utf8"),
+      /<p><span data-site="party">Lakeside Holdings &amp; Sons \("we", "us"\), which owns and operates Lakeside Stays,<\/span> runs lakeside\.example,/);
     assert.match(readFileSync(dir + "js/site.js", "utf8"), /"name": "Lakeside Stays"[\s\S]*"bookingSubdomains": false/);
     assert.match(readFileSync(dir + "supabase/functions/_shared/site.js", "utf8"), /export const SITE = Object\.freeze\(\{\s+"name": "Lakeside Stays"/);
     assert.deepEqual(plan(dir, FORK), [], "applying twice changes nothing");
@@ -83,7 +91,12 @@ test("a rebrand reaches every static page and round-trips back exactly", () => {
     // No operator: the line is hidden (and comes back when one is set).
     apply(dir, { ...FORK, operator: "" });
     assert.match(readFileSync(dir + "index.html", "utf8"), /<p class="foot-operator" data-site="operator" hidden><\/p>/);
-    assert.doesNotMatch(readFileSync(dir + "terms.html", "utf8"), /owned and operated/);
+    assert.doesNotMatch(readFileSync(dir + "terms.html", "utf8"), /owned and operated|owns and operates/);
+    assert.match(readFileSync(dir + "terms.html", "utf8"), /between you and <span data-site="party">Lakeside Stays \("we", "us"\)<\/span> for the/);
+    assert.match(readFileSync(dir + "privacy.html", "utf8"), /<p><span data-site="party">Lakeside Stays \("we", "us"\)<\/span> runs lakeside\.example,/);
+    // Written as typed: "$&" in a name is text, not a replacement pattern.
+    apply(dir, { ...FORK, operator: "Ca$& Co $1" });
+    assert.match(readFileSync(dir + "privacy.html", "utf8"), /<span data-site="party">Ca\$&amp; Co \$1 \("we", "us"\)/);
 
     apply(dir, config);
     for (const [path, text] of Object.entries(before)) assert.equal(readFileSync(dir + path, "utf8"), text, path + " restored");
