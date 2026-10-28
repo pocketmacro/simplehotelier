@@ -18,5 +18,6 @@ window.SH_SITE = {
   },
   "priceLabel": "$30",
   "logoMark": "assets/logo-mark.svg",
-  "favicon": "assets/favicon.svg"
+  "favicon": "assets/favicon.svg",
+  "sourceUrl": "https://github.com/pocketmacro/simplehotelier"
 };

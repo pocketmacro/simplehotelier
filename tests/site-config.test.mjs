@@ -24,7 +24,7 @@ const FORK = {
   name: "Lakeside Stays", domain: "lakeside.example", bookingSubdomains: false, extraOrigins: [],
   supportEmail: "help@lakeside.example", emailFrom: "bookings@lakeside.example",
   plan: { priceCents: 2450, currency: "EUR", trialDays: 14 },
-  logoMark: "assets/logo-mark.svg", favicon: "assets/favicon.svg"
+  logoMark: "assets/logo-mark.svg", favicon: "assets/favicon.svg", sourceUrl: "https://git.lakeside.example/stays"
 };
 
 /* A scratch copy of everything scripts/site.mjs reads or writes. */
@@ -68,6 +68,9 @@ test("a rebrand reaches every static page and round-trips back exactly", () => {
     assert.match(readFileSync(dir + "app.html", "utf8"), /Drag-free 14-day board/, "not a trial: untouched, and not turned into a 30-day board on the way back");
     assert.match(readFileSync(dir + "book.html", "utf8"), /Powered by <strong>Lakeside Stays<\/strong>.*https:\/\/lakeside\.example\/privacy/);
     assert.match(readFileSync(dir + "assets/logo.svg", "utf8"), /aria-label="Lakeside Stays"/);
+    for (const page of ["index.html", "terms.html", "privacy.html", "book.html", "app.html"]) {
+      assert.match(readFileSync(dir + page, "utf8"), /href="https:\/\/git\.lakeside\.example\/stays"[^>]*>Source code/, page + " links the fork's source");
+    }
     assert.match(readFileSync(dir + "js/site.js", "utf8"), /"name": "Lakeside Stays"[\s\S]*"bookingSubdomains": false/);
     assert.match(readFileSync(dir + "supabase/functions/_shared/site.js", "utf8"), /export const SITE = Object\.freeze\(\{\s+"name": "Lakeside Stays"/);
     assert.deepEqual(plan(dir, FORK), [], "applying twice changes nothing");
@@ -99,6 +102,8 @@ test("bad config values are refused with a reason", () => {
   bad({ plan: { priceCents: 3000, currency: "USD", trialDays: 0 } }, /trialDays/);
   bad({ logoMark: "assets/missing.svg" }, /does not exist/);
   bad({ favicon: "../outside.svg" }, /favicon/);
+  bad({ sourceUrl: "" }, /sourceUrl/);
+  bad({ sourceUrl: "http://github.com/x/y" }, /sourceUrl/);
 });
 
 test("server origin checks follow the configured domain", () => {
@@ -111,6 +116,17 @@ test("server origin checks follow the configured domain", () => {
   assert.equal(wordmark("SimpleHotelier", "#e0aa4e"), 'Simple<span style="color:#e0aa4e">Hotelier</span>');
   assert.equal(wordmark("Lakeside Stays", "#000"), 'Lakeside <span style="color:#000">Stays</span>');
   assert.equal(wordmark("acme", "#000"), "acme");
+});
+
+/* AGPL section 13: everyone using the platform over the network can get its
+   source: the landing page, legal pages, booking page, sign-in and dashboard. */
+test("every page people use links the source code", () => {
+  const link = `href="${SITE.sourceUrl}"`;
+  for (const page of ["index.html", "terms.html", "privacy.html", "book.html"]) assert.ok(read(page).includes(link), page);
+  const app = read("app.html");
+  assert.ok(app.includes(`<a class="side-source" ${link}`), "dashboard sidebar");
+  assert.ok(app.includes(`<p class="auth-side-note auth-source"><a ${link}`), "sign-in screen");
+  assert.match(read("LICENSE"), /^\s+GNU AFFERO GENERAL PUBLIC LICENSE\n\s+Version 3, 19 November 2007\n/);
 });
 
 test("pages load js/site.js before the scripts that read it", () => {

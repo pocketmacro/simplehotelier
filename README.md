@@ -20,6 +20,7 @@ Everything that says who runs the platform lives in `site.config.json`:
 | `emailFrom` | Sender for every email (verify this domain with your mail provider) |
 | `plan` | `priceCents`, `currency` and `trialDays` of the monthly subscription |
 | `logoMark`, `favicon` | Logo files (replace the SVGs in `assets/`, or point at your own) |
+| `sourceUrl` | Link to your copy's source code, shown in every footer (the AGPL requires offering it to your users) |
 
 Then run `node scripts/site.mjs`. It rewrites `js/site.js` (the browser's
 copy), `supabase/functions/_shared/site.js` (the functions' copy) and the
@@ -126,5 +127,6 @@ published by the Free Software Foundation. See [LICENSE](LICENSE).
 In short: you may run, change and rebrand it (see "Run your own copy"). If
 you run a modified version as a service for other people, the AGPL requires
 you to offer those users the source code of your version under the same
-license. Properties that use a hosted copy, or embed its booking page on
+license: set `sourceUrl` in `site.config.json` to your repository and every
+page footer (landing, legal, booking page, sign-in, dashboard) links to it. Properties that use a hosted copy, or embed its booking page on
 their website, take on no obligations.

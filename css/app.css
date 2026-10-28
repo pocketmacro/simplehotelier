@@ -129,6 +129,9 @@ button { font-family: inherit; }
 #signOutBtn:hover { background: rgb(255 255 255 / 16%); color: #fff; }
 .avatar { width: 32px; height: 32px; aspect-ratio: 1 / 1; border-radius: 50%; background: #3b6b68; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: 0 0 32px; }
 .user-chip strong { display: block; font-size: 13px; color: #fff; }
+/* AGPL: the source link stays on screen for everyone using the dashboard. */
+.side-source { display: block; padding: 4px 8px 0; font-size: 11.5px; color: var(--sidebar-muted); text-underline-offset: 2px; }
+.side-source:hover { color: #fff; }
 .user-chip span { font-size: 11.5px; color: var(--sidebar-muted); }
 
 /* Main */
@@ -601,6 +604,8 @@ table.data .guest span { color: var(--muted); font-size: 12.3px; }
 .auth-points li { display: flex; gap: 10px; align-items: baseline; font-size: 13.8px; color: #e4efec; }
 .auth-points li::before { content: "✓"; color: #7fd79a; font-weight: 800; }
 .auth-side-note { font-size: 12px; color: var(--sidebar-muted); margin-top: 22px; }
+.auth-side-note.auth-source { margin-top: 6px; }
+.auth-source a { color: inherit; text-underline-offset: 2px; }
 .auth-main { padding: 30px 30px 24px; }
 .auth-tabs { display: flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 11px; padding: 4px; margin-bottom: 18px; }
 .auth-tabs button { flex: 1; border: 0; background: none; padding: 9px; border-radius: 8px; font: inherit; font-weight: 700; font-size: 13.5px; color: var(--muted); cursor: pointer; }

@@ -1,12 +1,12 @@
 // SimpleHotelier — apply site.config.json (the platform's name, domain,
-// emails, plan price and logo) to the whole project. There is no build step:
+// emails, plan price, logo and source link) to the whole project. There is no build step:
 // this rewrites files in place, and is safe to run again after every change.
 //  * js/site.js: window.SH_SITE for the browser. It also records the values
 //    the static pages now carry, so the next run knows what to replace.
 //  * supabase/functions/_shared/site.js: SITE for the Edge Functions.
 //  * Static pages (*.html, llms.txt, robots.txt, sitemap.xml, assets/*.svg):
-//    the recorded name, domain, emails, price, trial length and logo paths
-//    are replaced with the new ones, so titles, meta tags and legal pages are
+//    the recorded name, domain, emails, price, trial length, logo paths and
+//    source link are replaced with the new ones, so titles, meta tags and legal pages are
 //    right without JavaScript.
 //  * _headers: the CSP's Supabase host follows SUPABASE_URL in js/config.js.
 // Run: node scripts/site.mjs            apply
@@ -58,11 +58,17 @@ export function normalize(cfg, root = ROOT) {
     if (!existsSync(root + v)) fail(k + ": " + v + " does not exist");
     return v;
   };
+  // AGPL section 13: everyone using a modified copy over the network must be
+  // offered its source, so every page footer links here.
+  const sourceUrl = String(c.sourceUrl || "").trim();
+  let src;
+  try { src = new URL(sourceUrl); } catch { /* checked below */ }
+  if (!src || src.protocol !== "https:" || /["'<>\s]/.test(sourceUrl)) fail("sourceUrl: the https link to this copy's source code (AGPL)");
   return {
     name, domain, siteUrl: "https://" + domain, bookingSubdomains: c.bookingSubdomains !== false, extraOrigins,
     supportEmail: email("supportEmail"), emailFrom: email("emailFrom"),
     plan: { priceCents, currency, trialDays }, priceLabel: priceLabel(priceCents, currency),
-    logoMark: asset("logoMark"), favicon: asset("favicon")
+    logoMark: asset("logoMark"), favicon: asset("favicon"), sourceUrl
   };
 }
 
@@ -80,6 +86,7 @@ export function rebrand(text, prev, next) {
   const pairs = [];
   const add = (src, to) => pairs.push({ src, to });
   const lit = (a, b) => { if (a && b && a !== b) add(esc(a), b); };
+  lit(prev.sourceUrl, next.sourceUrl); // first: it may contain the domain or name
   lit(prev.supportEmail, next.supportEmail);
   lit(prev.emailFrom, next.emailFrom);
   lit(prev.logoMark, next.logoMark);
