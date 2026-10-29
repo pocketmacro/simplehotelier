@@ -205,11 +205,27 @@
         u.searchParams.set("booking_ref", code);
         u.searchParams.set("total", total);
         u.searchParams.set("currency", currency());
-        $("#redirectLink").href = u.toString();
+        const url = u.toString(), framed = window.top !== window;
+        $("#redirectLink").href = url;
+        // Embedded: the thank-you page replaces the host site's page, not just the widget.
+        if (framed) $("#redirectLink").target = "_top";
         $("#redirectNote").hidden = false;
-        setTimeout(() => { location.href = u.toString(); }, 1500);
+        setTimeout(() => { if (framed) redirectTop(url); else location.href = url; }, 1500);
       } catch { /* invalid URL saved in settings: stay on thank-you panel */ }
     }
+  }
+  /* The embed snippet's listener navigates the host page and acks. Snippets
+     pasted before it existed don't answer: navigate top ourselves (browsers
+     allow it once the guest has clicked in the frame). If that is blocked
+     too, the Continue link (target=_top) is still there. */
+  function redirectTop(url) {
+    const fallback = setTimeout(() => {
+      try { window.top.location.href = url; } catch { /* blocked: guest uses Continue */ }
+    }, 800);
+    window.addEventListener("message", (e) => {
+      if (e.source === window.parent && e.data && e.data.type === "simplehotelier:redirecting") clearTimeout(fallback);
+    });
+    window.parent.postMessage({ type: "simplehotelier:redirect", url }, "*");
   }
 
   function nights() {

@@ -1316,7 +1316,7 @@ function updateEmbed(tenant) {
   const slug = (tenant && tenant.slug) || "pinecrest";
   const src = bookingBase() + "/book.html?property=" + encodeURIComponent(slug) + "&embed=1";
   const el = $("#bkEmbed");
-  if (el) el.value = `<div style="max-width:720px;margin:0 auto"><iframe id="sh-book" src="${src}" style="width:100%;border:0;border-radius:14px;min-height:640px" loading="lazy" title="Book your stay"></iframe></div>\n<script>window.addEventListener("message",function(e){if(e.data&&e.data.type==="simplehotelier:height"){var f=document.getElementById("sh-book");if(f)f.style.height=e.data.height+"px"}});<\/script>`;
+  if (el) el.value = `<div style="max-width:720px;margin:0 auto"><iframe id="sh-book" src="${src}" style="width:100%;border:0;border-radius:14px;min-height:640px" loading="lazy" title="Book your stay"></iframe></div>\n<script>window.addEventListener("message",function(e){var f=document.getElementById("sh-book"),d=e.data;if(!f||e.source!==f.contentWindow||!d)return;if(d.type==="simplehotelier:height")f.style.height=d.height+"px";else if(d.type==="simplehotelier:redirect"&&/^https?:/i.test(d.url)){e.source.postMessage({type:"simplehotelier:redirecting"},e.origin);location.href=d.url}});<\/script>`;
   const open = $("#bkOpenLink");
   if (open) open.href = bookingBase() + "/book.html?property=" + encodeURIComponent(slug);
 }
