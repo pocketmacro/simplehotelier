@@ -32,7 +32,7 @@ never trusted on its own.
 2. `supabase secrets set STRIPE_PRICE_ID=price_...`
 3. `supabase functions deploy create-checkout`
 4. `supabase functions deploy stripe-webhook --no-verify-jwt`
-5. Stripe Dashboard > Webhooks: endpoint `https://<project>.supabase.co/functions/v1/stripe-webhook`, events `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`. Copy the signing secret: `supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...`
+5. `node scripts/setup-platform.mjs phase2` creates the webhook endpoint (`https://<project>.supabase.co/functions/v1/stripe-webhook`) with every event the function handles, pinned to API version `2024-06-20`, and sets `STRIPE_WEBHOOK_SECRET`.
 6. AI support (Spark): get a key at developer.meta.com (Meta Model API), then
    `supabase secrets set MODEL_API_KEY=...` and `supabase functions deploy support-ai`.
    Optional: `supabase secrets set META_MODEL=muse-spark-1.3` (the default).
@@ -53,10 +53,15 @@ Order matters — each step keeps the live site working:
 4. `node scripts/apply-sql.mjs supabase/migrations/20261115000100_public_booking_lockdown.sql`
    (removes anonymous inserts, hides `room_types.rate_plans`, scopes storage writes).
 
-## Before real money
-1. Enable Connect in the Stripe Dashboard (test mode), set platform profile + fees.
-2. Add a `stripe-webhook` function for `payment_intent.succeeded/failed` and
-   `account.updated` (set `tenants.stripe_onboarding_complete`).
-3. Verify in test mode with card `4242 4242 4242 4242`, then repeat the
-   tenant-isolation test: Property A must never charge Property B's guests.
-4. Only then switch to live keys (`sk_live_...`) via `supabase secrets set`.
+## Live mode (since 2026-10-31)
+Live Stripe keys live in `.env.prod` (gitignored); `setup-platform.mjs` prefers it
+over `.env` (test keys). The functions use a restricted key (`rk_live_`) with Write on
+Customers, PaymentIntents, SetupIntents, Charges/Refunds, Checkout Sessions, Customer
+portal, Accounts, Account Links, Transfers, Application Fees, Products and Prices;
+Read on PaymentMethods, Balance and Subscriptions.
+- `node scripts/setup-platform.mjs live` created the live price and webhook and set
+  `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID` and `STRIPE_WEBHOOK_SECRET` in one request
+  (rerunning reuses both; the key needs Webhook Endpoints write only while it runs).
+- `js/config.js` carries the matching `pk_live_` key. Swap both modes together.
+- Test-mode ids (`acct_`, `cus_`, `sub_`, `pm_`) don't exist in live mode: properties
+  that connected payouts or subscribed in test mode had them cleared and start over.
